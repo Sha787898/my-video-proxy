@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
 
@@ -9,17 +10,37 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function FileManagerPage() {
+    const router = useRouter();
+    const [user, setUser] = useState(null);
+    const [loadingAuth, setLoadingAuth] = useState(true);
+
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [copiedId, setCopiedId] = useState(null);
 
-    const fetchFiles = async () => {
+    // ১. সিকিউরিটি গার্ড ও ইউজার সেশন চেক
+    useEffect(() => {
+        async function checkAuthAndFetch() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                router.push('/login');
+                return;
+            }
+            setUser(session.user);
+            setLoadingAuth(false);
+            fetchFiles(session.user.id);
+        }
+        checkAuthAndFetch();
+    }, [router]);
+
+    const fetchFiles = async (userId) => {
         setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('files')
                 .select('*')
+                .eq('user_id', userId) // শুধু বর্তমান ইউজারের ফাইলগুলো ফেচ করবে
                 .order('created_at', { ascending: false });
 
             if (data) setFiles(data);
@@ -30,9 +51,13 @@ export default function FileManagerPage() {
         }
     };
 
-    useEffect(() => {
-        fetchFiles();
-    }, []);
+    if (loadingAuth) {
+        return (
+            <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-mono">
+                <p className="text-xs text-blue-400 animate-pulse">Checking authorization...</p>
+            </div>
+        );
+    }
 
     const copyEmbedCode = (file) => {
         const embedUrl = `<iframe src="https://multishows.top/embed/${file.id}" width="100%" height="450" frameborder="0" allowfullscreen></iframe>`;
@@ -43,7 +68,7 @@ export default function FileManagerPage() {
 
     const handleDelete = async (id) => {
         const { error } = await supabase.from('files').delete().eq('id', id);
-        if (!error) fetchFiles();
+        if (!error && user) fetchFiles(user.id);
     };
 
     const filteredFiles = files.filter(f => 
@@ -60,14 +85,17 @@ export default function FileManagerPage() {
                         <span className="text-xl">🗂️</span>
                         <h1 className="text-xs font-bold text-white uppercase tracking-wider">MultiServer File Manager</h1>
                     </div>
-                    <a href="/remote-upload" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-lg shadow-blue-600/20">
-                        + New Mirror Upload
-                    </a>
+                    <div className="flex items-center gap-4">
+                        <span className="text-xs text-slate-400 hidden sm:inline">{user?.email}</span>
+                        <a href="/remote-upload" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-lg shadow-blue-600/20">
+                            + New Mirror Upload
+                        </a>
+                    </div>
                 </header>
 
-                <main className="p-6 lg:p-10 max-w-6xl space-y-6">
+                <main className="p-6 lg:p-10 max-w-6xl mx-auto w-full space-y-6">
                     {/* Search & Actions Bar */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between shadow-xl">
                         <input 
                             type="text" 
                             placeholder="🔍 Search files by title or ID..."
