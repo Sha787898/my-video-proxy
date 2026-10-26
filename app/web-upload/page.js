@@ -5,47 +5,99 @@ import Sidebar from '../components/Sidebar';
 
 export default function WebUploadPage() {
     const [fileUrl, setFileUrl] = useState('');
-    const [uploading, setUploading] = useState(false);
+    const [fileName, setFileName] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [successMsg, setSuccessMsg] = useState('');
+    const [errorMsg, setErrorMsg] = useState('');
 
-    const handleUpload = (e) => {
+    const handleUpload = async (e) => {
         e.preventDefault();
-        if (!fileUrl.trim()) return;
-        setUploading(true);
-        setTimeout(() => {
-            setUploading(false);
-            alert('File successfully fetched and queued to MultiServer storage!');
+        if (!fileUrl) return;
+
+        setLoading(true);
+        setSuccessMsg('');
+        setErrorMsg('');
+
+        try {
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ uploadType: 'url', fileUrl, fileName }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || 'Failed to upload file');
+            }
+
+            setSuccessMsg('File successfully mirrored via Abyss & saved to Supabase!');
             setFileUrl('');
-        }, 2000);
+            setFileName('');
+        } catch (err) {
+            setErrorMsg(err.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex">
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex font-mono">
             <Sidebar />
             <div className="flex-1 flex flex-col min-w-0">
                 <header className="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
-                    <h1 className="text-sm font-bold text-white uppercase font-mono">Web Direct Upload</h1>
+                    <h1 className="text-sm font-bold text-white uppercase">Direct Web Upload</h1>
                 </header>
-                <main className="p-6 lg:p-10 max-w-4xl space-y-6">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">Fetch File from URL</h2>
-                        <form onSubmit={handleUpload} className="space-y-4">
+
+                <main className="p-6 lg:p-10 max-w-2xl">
+                    <form onSubmit={handleUpload} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                        <h2 className="text-xs font-bold text-white uppercase tracking-wider">Push Direct URL to Abyss Storage</h2>
+                        
+                        {successMsg && (
+                            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
+                                {successMsg}
+                            </div>
+                        )}
+
+                        {errorMsg && (
+                            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                                {errorMsg}
+                            </div>
+                        )}
+
+                        <div className="space-y-1">
+                            <label className="text-[10px] text-slate-400 uppercase">Custom File Name (Optional)</label>
                             <input 
-                                type="url"
-                                placeholder="https://example.com/video.mkv"
+                                type="text" 
+                                placeholder="e.g. Movie_2026_1080p.mp4" 
+                                value={fileName}
+                                onChange={(e) => setFileName(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-600"
+                            />
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-[10px] text-slate-400 uppercase">Direct Video / Stream URL</label>
+                            <input 
+                                type="url" 
+                                placeholder="https://example.com/video.mp4" 
                                 value={fileUrl}
                                 onChange={(e) => setFileUrl(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"
+                                required
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-600"
                             />
-                            <button 
-                                type="submit"
-                                disabled={uploading}
-                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider h-11 rounded-xl transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
-                            >
-                                <i className={`fa-solid ${uploading ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-up'}`}></i>
-                                {uploading ? 'Fetching & Mirroring...' : 'Start Web Fetch'}
-                            </button>
-                        </form>
-                    </div>
+                        </div>
+
+                        <button 
+                            type="submit" 
+                            disabled={loading}
+                            className="w-full py-3 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-600/25 disabled:opacity-50"
+                        >
+                            {loading ? 'Processing via Abyss API...' : 'Start Remote Upload & Sync'}
+                        </button>
+                    </form>
                 </main>
             </div>
         </div>

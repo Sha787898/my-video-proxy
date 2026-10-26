@@ -1,43 +1,78 @@
 'use client';
 
-export default function DashboardPage() {
-    return (
-        <div className="p-4 lg:p-6 pb-12 max-w-7xl mx-auto w-full space-y-6">
-            {/* Top Greeting Card */}
-            <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div>
-                    <h2 className="text-xl font-bold text-white tracking-wide">Welcome to MultiServer Dashboard</h2>
-                    <p className="text-slate-400 text-xs mt-1">Monitor your video streaming bandwidth, active nodes, and storage usage in real-time.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-bold flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Nodes Online
-                    </span>
-                </div>
-            </div>
+import { useState, useEffect } from 'react';
+import Sidebar from '../components/Sidebar';
+import { getStoredFiles } from '../utils/fileStore';
 
-            {/* Quick Stat Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-lg">
-                    <p className="text-xs font-bold text-slate-400 uppercase">Total Files</p>
-                    <h3 className="text-2xl font-extrabold text-white mt-1">1,248</h3>
-                    <span className="text-[11px] text-blue-400 font-medium mt-2 inline-block">+12 today</span>
-                </div>
-                <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-lg">
-                    <p className="text-xs font-bold text-slate-400 uppercase">Total Views</p>
-                    <h3 className="text-2xl font-extrabold text-white mt-1">2,793</h3>
-                    <span className="text-[11px] text-emerald-400 font-medium mt-2 inline-block">+180 this week</span>
-                </div>
-                <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-lg">
-                    <p className="text-xs font-bold text-slate-400 uppercase">Storage Used</p>
-                    <h3 className="text-2xl font-extrabold text-white mt-1">142.5 GB</h3>
-                    <span className="text-[11px] text-slate-400 font-medium mt-2 inline-block">Out of Unlimited</span>
-                </div>
-                <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-lg">
-                    <p className="text-xs font-bold text-slate-400 uppercase">Active Nodes</p>
-                    <h3 className="text-2xl font-extrabold text-white mt-1">5 / 5</h3>
-                    <span className="text-[11px] text-emerald-400 font-medium mt-2 inline-block">100% Operational</span>
-                </div>
+export default function DashboardPage() {
+    const [files, setFiles] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchDashboardData() {
+            setLoading(true);
+            const data = await getStoredFiles();
+            setFiles(data);
+            setLoading(false);
+        }
+        fetchDashboardData();
+    }, []);
+
+    // পরিসংখ্যান হিসাব করা
+    const totalFiles = files.length;
+    const activeFiles = files.filter(f => !f.status || f.status === 'Active').length;
+
+    return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex font-mono">
+            <Sidebar />
+            <div className="flex-1 flex flex-col min-w-0">
+                <header className="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
+                    <h1 className="text-sm font-bold text-white uppercase">Cloud Dashboard</h1>
+                    <span className="px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] rounded">
+                        Supabase Live Connected
+                    </span>
+                </header>
+
+                <main className="p-6 lg:p-10 space-y-6">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                            <h3 className="text-xs text-slate-400 uppercase tracking-wider">Total Files in Cloud</h3>
+                            <p className="text-2xl font-bold text-white mt-2">
+                                {loading ? '...' : totalFiles}
+                            </p>
+                        </div>
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                            <h3 className="text-xs text-slate-400 uppercase tracking-wider">Active Status Files</h3>
+                            <p className="text-2xl font-bold text-emerald-400 mt-2">
+                                {loading ? '...' : activeFiles}
+                            </p>
+                        </div>
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                            <h3 className="text-xs text-slate-400 uppercase tracking-wider">Database Status</h3>
+                            <p className="text-2xl font-bold text-blue-400 mt-2">Online</p>
+                        </div>
+                    </div>
+
+                    {/* Recent Files Section */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                        <h2 className="text-xs font-bold text-white uppercase tracking-wider">Recent Cloud Files</h2>
+                        {loading ? (
+                            <p className="text-xs text-slate-500">Loading data...</p>
+                        ) : files.length === 0 ? (
+                            <p className="text-xs text-slate-500">No files uploaded yet. Go to Web Upload to add files.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {files.slice(0, 5).map((file) => (
+                                    <div key={file.id} className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs">
+                                        <span className="font-medium text-white truncate max-w-md">{file.name}</span>
+                                        <span className="text-slate-400">{file.quality || '1080p'}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </main>
             </div>
         </div>
     );
