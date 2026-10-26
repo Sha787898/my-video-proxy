@@ -28,7 +28,7 @@ export default function Sidebar() {
 
             {/* Navigation Links */}
             <div className="flex-1 overflow-y-auto px-4 py-6 space-y-1.5 text-xs">
-                <Link href="/" className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold transition ${isActive('/') ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-900/50'}`}>
+                <Link href="/dashboard" className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold transition ${isActive('/dashboard') ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-900/50'}`}>
                     <span>📊</span> Dashboard
                 </Link>
 
@@ -36,7 +36,7 @@ export default function Sidebar() {
                     <span>🗂️</span> File Manager
                 </Link>
 
-                {/* Upload Options Menu */}
+                {/* Upload Options Dropdown */}
                 <div className="space-y-1">
                     <button 
                         onClick={() => setUploadOpen(!uploadOpen)} 

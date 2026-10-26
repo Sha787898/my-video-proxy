@@ -1,18 +1,52 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export default function DriveUploadPage() {
+    const router = useRouter();
+    const [user, setUser] = useState(null);
+    const [loadingAuth, setLoadingAuth] = useState(true);
+
     const [driveFileId, setDriveFileId] = useState('');
     const [fileName, setFileName] = useState('');
     const [loading, setLoading] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
 
+    // ১. সিকিউরিটি গার্ড: লগইন করা আছে কিনা চেক করা
+    useEffect(() => {
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                router.push('/login');
+            } else {
+                setUser(session.user);
+                setLoadingAuth(false);
+            }
+        }
+        checkAuth();
+    }, [router]);
+
+    // লোডিং অবস্থায় ব্লকিং স্ক্রিন
+    if (loadingAuth) {
+        return (
+            <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-mono">
+                <p className="text-xs text-blue-400 animate-pulse">Checking authorization...</p>
+            </div>
+        );
+    }
+
     const handleUpload = async (e) => {
         e.preventDefault();
-        if (!driveFileId) return;
+        if (!driveFileId || !user) return;
 
         setLoading(true);
         setSuccessMsg('');
@@ -27,7 +61,8 @@ export default function DriveUploadPage() {
                 body: JSON.stringify({
                     uploadType: 'drive',
                     driveFileId,
-                    fileName
+                    fileName,
+                    user_id: user.id // ইউজারের আইডি পাস করা হলো
                 }),
             });
 
@@ -53,6 +88,7 @@ export default function DriveUploadPage() {
             <div className="flex-1 flex flex-col min-w-0">
                 <header className="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
                     <h1 className="text-sm font-bold text-white uppercase">Google Drive Remote Upload</h1>
+                    <span className="text-xs text-slate-400">{user?.email}</span>
                 </header>
 
                 <main className="p-6 lg:p-10 max-w-2xl">
