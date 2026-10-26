@@ -53,7 +53,7 @@ export default function LandingPage() {
 
             {/* Footer */}
             <footer className="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500 font-mono">
-                &copy; {new Date().getFullYear()} MultiServer.top &mdash; All Rights Reserved.
+                &copy; 2026 MultiServer.top &mdash; All Rights Reserved.
             </footer>
         </div>
     );
