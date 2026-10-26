@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Sidebar from '../../components/Sidebar';
+import Sidebar from '../components/Sidebar'; // এখানে একটি ডট (../) হবে যেহেতু manage-sites ফোল্ডারটি সরাসরি app এর ভেতর আছে
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -23,11 +23,10 @@ export default function ManageSitesPage() {
     const [loadingAuth, setLoadingAuth] = useState(true);
 
     const [nodes, setNodes] = useState(DEFAULT_NODES);
-    const [activeModal, setActiveModal] = useState(null); // { type: 'key'|'domain', node: obj }
+    const [activeModal, setActiveModal] = useState(null);
     const [inputValue, setInputValue] = useState('');
     const [saveStatus, setSaveStatus] = useState('');
 
-    // ১. সিকিউরিটি গার্ড ও সেশন চেক
     useEffect(() => {
         async function checkAuthAndFetch() {
             const { data: { session } } = await supabase.auth.getSession();
@@ -38,7 +37,6 @@ export default function ManageSitesPage() {
             setUser(session.user);
             setLoadingAuth(false);
 
-            // Load saved API Keys from localStorage
             const savedKeys = localStorage.getItem('multiserver_node_keys');
             if (savedKeys) {
                 try {
@@ -85,7 +83,6 @@ export default function ManageSitesPage() {
 
         setNodes(updatedNodes);
 
-        // Persist API Keys locally for upload API usage
         const keyMap = {};
         updatedNodes.forEach(n => keyMap[n.id] = n.key);
         localStorage.setItem('multiserver_node_keys', JSON.stringify(keyMap));
@@ -100,7 +97,6 @@ export default function ManageSitesPage() {
             <Sidebar />
 
             <div className="flex-1 flex flex-col min-w-0">
-                {/* Header Navbar */}
                 <header className="h-16 border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <span className="text-xl">⚙️</span>
@@ -116,15 +112,12 @@ export default function ManageSitesPage() {
 
                 <main className="flex-1 flex flex-col items-center justify-start p-6 lg:p-10">
                     <div className="w-full max-w-5xl space-y-6">
-                        
-                        {/* Status Notice */}
                         {saveStatus && (
                             <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-bold flex items-center gap-2">
                                 <span>✅</span> {saveStatus}
                             </div>
                         )}
 
-                        {/* Top Info Banner */}
                         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xl">
                             <div>
                                 <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -134,12 +127,8 @@ export default function ManageSitesPage() {
                                     Toggle operational nodes, attach API keys, custom domains, and route your remote uploads.
                                 </p>
                             </div>
-                            <button className="px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-xs font-bold text-slate-200 border border-slate-800 transition self-start md:self-auto">
-                                ↕️ Reorder Priority Ranks
-                            </button>
                         </div>
 
-                        {/* Node Cards List */}
                         <div className="space-y-4">
                             {nodes.map((node, index) => (
                                 <div 
@@ -149,7 +138,6 @@ export default function ManageSitesPage() {
                                     }`}
                                 >
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                        {/* Left: Info */}
                                         <div className="flex items-center gap-4">
                                             <div className="text-xs text-slate-500 font-bold bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
                                                 #{String(index + 1).padStart(2, '0')}
@@ -173,7 +161,6 @@ export default function ManageSitesPage() {
                                             </div>
                                         </div>
 
-                                        {/* Right: Actions & Toggle */}
                                         <div className="flex items-center gap-3 self-end sm:self-auto">
                                             <button 
                                                 onClick={() => handleOpenModal(node, 'key')}
@@ -193,7 +180,6 @@ export default function ManageSitesPage() {
                                                 <span>🌐</span> Domain
                                             </button>
 
-                                            {/* Toggle Switch */}
                                             <button 
                                                 onClick={() => toggleNodeActive(node.id)}
                                                 className={`w-12 h-6 rounded-full transition-colors relative p-1 cursor-pointer ${
@@ -213,7 +199,6 @@ export default function ManageSitesPage() {
                 </main>
             </div>
 
-            {/* Modal for Adding/Editing API Key or Domain */}
             {activeModal && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 sm:p-8 space-y-4 shadow-2xl">
