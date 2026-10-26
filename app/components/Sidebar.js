@@ -15,9 +15,14 @@ export default function Sidebar() {
         <aside className="w-64 bg-slate-950 border-r border-slate-900 flex flex-col h-screen sticky top-0 font-mono select-none">
             {/* Logo Header */}
             <div className="h-16 border-b border-slate-900 px-6 flex items-center justify-between">
-                <span className="text-sm font-black tracking-widest bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-500 bg-clip-text text-transparent uppercase">
-                    TOXCLOUD
-                </span>
+                <Link href="/" className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-black text-white text-sm shadow-lg shadow-blue-600/30">
+                        MS
+                    </div>
+                    <span className="text-sm font-black tracking-widest text-white uppercase">
+                        MULTISERVER
+                    </span>
+                </Link>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">PRO</span>
             </div>
 
@@ -27,39 +32,39 @@ export default function Sidebar() {
                     <span>📊</span> Dashboard
                 </Link>
 
-                {/* Upload File Dropdown */}
+                <Link href="/file-manager" className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold transition ${isActive('/file-manager') ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-900/50'}`}>
+                    <span>🗂️</span> File Manager
+                </Link>
+
+                {/* Upload Options Menu */}
                 <div className="space-y-1">
                     <button 
                         onClick={() => setUploadOpen(!uploadOpen)} 
                         className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-slate-400 hover:text-white hover:bg-slate-900/50 transition"
                     >
                         <div className="flex items-center gap-3">
-                            <span>⬆️</span> Upload File
+                            <span>⬆️</span> Upload Options
                         </div>
                         <span className={`transition-transform text-[10px] ${uploadOpen ? 'rotate-180' : ''}`}>▼</span>
                     </button>
 
                     {uploadOpen && (
                         <div className="pl-4 space-y-1 border-l border-slate-800 ml-4 my-1">
-                            <Link href="/web-upload" className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/web-upload') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
-                                Web Upload
-                            </Link>
-                            <Link href="/drive-upload" className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/drive-upload') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
-                                Gdrive Upload
-                            </Link>
                             <Link href="/remote-upload" className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/remote-upload') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
                                 Remote Upload
                             </Link>
+                            <Link href="/drive-upload" className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/drive-upload') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
+                                GDrive Mirror
+                            </Link>
+                            <Link href="/web-upload" className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/web-upload') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
+                                Direct Web Upload
+                            </Link>
                             <Link href="/processing-files" className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/processing-files') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
-                                Processing Files
+                                Processing Queue
                             </Link>
                         </div>
                     )}
                 </div>
-
-                <Link href="/file-manager" className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold transition ${isActive('/file-manager') ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-900/50'}`}>
-                    <span>🗂️</span> Manage Files
-                </Link>
 
                 <Link href="/embed-generator" className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold transition ${isActive('/embed-generator') ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-900/50'}`}>
                     <span>⚡</span> Embed Generator
@@ -84,7 +89,7 @@ export default function Sidebar() {
                     {settingsOpen && (
                         <div className="pl-4 space-y-1 border-l border-slate-800 ml-4 my-1">
                             <Link href="/manage-sites" className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/manage-sites') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
-                                Manage Sites
+                                Manage Sites & Keys
                             </Link>
                         </div>
                     )}
