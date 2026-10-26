@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Sidebar from '../components/Sidebar';
+import { useRouter } from 'next/navigation';
+import Sidebar from '../../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -17,26 +18,50 @@ const DEFAULT_NODES = [
 ];
 
 export default function ManageSitesPage() {
+    const router = useRouter();
+    const [user, setUser] = useState(null);
+    const [loadingAuth, setLoadingAuth] = useState(true);
+
     const [nodes, setNodes] = useState(DEFAULT_NODES);
     const [activeModal, setActiveModal] = useState(null); // { type: 'key'|'domain', node: obj }
     const [inputValue, setInputValue] = useState('');
     const [saveStatus, setSaveStatus] = useState('');
 
+    // ১. সিকিউরিটি গার্ড ও সেশন চেক
     useEffect(() => {
-        // Load saved API Keys or custom node configs from localStorage / Supabase
-        const savedKeys = localStorage.getItem('multiserver_node_keys');
-        if (savedKeys) {
-            try {
-                const parsed = JSON.parse(savedKeys);
-                setNodes(prev => prev.map(node => ({
-                    ...node,
-                    key: parsed[node.id] || node.key
-                })));
-            } catch (e) {
-                console.error(e);
+        async function checkAuthAndFetch() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                router.push('/login');
+                return;
+            }
+            setUser(session.user);
+            setLoadingAuth(false);
+
+            // Load saved API Keys from localStorage
+            const savedKeys = localStorage.getItem('multiserver_node_keys');
+            if (savedKeys) {
+                try {
+                    const parsed = JSON.parse(savedKeys);
+                    setNodes(prev => prev.map(node => ({
+                        ...node,
+                        key: parsed[node.id] || node.key
+                    })));
+                } catch (e) {
+                    console.error(e);
+                }
             }
         }
-    }, []);
+        checkAuthAndFetch();
+    }, [router]);
+
+    if (loadingAuth) {
+        return (
+            <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-mono">
+                <p className="text-xs text-blue-400 animate-pulse">Checking authorization...</p>
+            </div>
+        );
+    }
 
     const toggleNodeActive = (id) => {
         setNodes(prev => prev.map(node => node.id === id ? { ...node, active: !node.active } : node));
@@ -76,108 +101,114 @@ export default function ManageSitesPage() {
 
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Header Navbar */}
-                <header className="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
+                <header className="h-16 border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <span className="text-xl">⚙️</span>
                         <h1 className="text-sm font-bold text-white uppercase tracking-wider">Storage & Stream Nodes</h1>
                     </div>
-                    <a href="/web-upload" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-lg shadow-blue-600/20 flex items-center gap-2">
-                        <span>⬆️</span> Upload New File
-                    </a>
+                    <div className="flex items-center gap-4">
+                        <span className="text-xs text-slate-400 hidden sm:inline">{user?.email}</span>
+                        <a href="/web-upload" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-lg shadow-blue-600/20 flex items-center gap-2">
+                            <span>⬆️</span> Upload New File
+                        </a>
+                    </div>
                 </header>
 
-                <main className="p-6 lg:p-10 max-w-5xl space-y-6">
-                    {/* Status Notice */}
-                    {saveStatus && (
-                        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-bold flex items-center gap-2">
-                            <span>✅</span> {saveStatus}
-                        </div>
-                    )}
+                <main className="flex-1 flex flex-col items-center justify-start p-6 lg:p-10">
+                    <div className="w-full max-w-5xl space-y-6">
+                        
+                        {/* Status Notice */}
+                        {saveStatus && (
+                            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-bold flex items-center gap-2">
+                                <span>✅</span> {saveStatus}
+                            </div>
+                        )}
 
-                    {/* Top Info Banner */}
-                    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
-                        <div>
-                            <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                <span>🗄️</span> Node & Storage Management
-                            </h2>
-                            <p className="text-xs text-slate-400 mt-1">
-                                Toggle operational nodes, attach API keys, custom domains, and route your remote uploads.
-                            </p>
+                        {/* Top Info Banner */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xl">
+                            <div>
+                                <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                                    <span>🗄️</span> Node & Storage Management
+                                </h2>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    Toggle operational nodes, attach API keys, custom domains, and route your remote uploads.
+                                </p>
+                            </div>
+                            <button className="px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-xs font-bold text-slate-200 border border-slate-800 transition self-start md:self-auto">
+                                ↕️ Reorder Priority Ranks
+                            </button>
                         </div>
-                        <button className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 transition self-start md:self-auto">
-                            ↕️ Reorder Priority Ranks
-                        </button>
-                    </div>
 
-                    {/* Node Cards List */}
-                    <div className="space-y-4">
-                        {nodes.map((node, index) => (
-                            <div 
-                                key={node.id} 
-                                className={`bg-slate-900/90 border rounded-2xl p-5 shadow-xl transition-all duration-200 ${
-                                    node.active ? 'border-slate-800 hover:border-slate-700' : 'border-slate-900 opacity-60'
-                                }`}
-                            >
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                    {/* Left: Info */}
-                                    <div className="flex items-center gap-4">
-                                        <div className="text-xs text-slate-500 font-bold bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
-                                            #{String(index + 1).padStart(2, '0')}
-                                        </div>
-                                        <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-lg">
-                                            {node.icon}
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="text-xs font-bold text-white">{node.name}</h3>
-                                                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                                    ● {node.status}
-                                                </span>
+                        {/* Node Cards List */}
+                        <div className="space-y-4">
+                            {nodes.map((node, index) => (
+                                <div 
+                                    key={node.id} 
+                                    className={`bg-slate-900 border rounded-3xl p-6 shadow-xl transition-all duration-200 ${
+                                        node.active ? 'border-slate-800 hover:border-slate-700' : 'border-slate-900 opacity-60'
+                                    }`}
+                                >
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        {/* Left: Info */}
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-xs text-slate-500 font-bold bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                                                #{String(index + 1).padStart(2, '0')}
                                             </div>
-                                            <p className="text-[11px] text-slate-400 mt-0.5">
-                                                Limit: <span className="text-slate-200 font-bold">{node.limit}</span>
-                                                {node.customDomain && (
-                                                    <span className="ml-3 text-blue-400 font-bold">| Domain: {node.customDomain}</span>
-                                                )}
-                                            </p>
+                                            <div className="w-12 h-12 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center text-xl shadow-lg">
+                                                {node.icon}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="text-xs font-bold text-white">{node.name}</h3>
+                                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                                        ● {node.status}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[11px] text-slate-400 mt-0.5">
+                                                    Limit: <span className="text-slate-200 font-bold">{node.limit}</span>
+                                                    {node.customDomain && (
+                                                        <span className="ml-3 text-blue-400 font-bold">| Domain: {node.customDomain}</span>
+                                                    )}
+                                                </p>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    {/* Right: Actions & Toggle */}
-                                    <div className="flex items-center gap-3 self-end sm:self-auto">
-                                        <button 
-                                            onClick={() => handleOpenModal(node, 'key')}
-                                            className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition flex items-center gap-1.5 ${
-                                                node.key 
-                                                    ? 'bg-slate-950 border-slate-700 text-slate-300 hover:bg-slate-800' 
-                                                    : 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20'
-                                            }`}
-                                        >
-                                            <span>🔑</span> {node.key ? 'Edit Key' : '+ Add Key'}
-                                        </button>
+                                        {/* Right: Actions & Toggle */}
+                                        <div className="flex items-center gap-3 self-end sm:self-auto">
+                                            <button 
+                                                onClick={() => handleOpenModal(node, 'key')}
+                                                className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                                    node.key 
+                                                        ? 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800' 
+                                                        : 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20'
+                                                }`}
+                                            >
+                                                <span>🔑</span> {node.key ? 'Edit Key' : '+ Add Key'}
+                                            </button>
 
-                                        <button 
-                                            onClick={() => handleOpenModal(node, 'domain')}
-                                            className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 text-[11px] font-bold transition flex items-center gap-1.5"
-                                        >
-                                            <span>🌐</span> Domain
-                                        </button>
+                                            <button 
+                                                onClick={() => handleOpenModal(node, 'domain')}
+                                                className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer"
+                                            >
+                                                <span>🌐</span> Domain
+                                            </button>
 
-                                        {/* Toggle Switch */}
-                                        <button 
-                                            onClick={() => toggleNodeActive(node.id)}
-                                            className={`w-12 h-6 rounded-full transition-colors relative p-1 ${
-                                                node.active ? 'bg-blue-600' : 'bg-slate-800'
-                                            }`}
-                                        >
-                                            <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                                                node.active ? 'translate-x-6' : 'translate-x-0'
-                                            }`} />
-                                        </button>
+                                            {/* Toggle Switch */}
+                                            <button 
+                                                onClick={() => toggleNodeActive(node.id)}
+                                                className={`w-12 h-6 rounded-full transition-colors relative p-1 cursor-pointer ${
+                                                    node.active ? 'bg-blue-600' : 'bg-slate-800'
+                                                }`}
+                                            >
+                                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                                                    node.active ? 'translate-x-6' : 'translate-x-0'
+                                                }`} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
                 </main>
             </div>
@@ -185,12 +216,12 @@ export default function ManageSitesPage() {
             {/* Modal for Adding/Editing API Key or Domain */}
             {activeModal && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+                    <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 sm:p-8 space-y-4 shadow-2xl">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                            <h3 className="text-xs font-bold text-white uppercase tracking-wider truncate">
                                 {activeModal.type === 'key' ? 'Set API Key' : 'Set Custom Domain'} - {activeModal.node.name}
                             </h3>
-                            <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white text-sm">✕</button>
+                            <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white text-sm cursor-pointer">✕</button>
                         </div>
 
                         <div className="space-y-1.5">
@@ -209,13 +240,13 @@ export default function ManageSitesPage() {
                         <div className="flex items-center gap-3 pt-2">
                             <button 
                                 onClick={() => setActiveModal(null)}
-                                className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition"
+                                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition cursor-pointer"
                             >
                                 Cancel
                             </button>
                             <button 
                                 onClick={handleSaveModal}
-                                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-600/25"
+                                className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-600/25 cursor-pointer"
                             >
                                 Save Changes
                             </button>
