@@ -2,9 +2,12 @@
 
 import { use } from 'react';
 
+export const dynamic = 'force-dynamic';
+
 export default function EmbedPlayerPage({ params }) {
     // Dynamic Route Params Extract
-    const { id } = use(params);
+    const resolvedParams = use(params);
+    const id = resolvedParams?.id || 'default';
 
     return (
         <div className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden relative group">

@@ -3,8 +3,11 @@
 import { use } from 'react';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 export default function FileDownloadPage({ params }) {
-    const { id } = use(params);
+    const resolvedParams = use(params);
+    const id = resolvedParams?.id || 'default';
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
