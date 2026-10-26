@@ -1,19 +1,17 @@
 'use client';
 
-import { use } from 'react';
+import { use, Suspense } from 'react';
 import Link from 'next/link';
 
-export default function FileDownloadPage({ params }) {
+function FileDownloadContent({ params }) {
     const resolvedParams = use(params);
     const id = resolvedParams?.id || 'default';
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
-            {/* Background Glow */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/15 blur-[120px] rounded-full pointer-events-none"></div>
 
             <div className="max-w-2xl w-full bg-slate-800 border border-slate-700 rounded-2xl p-6 lg:p-8 shadow-2xl relative z-10 space-y-6">
-                {/* File Header Details */}
                 <div className="flex items-start gap-4 pb-5 border-b border-slate-700">
                     <div className="w-14 h-14 bg-blue-600/15 text-blue-400 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 border border-blue-500/20">
                         <i className="fa-solid fa-file-video"></i>
@@ -27,7 +25,6 @@ export default function FileDownloadPage({ params }) {
                     </div>
                 </div>
 
-                {/* Video Stream Preview Embed */}
                 <div className="aspect-video w-full bg-slate-900 rounded-xl overflow-hidden border border-slate-700 relative shadow-inner">
                     <iframe 
                         src={`/embed/${id}`} 
@@ -36,7 +33,6 @@ export default function FileDownloadPage({ params }) {
                     ></iframe>
                 </div>
 
-                {/* Download Buttons */}
                 <div className="flex flex-col sm:flex-row gap-3 pt-2">
                     <a 
                         href="#" 
@@ -53,5 +49,13 @@ export default function FileDownloadPage({ params }) {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function FileDownloadPage({ params }) {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400 text-xs font-mono">Loading File Node...</div>}>
+            <FileDownloadContent params={params} />
+        </Suspense>
     );
 }

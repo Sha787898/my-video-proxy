@@ -1,15 +1,13 @@
 'use client';
 
-import { use } from 'react';
+import { use, Suspense } from 'react';
 
-export default function EmbedPlayerPage({ params }) {
-    // Dynamic Route Params Extract
+function EmbedContent({ params }) {
     const resolvedParams = use(params);
     const id = resolvedParams?.id || 'default';
 
     return (
         <div className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden relative group">
-            {/* MultiServer Custom Video Player Framework */}
             <video 
                 controls 
                 autoPlay={false}
@@ -20,11 +18,18 @@ export default function EmbedPlayerPage({ params }) {
                 Your browser does not support video playback.
             </video>
 
-            {/* Top Branding Overlay */}
             <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700/60 opacity-80 group-hover:opacity-100 transition">
                 <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
                 <span className="text-xs font-bold text-slate-200 tracking-wide font-mono">MultiServer Stream ({id})</span>
             </div>
         </div>
+    );
+}
+
+export default function EmbedPlayerPage({ params }) {
+    return (
+        <Suspense fallback={<div className="w-screen h-screen bg-black flex items-center justify-center text-slate-400 text-xs font-mono">Loading Stream Node...</div>}>
+            <EmbedContent params={params} />
+        </Suspense>
     );
 }
