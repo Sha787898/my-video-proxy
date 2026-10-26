@@ -2,8 +2,6 @@
 
 import { use } from 'react';
 
-export const dynamic = 'force-dynamic';
-
 export default function EmbedPlayerPage({ params }) {
     // Dynamic Route Params Extract
     const resolvedParams = use(params);

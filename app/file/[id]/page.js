@@ -3,8 +3,6 @@
 import { use } from 'react';
 import Link from 'next/link';
 
-export const dynamic = 'force-dynamic';
-
 export default function FileDownloadPage({ params }) {
     const resolvedParams = use(params);
     const id = resolvedParams?.id || 'default';
