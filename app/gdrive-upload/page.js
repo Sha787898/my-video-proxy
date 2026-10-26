@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Sidebar from '../components/sidebar';
+import Sidebar from '../components/Sidebar';
 
 export class GDriveUploadPage {} // placeholder wrapper
 

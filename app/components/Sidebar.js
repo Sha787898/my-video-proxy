@@ -1,3 +1,4 @@
+cat << 'EOF' > app/components/Sidebar.js
 'use client';
 
 import Link from 'next/link';
@@ -59,3 +60,4 @@ export default function Sidebar() {
         </aside>
     );
 }
+EOF
