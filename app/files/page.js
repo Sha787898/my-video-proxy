@@ -1,111 +1,98 @@
 'use client';
 
 import { useState } from 'react';
+import Sidebar from '../components/Sidebar';
 
-export default function ManageFilesPage() {
+export default function FilesPage() {
     const [searchTerm, setSearchTerm] = useState('');
 
-    // ডেমো ফাইল লিস্ট (আপনার ব্যাকএন্ড বা API আসার আগে প্রিভিউ দেখানোর জন্য)
-    const filesList = [
-        { id: 'ms_abc123', name: 'Naruto Shippuden Episode 365 [1080p].mkv', size: '1.2 GB', format: 'MKV', date: 'Oct 26, 2026' },
-        { id: 'ms_xyz789', name: 'Chainsaw Man Movie Reze Arc [480p].mp4', size: '650 MB', format: 'MP4', date: 'Oct 25, 2026' },
-        { id: 'ms_def456', name: 'That Time I Got Reincarnated as a Slime S3.mkv', size: '1.8 GB', format: 'MKV', date: 'Oct 24, 2026' },
+    const files = [
+        { id: 'f1a2b3', name: 'MultiServer_Video_Node_01.mkv', size: '1.45 GB', quality: '1080p FHD', date: '2026-10-26', status: 'Active' },
+        { id: 'x9y8z7', name: 'Action_Movie_Trailer_Remux.mp4', size: '650 MB', quality: '4K UHD', date: '2026-10-25', status: 'Active' },
+        { id: 'm4n5p6', name: 'Anime_Episode_Raw_Rip.mkv', size: '380 MB', quality: '1080p', date: '2026-10-24', status: 'Processing' },
     ];
 
-    const filteredFiles = filesList.filter(file => 
-        file.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredFiles = files.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const handleCopy = (text, btnId) => {
-        navigator.clipboard.writeText(text);
-        const btn = document.getElementById(btnId);
-        if (btn) {
-            const originalHTML = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-check text-xs"></i> Copied';
-            btn.className = 'px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold transition';
-            setTimeout(() => {
-                btn.innerHTML = originalHTML;
-                btn.className = 'px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-sm';
-            }, 2000);
-        }
+    const copyLink = (id) => {
+        const url = `${window.location.origin}/file/${id}`;
+        navigator.clipboard.writeText(url);
+        alert('File link copied to clipboard!');
     };
 
     return (
-        <div className="p-4 lg:p-6 pb-12 max-w-7xl mx-auto w-full space-y-6">
-            {/* Header & Search Bar */}
-            <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
-                <div>
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-folder-open text-blue-500"></i> Manage Files
-                    </h2>
-                    <p className="text-slate-400 text-xs mt-1">View, search, and copy embed/download links for all stored media.</p>
-                </div>
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex">
+            <Sidebar />
 
-                <div className="w-full md:w-72">
-                    <input 
-                        type="text" 
-                        placeholder="Search files..." 
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 text-slate-100 text-xs rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500 shadow-inner"
-                    />
-                </div>
-            </div>
+            <div className="flex-1 flex flex-col min-w-0">
+                <header className="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
+                    <h1 className="text-sm font-bold text-white uppercase font-mono">File Manager</h1>
+                    <span className="text-xs font-mono text-slate-400">Total: {files.length} Files</span>
+                </header>
 
-            {/* Files List Table / Cards */}
-            <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
-                <div className="p-5 border-b border-slate-700 flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Stored Media Files ({filteredFiles.length})</h3>
-                </div>
-
-                <div className="divide-y divide-slate-700/60">
-                    {filteredFiles.length > 0 ? (
-                        filteredFiles.map((file, idx) => {
-                            const embedUrl = `https://multiserver.top/embed/${file.id}`;
-                            const downloadUrl = `https://multiserver.top/file/${file.id}`;
-
-                            return (
-                                <div key={file.id} className="p-4 lg:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 hover:bg-slate-750 transition">
-                                    <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                                        <div className="w-10 h-10 bg-slate-900 text-blue-400 rounded-xl flex items-center justify-center flex-shrink-0 border border-slate-700">
-                                            <i className="fa-solid fa-file-video text-base"></i>
-                                        </div>
-                                        <div className="min-w-0">
-                                            <h4 className="text-sm font-semibold text-white truncate">{file.name}</h4>
-                                            <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-400">
-                                                <span className="font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-700">{file.format}</span>
-                                                <span><i className="fa-solid fa-hard-drive mr-1"></i> {file.size}</span>
-                                                <span><i className="fa-solid fa-calendar mr-1"></i> {file.date}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Action Buttons */}
-                                    <div className="flex items-center gap-2 flex-shrink-0 w-full lg:w-auto justify-end">
-                                        <button 
-                                            id={`btn-dl-${idx}`} 
-                                            onClick={() => handleCopy(downloadUrl, `btn-dl-${idx}`)}
-                                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold transition cursor-pointer"
-                                        >
-                                            Copy DL Link
-                                        </button>
-                                        <button 
-                                            id={`btn-emb-${idx}`} 
-                                            onClick={() => handleCopy(embedUrl, `btn-emb-${idx}`)}
-                                            className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-sm"
-                                        >
-                                            Copy Embed
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })
-                    ) : (
-                        <div className="p-10 text-center text-slate-500 text-xs">
-                            No files found matching your search.
+                <main className="p-6 lg:p-10 space-y-6">
+                    {/* Search Bar */}
+                    <div className="flex gap-3">
+                        <div className="relative flex-1">
+                            <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                            <input 
+                                type="text"
+                                placeholder="Search files by name..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-mono transition"
+                            />
                         </div>
-                    )}
-                </div>
+                    </div>
+
+                    {/* Files Table / List */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b border-slate-800 bg-slate-950/50 text-[10px] uppercase font-mono text-slate-400">
+                                        <th className="p-4">File Name</th>
+                                        <th className="p-4">Size</th>
+                                        <th className="p-4">Quality</th>
+                                        <th className="p-4">Date Added</th>
+                                        <th className="p-4">Status</th>
+                                        <th className="p-4 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
+                                    {filteredFiles.map((file) => (
+                                        <tr key={file.id} className="hover:bg-slate-850/50 transition">
+                                            <td className="p-4 flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-blue-600/10 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/20">
+                                                    <i className="fa-solid fa-file-video text-xs"></i>
+                                                </div>
+                                                <span className="font-bold text-white truncate max-w-xs">{file.name}</span>
+                                            </td>
+                                            <td className="p-4 text-slate-300">{file.size}</td>
+                                            <td className="p-4">
+                                                <span className="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded text-[10px] border border-blue-500/20">{file.quality}</span>
+                                            </td>
+                                            <td className="p-4 text-slate-400">{file.date}</td>
+                                            <td className="p-4">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] ${file.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                                                    {file.status}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-right space-x-2">
+                                                <button onClick={() => copyLink(file.id)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-bold transition">
+                                                    <i className="fa-solid fa-link mr-1"></i> Copy Link
+                                                </button>
+                                                <a href={`/file/${file.id}`} target="_blank" className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold inline-block transition">
+                                                    <i className="fa-solid fa-eye"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </main>
             </div>
         </div>
     );
