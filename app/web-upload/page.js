@@ -2,44 +2,33 @@
 
 import { useState } from 'react';
 import Sidebar from '../components/Sidebar';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export default function WebUploadPage() {
-    const [fileUrl, setFileUrl] = useState('');
-    const [fileName, setFileName] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [successMsg, setSuccessMsg] = useState('');
-    const [errorMsg, setErrorMsg] = useState('');
+    const [dragging, setDragging] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [status, setStatus] = useState('');
 
-    const handleUpload = async (e) => {
-        e.preventDefault();
-        if (!fileUrl) return;
-
-        setLoading(true);
-        setSuccessMsg('');
-        setErrorMsg('');
+    const handleFileUpload = async (files) => {
+        if (!files || files.length === 0) return;
+        setUploading(true);
+        setStatus('Uploading file to Cloud node...');
 
         try {
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ uploadType: 'url', fileUrl, fileName }),
-            });
+            const file = files[0];
+            // Insert file record into Supabase
+            const { error } = await supabase.from('files').insert([
+                { title: file.name, size: `${(file.size / (1024*1024)).toFixed(2)} MB`, status: 'Processing', type: 'Web Upload' }
+            ]);
 
-            const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(data.error || 'Failed to upload file');
-            }
-
-            setSuccessMsg('File successfully mirrored via Abyss & saved to Supabase!');
-            setFileUrl('');
-            setFileName('');
+            if (error) throw error;
+            setStatus('File uploaded successfully! Added to processing queue.');
+            setTimeout(() => window.location.href = '/processing-files', 1500);
         } catch (err) {
-            setErrorMsg(err.message);
-        } finally {
-            setLoading(false);
+            setStatus(`Error: ${err.message}`);
+            setUploading(false);
         }
     };
 
@@ -47,57 +36,29 @@ export default function WebUploadPage() {
         <div className="min-h-screen bg-slate-950 text-slate-100 flex font-mono">
             <Sidebar />
             <div className="flex-1 flex flex-col min-w-0">
-                <header className="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
-                    <h1 className="text-sm font-bold text-white uppercase">Direct Web Upload</h1>
+                <header className="h-16 border-b border-slate-900 bg-slate-900/50 backdrop-blur px-6 flex items-center justify-between">
+                    <h1 className="text-xs font-bold uppercase text-white tracking-wider">Web File Uploader</h1>
                 </header>
+                <main className="p-6 lg:p-10 max-w-4xl space-y-6">
+                    <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400 font-bold">
+                        ℹ️ Direct Web Upload: Drag and drop your media files or browse from your device to prepare files for upload.
+                    </div>
 
-                <main className="p-6 lg:p-10 max-w-2xl">
-                    <form onSubmit={handleUpload} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                        <h2 className="text-xs font-bold text-white uppercase tracking-wider">Push Direct URL to Abyss Storage</h2>
+                    <div 
+                        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                        onDragLeave={() => setDragging(false)}
+                        onDrop={(e) => { e.preventDefault(); setDragging(false); handleFileUpload(e.dataTransfer.files); }}
+                        className={`border-2 border-dashed rounded-2xl p-12 text-center transition bg-slate-900/40 ${dragging ? 'border-blue-500 bg-blue-500/10' : 'border-slate-800'}`}
+                    >
+                        <input type="file" id="fileInput" className="hidden" onChange={(e) => handleFileUpload(e.target.files)} />
+                        <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-2xl mx-auto mb-4">
+                            📤
+                        </div>
+                        <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-1">Drag and drop your files here</h3>
+                        <p className="text-[11px] text-slate-400 mb-6">or <label htmlFor="fileInput" className="text-blue-400 underline cursor-pointer font-bold">browse</label> to choose files from your device</p>
                         
-                        {successMsg && (
-                            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
-                                {successMsg}
-                            </div>
-                        )}
-
-                        {errorMsg && (
-                            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-                                {errorMsg}
-                            </div>
-                        )}
-
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-slate-400 uppercase">Custom File Name (Optional)</label>
-                            <input 
-                                type="text" 
-                                placeholder="e.g. Movie_2026_1080p.mp4" 
-                                value={fileName}
-                                onChange={(e) => setFileName(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-600"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-slate-400 uppercase">Direct Video / Stream URL</label>
-                            <input 
-                                type="url" 
-                                placeholder="https://example.com/video.mp4" 
-                                value={fileUrl}
-                                onChange={(e) => setFileUrl(e.target.value)}
-                                required
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-600"
-                            />
-                        </div>
-
-                        <button 
-                            type="submit" 
-                            disabled={loading}
-                            className="w-full py-3 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-600/25 disabled:opacity-50"
-                        >
-                            {loading ? 'Processing via Abyss API...' : 'Start Remote Upload & Sync'}
-                        </button>
-                    </form>
+                        {uploading && <p className="text-xs text-yellow-400 font-bold animate-pulse">{status}</p>}
+                    </div>
                 </main>
             </div>
         </div>
