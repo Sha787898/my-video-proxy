@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Sidebar from '../components/Sidebar'; // এখানে একটি ডট (../) হবে যেহেতু manage-sites ফোল্ডারটি সরাসরি app এর ভেতর আছে
+import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -10,11 +10,12 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const DEFAULT_NODES = [
-    { id: 'abyss', name: 'Abyss.to / LoadMyFile', limit: 'Unlimited', icon: '⚡', status: 'ONLINE', active: true, key: '' },
-    { id: 'gcloud', name: 'Google Cloud Drive', limit: '15 GB', icon: '☁️', status: 'ONLINE', active: true, key: '' },
-    { id: 'pixeldrain', name: 'Pixeldrain', limit: '10 GB', icon: '🧪', status: 'ONLINE', active: true, key: '' },
-    { id: 'vikingfile', name: 'VikingFile', limit: '100 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '' },
-    { id: 'gofile', name: 'GoFile', limit: '500 GB', icon: '📁', status: 'ONLINE', active: false, key: '' }
+    { id: 'vidmoly', name: 'Vidmoly.me', limit: 'Unlimited', icon: '⚡', status: 'ONLINE', active: true, key: '', customDomain: '' },
+    { id: 'abyss', name: 'Abyss.to / LoadMyFile', limit: 'Unlimited', icon: '🌊', status: 'ONLINE', active: true, key: '', customDomain: '' },
+    { id: 'gcloud', name: 'Google Cloud Drive', limit: '15 GB', icon: '☁️', status: 'ONLINE', active: true, key: '', customDomain: '' },
+    { id: 'pixeldrain', name: 'Pixeldrain', limit: '10 GB', icon: '🧪', status: 'ONLINE', active: true, key: '', customDomain: '' },
+    { id: 'vikingfile', name: 'VikingFile', limit: '100 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'gofile', name: 'GoFile', limit: '500 GB', icon: '📁', status: 'ONLINE', active: false, key: '', customDomain: '' }
 ];
 
 export default function ManageSitesPage() {
@@ -34,20 +35,26 @@ export default function ManageSitesPage() {
                 router.push('/login');
                 return;
             }
-            setUser(session.user);
+            const currentUser = session.user;
+            setUser(currentUser);
             setLoadingAuth(false);
 
-            const savedKeys = localStorage.getItem('multiserver_node_keys');
-            if (savedKeys) {
-                try {
-                    const parsed = JSON.parse(savedKeys);
-                    setNodes(prev => prev.map(node => ({
+            // Supabase settings টেবিল থেকে ইউজারের সেভ করা কি এবং ডোমেইন ফেচ করা
+            const { data: settingsData, error } = await supabase
+                .from('settings')
+                .select('key, value')
+                .eq('user_id', currentUser.id);
+
+            if (!error && settingsData) {
+                setNodes(prevNodes => prevNodes.map(node => {
+                    const foundKey = settingsData.find(s => s.key === `${node.id}_api_key`);
+                    const foundDomain = settingsData.find(s => s.key === `${node.id}_domain`);
+                    return {
                         ...node,
-                        key: parsed[node.id] || node.key
-                    })));
-                } catch (e) {
-                    console.error(e);
-                }
+                        key: foundKey ? foundKey.value : node.key,
+                        customDomain: foundDomain ? foundDomain.value : node.customDomain
+                    };
+                }));
             }
         }
         checkAuthAndFetch();
@@ -70,9 +77,25 @@ export default function ManageSitesPage() {
         setInputValue(type === 'key' ? node.key || '' : node.customDomain || '');
     };
 
-    const handleSaveModal = () => {
-        if (!activeModal) return;
+    const handleSaveModal = async () => {
+        if (!activeModal || !user) return;
         const { node, type } = activeModal;
+
+        const targetSettingKey = type === 'key' ? `${node.id}_api_key` : `${node.id}_domain`;
+
+        // Supabase-এ আপসার্ট (Insert or Update) করার লজিক
+        const { error } = await supabase
+            .from('settings')
+            .upsert({
+                user_id: user.id,
+                key: targetSettingKey,
+                value: inputValue
+            }, { onConflict: ['user_id', 'key'] });
+
+        if (error) {
+            alert('Failed to save: ' + error.message);
+            return;
+        }
 
         const updatedNodes = nodes.map(n => {
             if (n.id === node.id) {
@@ -82,12 +105,7 @@ export default function ManageSitesPage() {
         });
 
         setNodes(updatedNodes);
-
-        const keyMap = {};
-        updatedNodes.forEach(n => keyMap[n.id] = n.key);
-        localStorage.setItem('multiserver_node_keys', JSON.stringify(keyMap));
-
-        setSaveStatus(`Updated ${type === 'key' ? 'API Key' : 'Custom Domain'} for ${node.name}`);
+        setSaveStatus(`Successfully updated ${type === 'key' ? 'API Key' : 'Custom Domain'} for ${node.name}`);
         setTimeout(() => setSaveStatus(''), 3000);
         setActiveModal(null);
     };
@@ -104,7 +122,7 @@ export default function ManageSitesPage() {
                     </div>
                     <div className="flex items-center gap-4">
                         <span className="text-xs text-slate-400 hidden sm:inline">{user?.email}</span>
-                        <a href="/web-upload" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-lg shadow-blue-600/20 flex items-center gap-2">
+                        <a href="/gdrive-upload" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-lg shadow-blue-600/20 flex items-center gap-2">
                             <span>⬆️</span> Upload New File
                         </a>
                     </div>
@@ -124,7 +142,7 @@ export default function ManageSitesPage() {
                                     <span>🗄️</span> Node & Storage Management
                                 </h2>
                                 <p className="text-xs text-slate-400 mt-1">
-                                    Toggle operational nodes, attach API keys, custom domains, and route your remote uploads.
+                                    Configure operational nodes, attach your personal API keys, custom domains, and route uploads securely.
                                 </p>
                             </div>
                         </div>
