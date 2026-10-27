@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -85,7 +85,7 @@ export async function POST(request) {
                 }
             }
 
-            // Database Record with Processing status and embed_url
+            // 1. Database Record insert with Processing status & embed_url
             const fileRecord = {
                 id: fileId,
                 name: cleanTitle,
@@ -110,23 +110,19 @@ export async function POST(request) {
 
             processedFiles.push(fileRecord);
 
-            // Background Upload matching the exact Abyss API Spec (multipart/form-data with file)
-            (async () => {
+            // 2. Using Next.js `after` hook so Vercel keeps running background upload securely
+            after(async () => {
                 try {
                     let finalWatchUrl = directDownloadUrl;
                     let newStatus = 'Active';
 
                     if (selectedNode === 'abyss' && userApiKey) {
-                        // 1. Fetch file stream/blob from Google Drive
                         const gdriveFileRes = await fetch(directDownloadUrl);
                         if (gdriveFileRes.ok) {
                             const fileBlob = await gdriveFileRes.blob();
-                            
-                            // 2. Build multipart/form-data payload
                             const formData = new FormData();
                             formData.append('file', fileBlob, cleanTitle);
 
-                            // 3. POST request to Abyss official upload endpoint
                             const abyssRes = await fetch(`https://up.abyss.to/${userApiKey}`, {
                                 method: 'POST',
                                 body: formData
@@ -147,7 +143,7 @@ export async function POST(request) {
                         }
                     }
 
-                    // Update database with active status and final stream URL
+                    // Update database with active status and final Abyss/Vidmoly stream URL
                     await supabase
                         .from('files')
                         .update({ original_url: finalWatchUrl, status: newStatus })
@@ -156,7 +152,7 @@ export async function POST(request) {
                 } catch (bgErr) {
                     console.error('Background Upload Error:', bgErr);
                 }
-            })();
+            });
         }
 
         return NextResponse.json({ 
