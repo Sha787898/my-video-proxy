@@ -28,9 +28,11 @@ export async function POST(request) {
         }
 
         const processedFiles = [];
-        const selectedNode = uploadType || 'vidmoly';
+        
+        // Jodi uploadType 'gdrive' hoy ba faka thake, tahole default remote node 'vidmoly' dhore nibe
+        const selectedNode = (uploadType && uploadType !== 'gdrive') ? uploadType : 'vidmoly';
 
-        // ১. প্রোগ্রেস করার আগে ইউজারের নিজস্ব API Key ফেচ করা
+        // 1. User-specific API key fetch kora (shudhu vidmoly ba abyss-er jonno)
         let userApiKey = null;
         if (userId) {
             const { data: settingData, error: settingErr } = await supabase
@@ -57,11 +59,10 @@ export async function POST(request) {
             let fileSize = 'Unknown Size';
             let directDownloadUrl = fileUrl;
 
-            // ২. Google Drive ID Extraction & Real Metadata Fetching
+            // 2. Google Drive ID Extraction & Real Metadata Fetching
             const driveMatch = fileUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || fileUrl.match(/id=([a-zA-Z0-9_-]+)/);
             if (driveMatch && driveMatch[1]) {
                 const gId = driveMatch[1];
-                // সঠিক ডাইরেক্ট ডাউনলোড লিংক ফরম্যাট
                 directDownloadUrl = `https://drive.google.com/uc?export=download&id=${gId}`;
                 cleanTitle = `GDrive_Video_${gId.substring(0, 6)}.mp4`;
 
@@ -89,7 +90,7 @@ export async function POST(request) {
             let finalWatchUrl = directDownloadUrl;
             let fileStatus = 'Processing';
 
-            // ৩. রিমোট সার্ভারে (Vidmoly / Abyss) রিয়েল আপলোড রিকোয়েস্ট পাঠানো
+            // 3. Remote Upload Execution to Vidmoly or Abyss
             if (selectedNode === 'vidmoly') {
                 const vidmolyApiUrl = `https://vidmoly.me/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`;
                 const vidmolyRes = await fetch(vidmolyApiUrl);
@@ -121,7 +122,7 @@ export async function POST(request) {
                 }
             }
 
-            // ৪. ডেটাবেজে সঠিক রেকর্ড সেভ করা
+            // 4. Database Insert
             const fileRecord = {
                 id: fileId,
                 name: cleanTitle,
