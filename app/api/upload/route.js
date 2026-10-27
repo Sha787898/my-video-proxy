@@ -85,7 +85,7 @@ export async function POST(request) {
                 }
             }
 
-            // Database Record e embed_url add kore dewa holo
+            // Database Record with Processing status and embed_url
             const fileRecord = {
                 id: fileId,
                 name: cleanTitle,
@@ -110,19 +110,34 @@ export async function POST(request) {
 
             processedFiles.push(fileRecord);
 
-            // Background-e Remote Upload Execution (Abyss & Vidmoly)
+            // Background Upload matching the exact Abyss API Spec (multipart/form-data with file)
             (async () => {
                 try {
                     let finalWatchUrl = directDownloadUrl;
                     let newStatus = 'Active';
 
                     if (selectedNode === 'abyss' && userApiKey) {
-                        const abyssRes = await fetch(`https://abyss.to/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`);
-                        const abyssData = await abyssRes.json();
-                        if (abyssData && abyssData.result && abyssData.result.url) {
-                            finalWatchUrl = abyssData.result.url;
-                        } else if (abyssData && abyssData.url) {
-                            finalWatchUrl = abyssData.url;
+                        // 1. Fetch file stream/blob from Google Drive
+                        const gdriveFileRes = await fetch(directDownloadUrl);
+                        if (gdriveFileRes.ok) {
+                            const fileBlob = await gdriveFileRes.blob();
+                            
+                            // 2. Build multipart/form-data payload
+                            const formData = new FormData();
+                            formData.append('file', fileBlob, cleanTitle);
+
+                            // 3. POST request to Abyss official upload endpoint
+                            const abyssRes = await fetch(`https://up.abyss.to/${userApiKey}`, {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            const abyssData = await abyssRes.json();
+                            if (abyssData && abyssData.slug) {
+                                finalWatchUrl = `https://abyss.to/${abyssData.slug}`;
+                            } else if (abyssData && abyssData.url) {
+                                finalWatchUrl = abyssData.url;
+                            }
                         }
                     } else if (selectedNode === 'vidmoly' && userApiKey) {
                         const vidmolyRes = await fetch(`https://vidmoly.me/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`);
@@ -132,7 +147,7 @@ export async function POST(request) {
                         }
                     }
 
-                    // Database update with final stream/embed link
+                    // Update database with active status and final stream URL
                     await supabase
                         .from('files')
                         .update({ original_url: finalWatchUrl, status: newStatus })
