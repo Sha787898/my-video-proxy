@@ -19,8 +19,6 @@ export default function GDriveUploadPage() {
     const [linksInput, setLinksInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
-    
-    // আপলোড হওয়া ফাইলগুলোর রিয়েল রেজल्ट নিচে দেখানোর জন্য স্টেট
     const [uploadedFiles, setUploadedFiles] = useState([]);
 
     useEffect(() => {
@@ -72,8 +70,8 @@ export default function GDriveUploadPage() {
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Failed to process links');
 
-            setSuccessMsg(`Completed! Successfully processed all ${data.count} file(s). 🎉`);
-            setUploadedFiles(data.files || []); // সার্ভার থেকে আসা ফাইলগুলোর লিংক নিচে শো করার জন্য সেট করা হলো
+            setSuccessMsg(`Completed! Successfully processed and queued ${data.count} file(s). 🎉`);
+            setUploadedFiles(data.files || []);
             setLinksInput('');
         } catch (err) {
             alert(err.message);
@@ -107,7 +105,7 @@ export default function GDriveUploadPage() {
                         <div className="p-4 rounded-2xl bg-blue-600/10 border border-blue-500/20 text-xs text-blue-300 flex items-start gap-3 shadow-lg backdrop-blur-md">
                             <span className="text-base">ℹ️</span>
                             <p className="leading-relaxed">
-                                Google Drive Integration: Extract links from shared folders directly into the queue or paste individual file links one per line.
+                                Google Drive Integration: Paste your public Google Drive file links below (one link per line). They will be processed and added to your File Manager with 'Processing' status.
                             </p>
                         </div>
 
@@ -163,10 +161,11 @@ export default function GDriveUploadPage() {
                                         Google Drive Public Links (One per line)
                                     </label>
                                     <textarea 
-                                        rows={5}
+                                        rows={6}
+                                        required
                                         value={linksInput}
                                         onChange={(e) => setLinksInput(e.target.value)}
-                                        placeholder="https://drive.google.com/file/d/1xxxxxxx/view&#10;https://drive.google.com/file/d/2xxxxxxx/view"
+                                        placeholder={`https://drive.google.com/file/d/1xxxxxxx/view\nhttps://drive.google.com/file/d/2xxxxxxx/view`}
                                         className="w-full bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-2xl p-4 focus:outline-none focus:border-blue-500 font-mono leading-relaxed transition"
                                     />
                                 </div>
@@ -176,16 +175,16 @@ export default function GDriveUploadPage() {
                                     disabled={isLoading}
                                     className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-xs font-bold uppercase transition shadow-xl shadow-blue-600/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                                 >
-                                    <span>⬆️</span> {isLoading ? 'Processing Links & Generating...' : 'Upload Links'}
+                                    <span>⬆️</span> {isLoading ? 'Processing Links...' : 'Upload Links'}
                                 </button>
                             </form>
                         </div>
 
-                        {/* --- Newly Generated Upload Results Section (নিচে শো করার অংশ) --- */}
+                        {/* Generated Links Results */}
                         {uploadedFiles.length > 0 && (
                             <div className="space-y-4 animate-fade-in">
                                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider px-2">
-                                    ✨ Successfully Generated Links ({uploadedFiles.length})
+                                    ✨ Successfully Queued Files ({uploadedFiles.length})
                                 </h3>
 
                                 {uploadedFiles.map((file) => (
@@ -195,47 +194,17 @@ export default function GDriveUploadPage() {
                                                 <span className="p-2.5 rounded-xl bg-blue-600/10 text-blue-400 text-sm">🎞️</span>
                                                 <div>
                                                     <h4 className="text-xs font-bold text-white">{file.name}</h4>
-                                                    <p className="text-[10px] text-slate-400 mt-0.5">Size: {file.size} | Quality: {file.quality}</p>
+                                                    <p className="text-[10px] text-slate-400 mt-0.5">Status: {file.status} | Size: {file.size}</p>
                                                 </div>
                                             </div>
-                                            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">Active</span>
+                                            <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20">Processing</span>
                                         </div>
 
-                                        {/* Download Link Box */}
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase">Download Link</label>
                                             <div className="flex items-center gap-2">
-                                                <input 
-                                                    type="text" 
-                                                    readOnly 
-                                                    value={file.url} 
-                                                    className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2.5 font-mono"
-                                                />
-                                                <button 
-                                                    onClick={() => copyToClipboard(file.url)}
-                                                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition cursor-pointer"
-                                                >
-                                                    Copy
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* Embed Link Box */}
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Embed Player Link</label>
-                                            <div className="flex items-center gap-2">
-                                                <input 
-                                                    type="text" 
-                                                    readOnly 
-                                                    value={file.embed_url} 
-                                                    className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2.5 font-mono"
-                                                />
-                                                <button 
-                                                    onClick={() => copyToClipboard(file.embed_url)}
-                                                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition cursor-pointer"
-                                                >
-                                                    Copy
-                                                </button>
+                                                <input type="text" readOnly value={file.url} className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono" />
+                                                <button onClick={() => copyToClipboard(file.url)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition">Copy</button>
                                             </div>
                                         </div>
                                     </div>
