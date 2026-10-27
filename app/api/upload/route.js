@@ -64,9 +64,10 @@ export async function POST(request) {
             }
 
             let fileStatus = 'Processing';
+            let userApiKey = null;
             const selectedNode = uploadType || 'vidmoly';
 
-            // User Specific API Key Fetch
+            // API Key Fetching (User specific ba Fallback)
             if (userId) {
                 try {
                     const { data: settingData } = await supabase
@@ -76,38 +77,62 @@ export async function POST(request) {
                         .eq('key', `${selectedNode}_api_key`)
                         .single();
 
-                    const userApiKey = settingData ? settingData.value : null;
-
-                    if (userApiKey) {
-                        if (selectedNode === 'vidmoly') {
-                            const vidmolyRes = await fetch(`https://vidmoly.me/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`);
-                            const vidmolyData = await vidmolyRes.json();
-                            
-                            if (vidmolyData && vidmolyData.result && vidmolyData.result.filecode) {
-                                directDownloadUrl = `https://vidmoly.me/w/${vidmolyData.result.filecode}`;
-                                fileStatus = 'Active';
-                            }
-                        } else if (selectedNode === 'abyss') {
-                            const abyssRes = await fetch(`http://up.abyss.to/${userApiKey}`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ url: directDownloadUrl, name: cleanTitle })
-                            });
-                            const abyssData = await abyssRes.json();
-                            if (abyssData.url) {
-                                directDownloadUrl = abyssData.url;
-                                fileStatus = 'Active';
-                            }
-                        }
+                    if (settingData) {
+                        userApiKey = settingData.value;
                     }
-                } catch (nodeErr) {
-                    console.error(`${selectedNode} Remote Upload Error:`, nodeErr);
+                } catch (err) {
+                    console.error('Settings fetch error:', err);
+                }
+            }
+
+            // Jodi user-specific key na paoya jay, tahole default hardcoded key use korbe jeno upload na thamiye chole
+            if (!userApiKey) {
+                if (selectedNode === 'vidmoly') {
+                    userApiKey = '633641ic28k4pnr23qck42'; // Default fallback key
+                } else if (selectedNode === 'abyss') {
+                    userApiKey = 'd6dfaae96764d5bce6fe82fe9b739ac5'; // Default fallback key
+                }
+            }
+
+            // Remote Upload Execution to Vidmoly or Abyss
+            if (selectedNode === 'vidmoly' && userApiKey) {
+                try {
+                    const vidmolyRes = await fetch(`https://vidmoly.me/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`);
+                    const vidmolyData = await vidmolyRes.json();
+                    
+                    if (vidmolyData && vidmolyData.result && vidmolyData.result.filecode) {
+                        directDownloadUrl = `https://vidmoly.me/w/${vidmolyData.result.filecode}`;
+                        fileStatus = 'Active';
+                    } else {
+                        console.error('Vidmoly Remote Upload Failed:', vidmolyData);
+                        return NextResponse.json({ error: `Vidmoly Error: ${JSON.stringify(vidmolyData)}` }, { status: 400 });
+                    }
+                } catch (vErr) {
+                    console.error('Vidmoly Error:', vErr);
+                }
+            } else if (selectedNode === 'abyss' && userApiKey) {
+                try {
+                    const abyssRes = await fetch(`http://up.abyss.to/${userApiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: directDownloadUrl, name: cleanTitle })
+                    });
+                    const abyssData = await abyssRes.json();
+                    
+                    if (abyssData && abyssData.url) {
+                        directDownloadUrl = abyssData.url;
+                        fileStatus = 'Active';
+                    } else {
+                        console.error('Abyss Remote Upload Failed:', abyssData);
+                        return NextResponse.json({ error: `Abyss Error: ${JSON.stringify(abyssData)}` }, { status: 400 });
+                    }
+                } catch (aErr) {
+                    console.error('Abyss Error:', aErr);
                 }
             } else {
                 fileStatus = 'Active';
             }
 
-            // Database insertion logic (embed_url removed for safety if schema doesn't have it)
             const fileRecord = {
                 id: fileId,
                 name: cleanTitle,
@@ -139,7 +164,7 @@ export async function POST(request) {
         });
 
     } catch (err) {
-        console.error('API Error:', err);
+        console.error('API Critical Error:', err);
         return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
     }
 }
