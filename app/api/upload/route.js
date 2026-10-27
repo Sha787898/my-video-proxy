@@ -16,21 +16,25 @@ export async function POST(request) {
             return NextResponse.json({ error: 'No links provided' }, { status: 400 });
         }
 
-        // ইউজারের নিজস্ব API Key বা টোকেন সুপাবেজ থেকে ফেচ করা
+        // Get User API Key or fallback token from Supabase settings
         let userApiKey = '';
         if (userId) {
             const { data: settingData } = await supabase
                 .from('settings')
                 .select('value')
                 .eq('user_id', userId)
-                .eq('key', 'api_key') // অথবা আপনার ইউজার টেবিলের এপিআই কি
+                .eq('key', 'api_key')
                 .single();
             
             if (settingData) userApiKey = settingData.value;
         }
 
-        // লিংকগুলোকে এক লাইন এক লাইন করে Worker-এ পাঠানো
-        const linkArray = links.split('\n').map(l => l.trim()).filter(Boolean);
+        const linkArray = links.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.includes('1xxxxxxx') && !l.includes('2xxxxxxx'));
+
+        if (linkArray.length === 0) {
+            return NextResponse.json({ error: 'Please enter valid Google Drive links' }, { status: 400 });
+        }
+
         const results = [];
 
         for (const link of linkArray) {
@@ -47,13 +51,29 @@ export async function POST(request) {
             });
 
             const resData = await workerRes.json();
+
+            // Insert file record into Supabase so it appears in File Manager
+            if (resData.status === 'success' || resData.data) {
+                const fileInfo = resData.data || {};
+                await supabase.from('files').insert([{
+                    id: fileInfo.id || Math.random().toString(36).substring(2, 10),
+                    name: fileInfo.title || 'GDrive_File.mp4',
+                    size: 'Processing...',
+                    quality: '1080p WEB-DL',
+                    date: new Date().toISOString().split('T')[0],
+                    status: 'Active',
+                    original_url: link,
+                    user_id: userId || null
+                }]);
+            }
+
             results.push(resData);
         }
 
         return NextResponse.json({ 
             success: true, 
             count: results.length,
-            results: results 
+            files: results 
         });
 
     } catch (err) {
