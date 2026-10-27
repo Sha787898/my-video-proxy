@@ -14,12 +14,10 @@ export async function POST(request) {
             return NextResponse.json({ error: 'No links provided for uploading' }, { status: 400 });
         }
 
-        // সিকিউরিটি ও ডায়নামিক ডোমেইন ডিটেকশন (Vercel বা Custom Domain)
         const host = request.headers.get('host') || 'my-video-proxy-three.vercel.app';
         const protocol = request.headers.get('x-forwarded-proto') || 'https';
         const baseUrl = `${protocol}://${host}`;
 
-        // মাল্টিলাইন বা সিঙ্গেল লিংক হ্যান্ডেল করার অ্যারে কনভার্শন
         const linkArray = typeof links === 'string' 
             ? links.split('\n').map(l => l.trim()).filter(l => l.length > 0)
             : links;
@@ -32,7 +30,7 @@ export async function POST(request) {
             let cleanTitle = fileName && fileName.trim() !== '' ? fileName : '';
             let directDownloadUrl = fileUrl;
 
-            // Google Drive লিংক বা File ID থেকে ডাইরেক্ট ডাউনলোড লিংক জেনারেট করার লজিক
+            // Google Drive লিংক বা File ID থেকে ডাইরেক্ট ডাউনলোড লিংক জেনারেট
             const driveMatch = fileUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || fileUrl.match(/id=([a-zA-Z0-9_-]+)/);
             if (driveMatch && driveMatch[1]) {
                 const gId = driveMatch[1];
@@ -45,21 +43,20 @@ export async function POST(request) {
             }
 
             let fileSize = '750.00 MB';
-            // ফাইল ম্যানেজারে আগে দেখানোর জন্য এবং ডুপ্লিকেট চেক করতে ডিফল্ট স্ট্যাটাস 'Processing' রাখা হলো
-            let fileStatus = 'Processing';
+            let fileStatus = 'Processing'; // প্রথমে ফাইল ম্যানেজারে প্রসেসিং দেখাবে
 
-            // Abyss বা অন্যান্য সার্ভারে পুশ করার লজিক
-            if (uploadType === 'abyss' || uploadType === 'gdrive') {
-                const { data: settingData } = await supabase
-                    .from('settings')
-                    .select('value')
-                    .eq('key', 'abyss_api_key')
-                    .single();
-
-                const apiKey = settingData ? settingData.value : 'd6dfaae96764d5bce6fe82fe9b739ac5';
-                const abyssUploadUrl = `http://up.abyss.to/${apiKey}`;
-                
+            // যদি এক্সপ্লিসিটলি abyss সিলেক্ট করা হয় তবেই রিমোট সার্ভারে পুশ করার চেষ্টা করবে
+            if (uploadType === 'abyss') {
                 try {
+                    const { data: settingData } = await supabase
+                        .from('settings')
+                        .select('value')
+                        .eq('key', 'abyss_api_key')
+                        .single();
+
+                    const apiKey = settingData ? settingData.value : 'd6dfaae96764d5bce6fe82fe9b739ac5';
+                    const abyssUploadUrl = `http://up.abyss.to/${apiKey}`;
+                    
                     const abyssRes = await fetch(abyssUploadUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -68,16 +65,17 @@ export async function POST(request) {
                     const abyssResult = await abyssRes.json();
                     if (abyssResult.url) {
                         directDownloadUrl = abyssResult.url;
-                        fileStatus = 'Active'; // আপলোড সফল হলে স্ট্যাটাস Active হবে
+                        fileStatus = 'Active';
                     }
                 } catch (err) {
-                    console.error('Server Mirror Error:', err);
+                    console.error('Abyss Server Mirror Warning (Fallback used):', err);
+                    // ফেইল করলেও ডাইভের ডাইরেক্ট লিংক নিয়ে প্রসেস চালিয়ে যাবে
                 }
             } else {
+                // GDrive মিররের ক্ষেত্রে সরাসরিভেইভ হবে এবং স্ট্যাটাস প্রসেসিং বা অ্যাক্টিভ থাকবে
                 fileStatus = 'Active';
             }
 
-            // সিস্টেমের নিজস্ব ডোমেইন দিয়ে ডাউনলোড ও এম্বেড লিংক তৈরি
             const systemDownloadLink = `${baseUrl}/file/${fileId}`;
             const systemEmbedLink = `${baseUrl}/embed/${fileId}`;
 
@@ -94,13 +92,14 @@ export async function POST(request) {
                 user_id: userId || null
             };
 
-            // Supabase ডাটাবেজে পার্মানেন্টলি সেভ করা
             const { error: dbError } = await supabase
                 .from('files')
                 .insert([fileRecord]);
 
             if (!dbError) {
                 processedFiles.push(fileRecord);
+            } else {
+                console.error('Supabase DB Insert Error:', dbError);
             }
         }
 
