@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
@@ -5,9 +6,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export default async function EmbedPage(props) {
-    const params = await props.params;
-    const { id } = params;
+async function EmbedContent({ params }) {
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
 
     // Database theke file data fetch kora
     const { data: file, error } = await supabase
@@ -107,7 +108,7 @@ export default async function EmbedPage(props) {
                     currentServers.forEach((srv, index) => {
                         const btn = document.createElement('button');
                         btn.className = \`server-item \${index === 0 ? 'active' : ''}\`;
-                        btn.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;"><i class="fas \${srv.icon}"></i> \${srv.name}</div>\`;
+                        btn.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;"><i class="fas \{srv.icon}"></i> \${srv.name}</div>\`;
                         btn.onclick = () => {
                             serverMenu.classList.remove('open');
                             iframe.src = srv.url;
@@ -142,5 +143,13 @@ export default async function EmbedPage(props) {
             `}} />
         </body>
         </html>
+    );
+}
+
+export default function EmbedPage({ params }) {
+    return (
+        <Suspense fallback={<div className="flex items-center justify-center h-screen bg-black text-slate-400 text-xs">Loading Player...</div>}>
+            <EmbedContent params={params} />
+        </Suspense>
     );
 }
