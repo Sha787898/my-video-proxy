@@ -28,9 +28,9 @@ export async function POST(request) {
         }
 
         const processedFiles = [];
-        const selectedNode = (uploadType && uploadType !== 'gdrive') ? uploadType : 'vidmoly';
+        const selectedNode = (uploadType && uploadType !== 'gdrive') ? uploadType : 'abyss'; // Abyss default
 
-        // 1. User specific key khuja, na pele default fallback key use kora jate error na ase
+        // User API Key fetch kora
         let userApiKey = null;
         if (userId) {
             try {
@@ -41,20 +41,17 @@ export async function POST(request) {
                     .eq('key', `${selectedNode}_api_key`)
                     .single();
 
-                if (settingData) {
-                    userApiKey = settingData.value;
-                }
+                if (settingData) userApiKey = settingData.value;
             } catch (err) {
                 console.error('Settings fetch error:', err);
             }
         }
 
-        // Jodi settings table theke na pay, tahole apnar default key ba test key ekhane bosiye nite paren
         if (!userApiKey) {
-            if (selectedNode === 'vidmoly') {
-                userApiKey = '633641ic28k4pnr23qck42'; // Apnar Vidmoly API Key ekhane hardcode kore dilam
-            } else if (selectedNode === 'abyss') {
-                userApiKey = 'd6dfaae96764d5bce6fe82fe9b739ac5'; // Apnar Abyss API Key ekhane hardcode kore dilam
+            if (selectedNode === 'abyss') {
+                userApiKey = 'd6dfaae96764d5bce6fe82fe9b739ac5'; // Default Abyss Fallback Key
+            } else if (selectedNode === 'vidmoly') {
+                userApiKey = '633641ic28k4pnr23qck42'; // Default Vidmoly Fallback Key
             }
         }
 
@@ -64,7 +61,7 @@ export async function POST(request) {
             let fileSize = 'Unknown Size';
             let directDownloadUrl = fileUrl;
 
-            // 2. Google Drive Metadata Fetching
+            // Google Drive Metadata Fetching
             const driveMatch = fileUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || fileUrl.match(/id=([a-zA-Z0-9_-]+)/);
             if (driveMatch && driveMatch[1]) {
                 const gId = driveMatch[1];
@@ -77,9 +74,7 @@ export async function POST(request) {
                         const driveRes = await fetch(`https://www.googleapis.com/drive/v3/files/${gId}?key=${googleApiKey}&fields=name,size,mimeType`);
                         const driveData = await driveRes.json();
                         
-                        if (driveData && driveData.name) {
-                            cleanTitle = driveData.name;
-                        }
+                        if (driveData && driveData.name) cleanTitle = driveData.name;
                         if (driveData && driveData.size) {
                             const bytes = parseInt(driveData.size, 10);
                             fileSize = bytes > 1024 * 1024 * 1024 
@@ -92,50 +87,16 @@ export async function POST(request) {
                 }
             }
 
-            let finalWatchUrl = directDownloadUrl;
-            let fileStatus = 'Processing';
-
-            // 3. Remote Upload Execution
-            if (selectedNode === 'vidmoly' && userApiKey) {
-                try {
-                    const vidmolyRes = await fetch(`https://vidmoly.me/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`);
-                    const vidmolyData = await vidmolyRes.json();
-                    
-                    if (vidmolyData && vidmolyData.result && vidmolyData.result.filecode) {
-                        finalWatchUrl = `https://vidmoly.me/w/${vidmolyData.result.filecode}`;
-                        fileStatus = 'Active';
-                    }
-                } catch (vErr) {
-                    console.error('Vidmoly remote upload error:', vErr);
-                }
-            } else if (selectedNode === 'abyss' && userApiKey) {
-                try {
-                    const abyssRes = await fetch(`https://up.abyss.to/${userApiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: directDownloadUrl, name: cleanTitle })
-                    });
-                    const abyssData = await abyssRes.json();
-                    
-                    if (abyssData && abyssData.url) {
-                        finalWatchUrl = abyssData.url;
-                        fileStatus = 'Active';
-                    }
-                } catch (aErr) {
-                    console.error('Abyss remote upload error:', aErr);
-                }
-            }
-
-            // 4. Database Insert
+            // Prothome 'Processing' status diye database-e record insert kore dibe (Instant link generate)
             const fileRecord = {
                 id: fileId,
                 name: cleanTitle,
                 size: fileSize,
                 quality: '1080p WEB-DL',
                 date: new Date().toISOString().split('T')[0],
-                status: fileStatus,
+                status: 'Processing',
                 url: `${baseUrl}/file/${fileId}`,
-                original_url: finalWatchUrl,
+                original_url: directDownloadUrl,
                 user_id: userId || null
             };
 
@@ -145,10 +106,45 @@ export async function POST(request) {
 
             if (dbError) {
                 console.error('DB Insert Error:', dbError);
-                return NextResponse.json({ error: `Database Error: ${dbError.message}` }, { status: 500 });
+                continue;
             }
 
             processedFiles.push(fileRecord);
+
+            // Background-e Remote Upload Execution (Abyss / Vidmoly)
+            (async () => {
+                try {
+                    let finalWatchUrl = directDownloadUrl;
+                    let newStatus = 'Active';
+
+                    if (selectedNode === 'abyss' && userApiKey) {
+                        const abyssRes = await fetch(`https://up.abyss.to/${userApiKey}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: directDownloadUrl, name: cleanTitle })
+                        });
+                        const abyssData = await abyssRes.json();
+                        if (abyssData && abyssData.url) {
+                            finalWatchUrl = abyssData.url;
+                        }
+                    } else if (selectedNode === 'vidmoly' && userApiKey) {
+                        const vidmolyRes = await fetch(`https://vidmoly.me/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`);
+                        const vidmolyData = await vidmolyRes.json();
+                        if (vidmolyData && vidmolyData.result && vidmolyData.result.filecode) {
+                            finalWatchUrl = `https://vidmoly.me/w/${vidmolyData.result.filecode}`;
+                        }
+                    }
+
+                    // Upload sesh hole database update kore Active kore dibe
+                    await supabase
+                        .from('files')
+                        .update({ original_url: finalWatchUrl, status: newStatus })
+                        .eq('id', fileId);
+
+                } catch (bgErr) {
+                    console.error('Background Upload Error:', bgErr);
+                }
+            })();
         }
 
         return NextResponse.json({ 
