@@ -71,7 +71,7 @@ export default function Sidebar() {
                                 <Link href="/remote-upload" onClick={() => setMobileOpen(false)} className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/remote-upload') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
                                     Remote Upload
                                 </Link>
-                                <Link href="/drive-upload" onClick={() => setMobileOpen(false)} className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/drive-upload') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
+                                <Link href="/drive-upload" onClick={() => setMobileOpen(false)} className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/gdrive-upload') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
                                     GDrive Mirror
                                 </Link>
                                 <Link href="/web-upload" onClick={() => setMobileOpen(false)} className={`block px-3 py-2 rounded-lg font-bold transition ${isActive('/web-upload') ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200'}`}>
