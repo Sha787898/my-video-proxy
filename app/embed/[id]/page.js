@@ -1,13 +1,12 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
-export const dynamic = 'force-dynamic';
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export default async function EmbedPage({ params }) {
+export default async function EmbedPage(props) {
+    const params = await props.params;
     const { id } = params;
 
     // Database theke file data fetch kora
@@ -21,7 +20,6 @@ export default async function EmbedPage({ params }) {
         notFound();
     }
 
-    // Dynamic Server List mapping from file original url / mirrors
     const currentServers = [
         { key: 'abyss', name: 'Abyss (Default)', url: file.original_url || 'https://abyssplayer.com/', icon: 'fa-play' },
         { key: 'vidmoly', name: 'Vidmoly', url: file.original_url?.includes('vidmoly') ? file.original_url : 'https://vidmoly.me/', icon: 'fa-play' }
@@ -120,7 +118,6 @@ export default async function EmbedPage({ params }) {
                         serverButtonsContainer.appendChild(btn);
                     });
 
-                    // Load default first server
                     iframe.src = currentServers[0].url;
                     activeServerNameSpan.innerText = currentServers[0].name;
 
