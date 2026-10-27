@@ -35,7 +35,7 @@ export async function POST(request) {
             let fileSize = '750.00 MB';
             let directDownloadUrl = fileUrl;
 
-            // Google Drive ID Extraction & Real Metadata Fetching
+            // Google Drive ID Extraction & Metadata Fetching
             const driveMatch = fileUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || fileUrl.match(/id=([a-zA-Z0-9_-]+)/);
             if (driveMatch && driveMatch[1]) {
                 const gId = driveMatch[1];
@@ -66,7 +66,7 @@ export async function POST(request) {
             let fileStatus = 'Processing';
             const selectedNode = uploadType || 'vidmoly';
 
-            // ইউজারের নিজস্ব user_id অনুযায়ী Supabase সেটিংস থেকে API Key ফেচ করার লজিক
+            // User Specific API Key Fetch
             if (userId) {
                 try {
                     const { data: settingData } = await supabase
@@ -107,6 +107,7 @@ export async function POST(request) {
                 fileStatus = 'Active';
             }
 
+            // Database insertion logic (embed_url removed for safety if schema doesn't have it)
             const fileRecord = {
                 id: fileId,
                 name: cleanTitle,
@@ -115,7 +116,6 @@ export async function POST(request) {
                 date: new Date().toISOString().split('T')[0],
                 status: fileStatus,
                 url: `${baseUrl}/file/${fileId}`,
-                embed_url: `${baseUrl}/embed/${fileId}`,
                 original_url: directDownloadUrl,
                 user_id: userId || null
             };
