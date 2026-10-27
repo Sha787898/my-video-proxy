@@ -8,48 +8,55 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { fileUrl, fileName } = body;
+        const { fileUrl, fileName, uploadType, userId } = body; // uploadType: 'abyss' বা 'gdrive'
 
         if (!fileUrl) {
             return NextResponse.json({ error: 'File URL is required' }, { status: 400 });
         }
 
-        // ডাটাবেজ থেকে Abyss API Key ফেচ করা (না থাকলে ডিফল্ট কি ব্যবহার হবে)
-        const { data: settingData } = await supabase
-            .from('settings')
-            .select('value')
-            .eq('key', 'abyss_api_key')
-            .single();
+        let finalDownloadUrl = fileUrl;
+        let fileType = 'Abyss.to';
+        let fileSize = 'N/A';
 
-        const apiKey = settingData ? settingData.value : 'd6dfaae96764d5bce6fe82fe9b739ac5';
+        if (uploadType === 'gdrive') {
+            fileType = 'Google Cloud Drive';
+            fileSize = '15 GB Limit';
+        } else {
+            // ডাটাবেজ থেকে Abyss API Key ফেচ করা (না থাকলে ডিফল্ট কি ব্যবহার হবে)
+            const { data: settingData } = await supabase
+                .from('settings')
+                .select('value')
+                .eq('key', 'abyss_api_key')
+                .single();
 
-        // Abyss Upload Endpoint Call
-        const abyssUploadUrl = `http://up.abyss.to/${apiKey}`;
-        
-        // এখানে রিমোট ফাইল বা লিংক Abyss সার্ভারে পুশ করা হচ্ছে
-        // (নোট: অনেক সময় রিমোট সার্ভার URL থেকে সরাসরি ফাইল গ্রহণ করে অথবা FormData চায়)
-        const response = await fetch(abyssUploadUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ url: fileUrl, name: fileName })
-        });
+            const apiKey = settingData ? settingData.value : 'd6dfaae96764d5bce6fe82fe9b739ac5';
+            const abyssUploadUrl = `http://up.abyss.to/${apiKey}`;
+            
+            try {
+                const response = await fetch(abyssUploadUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: fileUrl, name: fileName })
+                });
+                const result = await response.json();
+                if (result.url) {
+                    finalDownloadUrl = result.url;
+                }
+            } catch (abyssErr) {
+                console.error('Abyss server error, using fallback URL:', abyssErr);
+            }
+        }
 
-        const result = await response.json();
-
-        // যদি Abyss সার্ভার থেকে সাকসেসফুল রেসপন্স ও ফাইনাল লিংক পাওয়া যায়
-        const finalDownloadUrl = result.url || fileUrl; // ফলব্যাক হিসেবে ডাইরেক্ট লিংক
         const fileId = Math.random().toString(36).substring(2, 8);
-
         const newFileRecord = {
             id: fileId,
-            name: fileName || fileUrl.split('/').pop() || `Abyss_Video_${fileId}.mp4`,
-            size: 'N/A',
+            name: fileName || fileUrl.split('/').pop() || `Media_${fileId}.mp4`,
+            size: fileSize,
             quality: '1080p WEB-DL',
             date: new Date().toISOString().split('T')[0],
             status: 'Active',
-            url: finalDownloadUrl
+            url: finalDownloadUrl,
+            user_id: userId || null
         };
 
         // Supabase-এর files টেবিলে সেভ করা
