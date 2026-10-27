@@ -15,7 +15,18 @@ const DEFAULT_NODES = [
     { id: 'gcloud', name: 'Google Cloud Drive', limit: '15 GB', icon: '☁️', status: 'ONLINE', active: true, key: '', customDomain: '' },
     { id: 'pixeldrain', name: 'Pixeldrain', limit: '10 GB', icon: '🧪', status: 'ONLINE', active: true, key: '', customDomain: '' },
     { id: 'vikingfile', name: 'VikingFile', limit: '100 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'gofile', name: 'GoFile', limit: '500 GB', icon: '📁', status: 'ONLINE', active: false, key: '', customDomain: '' }
+    { id: 'gofile', name: 'GoFile', limit: '500 GB', icon: '📁', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'voe', name: 'VOE.sx', limit: 'Unlimited', icon: '🚀', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'sendnow', name: 'Send.now', limit: 'Unlimited', icon: '📤', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'streamhg', name: 'StreamHG', limit: 'Unlimited', icon: '📺', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'earnvids', name: 'EarnVids', limit: 'Unlimited', icon: '💰', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'turboviplay', name: 'TurboViPlay', limit: 'Unlimited', icon: '🔥', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'dropload', name: 'DropLoad', limit: 'Unlimited', icon: '📦', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'ruby', name: 'Ruby.video', limit: 'Unlimited', icon: '💎', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'byse', name: 'Byse', limit: 'Unlimited', icon: '🔗', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'mixdrop', name: 'MixDrop', limit: 'Unlimited', icon: '🔀', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'buzzheavier', name: 'BuzzHeavier', limit: 'Unlimited', icon: '🐝', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'mega', name: 'MEGA', limit: '20 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '' }
 ];
 
 export default function ManageSitesPage() {
@@ -39,7 +50,7 @@ export default function ManageSitesPage() {
             setUser(currentUser);
             setLoadingAuth(false);
 
-            // Supabase settings টেবিল থেকে ইউজারের সেভ করা কি এবং ডোমেইন ফেচ করা
+            // Supabase settings table theke user-er save kora key ebong domain fetch kora
             const { data: settingsData, error } = await supabase
                 .from('settings')
                 .select('key, value')
@@ -83,7 +94,7 @@ export default function ManageSitesPage() {
 
         const targetSettingKey = type === 'key' ? `${node.id}_api_key` : `${node.id}_domain`;
 
-        // Supabase-এ আপসার্ট (Insert or Update) করার লজিক
+        // Supabase-e upsert (Insert or Update) korar logic
         const { error } = await supabase
             .from('settings')
             .upsert({
@@ -222,7 +233,8 @@ export default function ManageSitesPage() {
                     <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 sm:p-8 space-y-4 shadow-2xl">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                             <h3 className="text-xs font-bold text-white uppercase tracking-wider truncate">
-                                {activeModal.type === 'key' ? 'Set API Key' : 'Set Custom Domain'} - {activeModal.node.name}
+                                {activeModal.type === 'key' ? 'Set API Key for ' : 'Set Custom Domain for '}
+                                <span className="text-blue-400">{activeModal.node.name}</span>
                             </h3>
                             <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white text-sm cursor-pointer">✕</button>
                         </div>
