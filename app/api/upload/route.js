@@ -17,7 +17,7 @@ export async function POST(request) {
         }
 
         // Get User API Key or fallback token from Supabase settings
-        let userApiKey = '';
+        let userApiKey = 'default_fallback_key';
         if (userId) {
             const { data: settingData } = await supabase
                 .from('settings')
@@ -26,7 +26,7 @@ export async function POST(request) {
                 .eq('key', 'api_key')
                 .single();
             
-            if (settingData) userApiKey = settingData.value;
+            if (settingData && settingData.value) userApiKey = settingData.value;
         }
 
         const linkArray = links.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.includes('1xxxxxxx') && !l.includes('2xxxxxxx'));
@@ -42,7 +42,7 @@ export async function POST(request) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-API-Key': userApiKey || 'default_fallback_key'
+                    'X-API-Key': userApiKey
                 },
                 body: JSON.stringify({
                     driveUrl: link,
@@ -51,23 +51,44 @@ export async function POST(request) {
             });
 
             const resData = await workerRes.json();
+            const fileInfo = resData.data || {};
 
-            // Insert file record into Supabase so it appears in File Manager
-            if (resData.status === 'success' || resData.data) {
-                const fileInfo = resData.data || {};
+            // Format size properly (Bytes to MB / GB)
+            let formattedSize = 'Unknown Size';
+            if (fileInfo.size) {
+                const bytes = parseInt(fileInfo.size, 10);
+                formattedSize = bytes > 1024 * 1024 * 1024 
+                    ? (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB' 
+                    : (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+            }
+
+            // Flattened object so frontend UI can read it instantly
+            const formattedResult = {
+                id: fileInfo.id || Math.random().toString(36).substring(2, 10),
+                name: fileInfo.title || 'GDrive_Video.mp4',
+                size: formattedSize,
+                status: resData.status === 'success' ? 'Active' : 'error',
+                original_url: link,
+                results: fileInfo.results || {}
+            };
+
+            // Optional: Insert into Supabase if needed for local tracking
+            try {
                 await supabase.from('files').insert([{
-                    id: fileInfo.id || Math.random().toString(36).substring(2, 10),
-                    name: fileInfo.title || 'GDrive_File.mp4',
-                    size: 'Processing...',
+                    id: formattedResult.id,
+                    name: formattedResult.name,
+                    size: formattedResult.size,
                     quality: '1080p WEB-DL',
                     date: new Date().toISOString().split('T')[0],
-                    status: 'Active',
+                    status: formattedResult.status,
                     original_url: link,
                     user_id: userId || null
                 }]);
+            } catch (dbErr) {
+                console.error('Supabase insert warning:', dbErr);
             }
 
-            results.push(resData);
+            results.push(formattedResult);
         }
 
         return NextResponse.json({ 
