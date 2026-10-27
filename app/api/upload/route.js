@@ -28,9 +28,8 @@ export async function POST(request) {
         }
 
         const processedFiles = [];
-        const selectedNode = (uploadType && uploadType !== 'gdrive') ? uploadType : 'abyss'; // Abyss default
+        const selectedNode = (uploadType && uploadType !== 'gdrive') ? uploadType : 'abyss';
 
-        // User API Key fetch kora
         let userApiKey = null;
         if (userId) {
             try {
@@ -49,9 +48,9 @@ export async function POST(request) {
 
         if (!userApiKey) {
             if (selectedNode === 'abyss') {
-                userApiKey = 'd6dfaae96764d5bce6fe82fe9b739ac5'; // Default Abyss Fallback Key
+                userApiKey = 'd6dfaae96764d5bce6fe82fe9b739ac5';
             } else if (selectedNode === 'vidmoly') {
-                userApiKey = '633641ic28k4pnr23qck42'; // Default Vidmoly Fallback Key
+                userApiKey = '633641ic28k4pnr23qck42';
             }
         }
 
@@ -61,7 +60,6 @@ export async function POST(request) {
             let fileSize = 'Unknown Size';
             let directDownloadUrl = fileUrl;
 
-            // Google Drive Metadata Fetching
             const driveMatch = fileUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || fileUrl.match(/id=([a-zA-Z0-9_-]+)/);
             if (driveMatch && driveMatch[1]) {
                 const gId = driveMatch[1];
@@ -87,7 +85,7 @@ export async function POST(request) {
                 }
             }
 
-            // Prothome 'Processing' status diye database-e record insert kore dibe (Instant link generate)
+            // Database Record e embed_url add kore dewa holo
             const fileRecord = {
                 id: fileId,
                 name: cleanTitle,
@@ -96,6 +94,7 @@ export async function POST(request) {
                 date: new Date().toISOString().split('T')[0],
                 status: 'Processing',
                 url: `${baseUrl}/file/${fileId}`,
+                embed_url: `${baseUrl}/embed/${fileId}`,
                 original_url: directDownloadUrl,
                 user_id: userId || null
             };
@@ -111,31 +110,29 @@ export async function POST(request) {
 
             processedFiles.push(fileRecord);
 
-            // Background-e Remote Upload Execution (Abyss / Vidmoly)
+            // Background-e Remote Upload Execution (Abyss & Vidmoly)
             (async () => {
                 try {
                     let finalWatchUrl = directDownloadUrl;
                     let newStatus = 'Active';
 
                     if (selectedNode === 'abyss' && userApiKey) {
-                        const abyssRes = await fetch(`https://up.abyss.to/${userApiKey}`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ url: directDownloadUrl, name: cleanTitle })
-                        });
+                        const abyssRes = await fetch(`https://abyss.to/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`);
                         const abyssData = await abyssRes.json();
-                        if (abyssData && abyssData.url) {
+                        if (abyssData && abyssData.result && abyssData.result.url) {
+                            finalWatchUrl = abyssData.result.url;
+                        } else if (abyssData && abyssData.url) {
                             finalWatchUrl = abyssData.url;
                         }
                     } else if (selectedNode === 'vidmoly' && userApiKey) {
                         const vidmolyRes = await fetch(`https://vidmoly.me/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`);
                         const vidmolyData = await vidmolyRes.json();
-                        if (vidmolyData && vidmolyData.result && vidmolyData.result.filecode) {
-                            finalWatchUrl = `https://vidmoly.me/w/${vidmolyData.result.filecode}`;
+                        if (vidmolyData && vidmolyData.result && (vidmolyData.result.filecode || vidmolyData.result.url)) {
+                            finalWatchUrl = vidmolyData.result.url || `https://vidmoly.me/w/${vidmolyData.result.filecode}`;
                         }
                     }
 
-                    // Upload sesh hole database update kore Active kore dibe
+                    // Database update with final stream/embed link
                     await supabase
                         .from('files')
                         .update({ original_url: finalWatchUrl, status: newStatus })
