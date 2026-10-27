@@ -28,19 +28,42 @@ export async function POST(request) {
         }
 
         const processedFiles = [];
+        const selectedNode = uploadType || 'vidmoly';
+
+        // ১. প্রোগ্রেস করার আগে ইউজারের নিজস্ব API Key ফেচ করা
+        let userApiKey = null;
+        if (userId) {
+            const { data: settingData, error: settingErr } = await supabase
+                .from('settings')
+                .select('value')
+                .eq('user_id', userId)
+                .eq('key', `${selectedNode}_api_key`)
+                .single();
+
+            if (!settingErr && settingData) {
+                userApiKey = settingData.value;
+            }
+        }
+
+        if (!userApiKey) {
+            return NextResponse.json({ 
+                error: `No API Key found for ${selectedNode}. Please add your API key in 'Manage Sites & Keys' page first.` 
+            }, { status: 400 });
+        }
 
         for (const fileUrl of linkArray) {
             const fileId = Math.random().toString(36).substring(2, 10);
             let cleanTitle = `Media_File_${fileId}.mp4`;
-            let fileSize = '750.00 MB';
+            let fileSize = 'Unknown Size';
             let directDownloadUrl = fileUrl;
 
-            // Google Drive ID Extraction & Metadata Fetching
+            // ২. Google Drive ID Extraction & Real Metadata Fetching
             const driveMatch = fileUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || fileUrl.match(/id=([a-zA-Z0-9_-]+)/);
             if (driveMatch && driveMatch[1]) {
                 const gId = driveMatch[1];
+                // সঠিক ডাইরেক্ট ডাউনলোড লিংক ফরম্যাট
                 directDownloadUrl = `https://drive.google.com/uc?export=download&id=${gId}`;
-                cleanTitle = `GDrive_Media_${gId.substring(0, 6)}.mp4`;
+                cleanTitle = `GDrive_Video_${gId.substring(0, 6)}.mp4`;
 
                 const googleApiKey = process.env.GOOGLE_API_KEY || '';
                 if (googleApiKey) {
@@ -63,76 +86,42 @@ export async function POST(request) {
                 }
             }
 
+            let finalWatchUrl = directDownloadUrl;
             let fileStatus = 'Processing';
-            let userApiKey = null;
-            const selectedNode = uploadType || 'vidmoly';
 
-            // API Key Fetching (User specific ba Fallback)
-            if (userId) {
-                try {
-                    const { data: settingData } = await supabase
-                        .from('settings')
-                        .select('value')
-                        .eq('user_id', userId)
-                        .eq('key', `${selectedNode}_api_key`)
-                        .single();
-
-                    if (settingData) {
-                        userApiKey = settingData.value;
-                    }
-                } catch (err) {
-                    console.error('Settings fetch error:', err);
+            // ৩. রিমোট সার্ভারে (Vidmoly / Abyss) রিয়েল আপলোড রিকোয়েস্ট পাঠানো
+            if (selectedNode === 'vidmoly') {
+                const vidmolyApiUrl = `https://vidmoly.me/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`;
+                const vidmolyRes = await fetch(vidmolyApiUrl);
+                const vidmolyData = await vidmolyRes.json();
+                
+                if (vidmolyData && vidmolyData.result && vidmolyData.result.filecode) {
+                    finalWatchUrl = `https://vidmoly.me/w/${vidmolyData.result.filecode}`;
+                    fileStatus = 'Active';
+                } else {
+                    return NextResponse.json({ 
+                        error: `Vidmoly Remote Upload Failed: ${JSON.stringify(vidmolyData)}` 
+                    }, { status: 400 });
+                }
+            } else if (selectedNode === 'abyss') {
+                const abyssRes = await fetch(`https://up.abyss.to/${userApiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: directDownloadUrl, name: cleanTitle })
+                });
+                const abyssData = await abyssRes.json();
+                
+                if (abyssData && abyssData.url) {
+                    finalWatchUrl = abyssData.url;
+                    fileStatus = 'Active';
+                } else {
+                    return NextResponse.json({ 
+                        error: `Abyss Remote Upload Failed: ${JSON.stringify(abyssData)}` 
+                    }, { status: 400 });
                 }
             }
 
-            // Jodi user-specific key na paoya jay, tahole default hardcoded key use korbe jeno upload na thamiye chole
-            if (!userApiKey) {
-                if (selectedNode === 'vidmoly') {
-                    userApiKey = '633641ic28k4pnr23qck42'; // Default fallback key
-                } else if (selectedNode === 'abyss') {
-                    userApiKey = 'd6dfaae96764d5bce6fe82fe9b739ac5'; // Default fallback key
-                }
-            }
-
-            // Remote Upload Execution to Vidmoly or Abyss
-            if (selectedNode === 'vidmoly' && userApiKey) {
-                try {
-                    const vidmolyRes = await fetch(`https://vidmoly.me/api/upload/url?key=${userApiKey}&url=${encodeURIComponent(directDownloadUrl)}`);
-                    const vidmolyData = await vidmolyRes.json();
-                    
-                    if (vidmolyData && vidmolyData.result && vidmolyData.result.filecode) {
-                        directDownloadUrl = `https://vidmoly.me/w/${vidmolyData.result.filecode}`;
-                        fileStatus = 'Active';
-                    } else {
-                        console.error('Vidmoly Remote Upload Failed:', vidmolyData);
-                        return NextResponse.json({ error: `Vidmoly Error: ${JSON.stringify(vidmolyData)}` }, { status: 400 });
-                    }
-                } catch (vErr) {
-                    console.error('Vidmoly Error:', vErr);
-                }
-            } else if (selectedNode === 'abyss' && userApiKey) {
-                try {
-                    const abyssRes = await fetch(`http://up.abyss.to/${userApiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: directDownloadUrl, name: cleanTitle })
-                    });
-                    const abyssData = await abyssRes.json();
-                    
-                    if (abyssData && abyssData.url) {
-                        directDownloadUrl = abyssData.url;
-                        fileStatus = 'Active';
-                    } else {
-                        console.error('Abyss Remote Upload Failed:', abyssData);
-                        return NextResponse.json({ error: `Abyss Error: ${JSON.stringify(abyssData)}` }, { status: 400 });
-                    }
-                } catch (aErr) {
-                    console.error('Abyss Error:', aErr);
-                }
-            } else {
-                fileStatus = 'Active';
-            }
-
+            // ৪. ডেটাবেজে সঠিক রেকর্ড সেভ করা
             const fileRecord = {
                 id: fileId,
                 name: cleanTitle,
@@ -141,7 +130,7 @@ export async function POST(request) {
                 date: new Date().toISOString().split('T')[0],
                 status: fileStatus,
                 url: `${baseUrl}/file/${fileId}`,
-                original_url: directDownloadUrl,
+                original_url: finalWatchUrl,
                 user_id: userId || null
             };
 
@@ -150,7 +139,6 @@ export async function POST(request) {
                 .insert([fileRecord]);
 
             if (dbError) {
-                console.error('Supabase DB Insert Error:', dbError);
                 return NextResponse.json({ error: `Database Error: ${dbError.message}` }, { status: 500 });
             }
 
