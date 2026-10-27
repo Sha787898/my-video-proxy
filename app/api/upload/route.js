@@ -16,7 +16,6 @@ export async function POST(request) {
             return NextResponse.json({ error: 'No links provided' }, { status: 400 });
         }
 
-        // Get User API Key or fallback token from Supabase settings
         let userApiKey = 'default_fallback_key';
         if (userId) {
             const { data: settingData } = await supabase
@@ -53,7 +52,6 @@ export async function POST(request) {
             const resData = await workerRes.json();
             const fileInfo = resData.data || {};
 
-            // Format size properly (Bytes to MB / GB)
             let formattedSize = 'Unknown Size';
             if (fileInfo.size) {
                 const bytes = parseInt(fileInfo.size, 10);
@@ -62,17 +60,26 @@ export async function POST(request) {
                     : (bytes / (1024 * 1024)).toFixed(2) + ' MB';
             }
 
-            // Flattened object so frontend UI can read it instantly
+            // Generate a proper download/stream link fallback
+            const fileId = fileInfo.id || Math.random().toString(36).substring(2, 10);
+            const generatedDownloadLink = fileInfo.results?.pixeldrain 
+                ? `https://pixeldrain.com/u/${fileInfo.results.pixeldrain}`
+                : fileInfo.results?.gofile 
+                ? `https://gofile.io/d/${fileInfo.results.gofile}`
+                : `https://drive.google.com/uc?export=download&id=${link.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] || ''}`;
+
             const formattedResult = {
-                id: fileInfo.id || Math.random().toString(36).substring(2, 10),
+                id: fileId,
                 name: fileInfo.title || 'GDrive_Video.mp4',
                 size: formattedSize,
                 status: resData.status === 'success' ? 'Active' : 'error',
+                download_link: generatedDownloadLink,
+                url: generatedDownloadLink,
                 original_url: link,
                 results: fileInfo.results || {}
             };
 
-            // Optional: Insert into Supabase if needed for local tracking
+            // Optional Supabase logging
             try {
                 await supabase.from('files').insert([{
                     id: formattedResult.id,
@@ -81,6 +88,7 @@ export async function POST(request) {
                     quality: '1080p WEB-DL',
                     date: new Date().toISOString().split('T')[0],
                     status: formattedResult.status,
+                    download_link: generatedDownloadLink,
                     original_url: link,
                     user_id: userId || null
                 }]);
