@@ -5,75 +5,103 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export default function FileManagerPage() {
     const router = useRouter();
     const [user, setUser] = useState(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
-
+    
     const [files, setFiles] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [copiedId, setCopiedId] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [editingFileId, setEditingFileId] = useState(null);
+    const [newFileName, setNewFileName] = useState('');
 
-    // ১. সিকিউরিটি গার্ড ও ইউজার সেশন চেক
     useEffect(() => {
-        async function checkAuthAndFetch() {
+        async function checkAuthAndFetchFiles() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
                 router.push('/login');
                 return;
             }
             setUser(session.user);
-            setLoadingAuth(false);
             fetchFiles(session.user.id);
+            setLoadingAuth(false);
         }
-        checkAuthAndFetch();
+        checkAuthAndFetchFiles();
     }, [router]);
 
     const fetchFiles = async (userId) => {
-        setLoading(true);
-        try {
-            const { data, error } = await supabase
-                .from('files')
-                .select('*')
-                .eq('user_id', userId) // শুধু বর্তমান ইউজারের ফাইলগুলো ফেচ করবে
-                .order('created_at', { ascending: false });
+        const { data, error } = await supabase
+            .from('files')
+            .select('*')
+            .eq('user_id', userId)
+            .order('date', { ascending: false });
 
-            if (data) setFiles(data);
-        } catch (err) {
-            console.error('Error loading files:', err);
-        } finally {
-            setLoading(false);
+        if (!error && data) {
+            setFiles(data);
         }
     };
+
+    const copyToClipboard = (text) => {
+        navigator.clipboard.writeText(text);
+        alert('Link copied to clipboard! 📋');
+    };
+
+    // ১. ফাইল রিনেম করার ফাংশন
+    const handleRename = async (fileId) => {
+        if (!newFileName.trim()) return;
+
+        const { error } = await supabase
+            .from('files')
+            .update({ name: newFileName })
+            .eq('id', fileId);
+
+        if (error) {
+            alert('Failed to rename file: ' + error.message);
+        } else {
+            setFiles(files.map(f => f.id === fileId ? { ...f, name: newFileName } : f));
+            setEditingFileId(null);
+            setNewFileName('');
+        }
+    };
+
+    // ২. ফাইল ডিলিট করার ফাংশন
+    const handleDelete = async (fileId) => {
+        if (!confirm('Are you sure you want to delete this file record?')) return;
+
+        const { error } = await supabase
+            .from('files')
+            .delete()
+            .eq('id', fileId);
+
+        if (error) {
+            alert('Failed to delete: ' + error.message);
+        } else {
+            setFiles(files.filter(f => f.id !== fileId));
+        }
+    };
+
+    // ৩. রি-আপলোড বা রিকোয়েস্ট পুনরায় পাঠানোর ফাংশন (Retry Upload)
+    const handleRetryUpload = async (file) => {
+        alert(`Retrying upload request for: ${file.name}`);
+        // এখানে ব্যাকএন্ড API-এ পুনরায় রিকোয়েস্ট পাঠানোর লজিক যুক্ত করা যাবে
+    };
+
+    const filteredFiles = files.filter(file => 
+        file.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     if (loadingAuth) {
         return (
             <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-mono">
-                <p className="text-xs text-blue-400 animate-pulse">Checking authorization...</p>
+                <p className="text-xs text-blue-400 animate-pulse">Loading File Manager...</p>
             </div>
         );
     }
-
-    const copyEmbedCode = (file) => {
-        const embedUrl = `<iframe src="https://multishows.top/embed/${file.id}" width="100%" height="450" frameborder="0" allowfullscreen></iframe>`;
-        navigator.clipboard.writeText(embedUrl);
-        setCopiedId(file.id);
-        setTimeout(() => setCopiedId(null), 2000);
-    };
-
-    const handleDelete = async (id) => {
-        const { error } = await supabase.from('files').delete().eq('id', id);
-        if (!error && user) fetchFiles(user.id);
-    };
-
-    const filteredFiles = files.filter(f => 
-        f.title?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 flex font-mono">
@@ -81,98 +109,138 @@ export default function FileManagerPage() {
 
             <div className="flex-1 flex flex-col min-w-0">
                 <header className="h-16 border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <span className="text-xl">🗂️</span>
-                        <h1 className="text-xs font-bold text-white uppercase tracking-wider">MultiServer File Manager</h1>
+                    <div className="flex items-center gap-2">
+                        <span className="text-blue-500 text-lg">📁</span>
+                        <h1 className="text-xs font-extrabold text-white uppercase tracking-wider">Cloud File Manager</h1>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-xs text-slate-400 hidden sm:inline">{user?.email}</span>
-                        <a href="/remote-upload" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-lg shadow-blue-600/20">
-                            + New Mirror Upload
-                        </a>
-                    </div>
+                    <span className="text-xs text-slate-400 hidden sm:inline">{user?.email}</span>
                 </header>
 
-                <main className="p-6 lg:p-10 max-w-6xl mx-auto w-full space-y-6">
-                    {/* Search & Actions Bar */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between shadow-xl">
-                        <input 
-                            type="text" 
-                            placeholder="🔍 Search files by title or ID..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full md:w-96 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-600 font-mono"
-                        />
-                        <div className="text-xs text-slate-400 font-bold">
-                            Total Items: <span className="text-blue-400">{filteredFiles.length}</span>
+                <main className="flex-1 p-6 lg:p-10 space-y-6">
+                    {/* Top Search & Stats Bar */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-xl">
+                        <div className="w-full sm:w-72">
+                            <input 
+                                type="text"
+                                placeholder="Search files by name..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500 font-mono"
+                            />
+                        </div>
+                        <div className="text-xs text-slate-400">
+                            Total Stored Files: <span className="text-blue-400 font-bold">{files.length}</span>
                         </div>
                     </div>
 
-                    {/* Files Table */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse text-xs">
-                                <thead>
-                                    <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px] bg-slate-950">
-                                        <th className="p-4">Media File Name</th>
-                                        <th className="p-4">Type / Source</th>
-                                        <th className="p-4">Status</th>
-                                        <th className="p-4">Created Date</th>
-                                        <th className="p-4 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800/60">
-                                    {loading ? (
-                                        <tr>
-                                            <td colSpan="5" className="p-8 text-center text-slate-500 animate-pulse">
-                                                Loading MultiServer files from Supabase cloud database...
-                                            </td>
-                                        </tr>
-                                    ) : filteredFiles.length > 0 ? (
-                                        filteredFiles.map((file) => (
-                                            <tr key={file.id} className="hover:bg-slate-800/40 transition">
-                                                <td className="p-4 font-bold text-white max-w-xs truncate">
-                                                    {file.title || 'Untitled Media Asset'}
-                                                </td>
-                                                <td className="p-4 text-slate-400">
-                                                    <span className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-[10px] font-bold text-blue-400">
-                                                        {file.type || 'Abyss Mirror'}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4">
-                                                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                                        {file.status || 'Active'}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-slate-500 text-[11px]">
-                                                    {file.created_at ? new Date(file.created_at).toLocaleDateString() : 'Recent'}
-                                                </td>
-                                                <td className="p-4 text-right space-x-2">
-                                                    <button 
-                                                        onClick={() => copyEmbedCode(file)}
-                                                        className="px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-400 border border-blue-500/20 hover:bg-blue-600/20 transition text-[10px] font-bold"
-                                                    >
-                                                        {copiedId === file.id ? 'Copied! ✅' : 'Copy Embed'}
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleDelete(file.id)}
-                                                        className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition text-[10px]"
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
-                                        <tr>
-                                            <td colSpan="5" className="p-12 text-center text-slate-500">
-                                                No media files found in your MultiServer repository.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+                    {/* Files List Table / Cards */}
+                    <div className="space-y-4">
+                        {filteredFiles.length === 0 ? (
+                            <div className="text-center py-20 bg-slate-900/40 border border-slate-800/80 rounded-3xl">
+                                <p className="text-xs text-slate-500">No files found in your storage.</p>
+                            </div>
+                        ) : (
+                            filteredFiles.map((file) => (
+                                <div key={file.id} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 transition hover:border-slate-700">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                                        <div className="flex items-center gap-3">
+                                            <span className="p-2.5 rounded-xl bg-blue-600/10 text-blue-400 text-sm">🎞️</span>
+                                            <div>
+                                                {editingFileId === file.id ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <input 
+                                                            type="text"
+                                                            value={newFileName}
+                                                            onChange={(e) => setNewFileName(e.target.value)}
+                                                            className="bg-slate-950 border border-blue-500 text-white text-xs px-2.5 py-1 rounded-lg"
+                                                        />
+                                                        <button onClick={() => handleRename(file.id)} className="px-3 py-1 bg-blue-600 text-white text-[10px] font-bold rounded-lg">Save</button>
+                                                        <button onClick={() => setEditingFileId(null)} className="px-3 py-1 bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg">Cancel</button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="text-xs font-bold text-white">{file.name}</h4>
+                                                        <button 
+                                                            onClick={() => { setEditingFileId(file.id); setNewFileName(file.name); }} 
+                                                            className="text-slate-500 hover:text-blue-400 text-[10px]"
+                                                            title="Rename File"
+                                                        >
+                                                            ✏️
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                <p className="text-[10px] text-slate-400 mt-0.5">Size: {file.size} | Date: {file.date}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+                                                file.status === 'Active' 
+                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                            }`}>
+                                                {file.status || 'Active'}
+                                            </span>
+
+                                            {file.status !== 'Active' && (
+                                                <button 
+                                                    onClick={() => handleRetryUpload(file)}
+                                                    className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-[10px] font-bold rounded-xl border border-blue-500/30 transition cursor-pointer"
+                                                >
+                                                    Retry Upload
+                                                </button>
+                                            )}
+
+                                            <button 
+                                                onClick={() => handleDelete(file.id)}
+                                                className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-bold rounded-xl border border-rose-500/20 transition cursor-pointer"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Links Section */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Download Link</label>
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    readOnly 
+                                                    value={file.url} 
+                                                    className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono"
+                                                />
+                                                <button 
+                                                    onClick={() => copyToClipboard(file.url)}
+                                                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                                                >
+                                                    Copy
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Embed Player Link</label>
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    readOnly 
+                                                    value={file.embed_url || `${file.url}/embed`} 
+                                                    className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono"
+                                                />
+                                                <button 
+                                                    onClick={() => copyToClipboard(file.embed_url || `${file.url}/embed`)}
+                                                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                                                >
+                                                    Copy
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </main>
             </div>

@@ -8,29 +8,48 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { links, uploadType, userId } = body; // links হতে পারে একটি অ্যারে বা মাল্টিলাইন স্ট্রিং
+        const { links, fileName, uploadType, userId } = body;
 
-        if (!links || (Array.isArray(links) && links.length === 0)) {
-            return NextResponse.json({ error: 'No links provided' }, { status: 400 });
+        if (!links) {
+            return NextResponse.json({ error: 'No links provided for uploading' }, { status: 400 });
         }
 
-        // যদি সিঙ্গেল স্ট্রিং বা মাল্টিলাইন হয়, তবে লাইন বাই লাইন স্প্লিট করে নেওয়া
+        // সিকিউরিটি ও ডায়নামিক ডোমেইন ডিটেকশন (Vercel বা Custom Domain)
+        const host = request.headers.get('host') || 'my-video-proxy-three.vercel.app';
+        const protocol = request.headers.get('x-forwarded-proto') || 'https';
+        const baseUrl = `${protocol}://${host}`;
+
+        // মাল্টিলাইন বা সিঙ্গেল লিংক হ্যান্ডেল করার অ্যারে কনভার্শন
         const linkArray = typeof links === 'string' 
             ? links.split('\n').map(l => l.trim()).filter(l => l.length > 0)
             : links;
 
-        const insertedFiles = [];
+        const processedFiles = [];
 
         for (const fileUrl of linkArray) {
-            const fileId = Math.random().toString(36).substring(2, 8);
-            let finalDownloadUrl = fileUrl;
-            let fileType = 'Google Cloud Drive';
-            let fileSize = '15 GB Limit';
-            let autoTitle = `GDrive_File_${fileId}`;
+            const fileId = Math.random().toString(36).substring(2, 10);
+            
+            let cleanTitle = fileName && fileName.trim() !== '' ? fileName : '';
+            let directDownloadUrl = fileUrl;
 
-            if (uploadType === 'abyss') {
-                fileType = 'Abyss.to';
-                fileSize = 'Unlimited';
+            // Google Drive লিংক বা File ID থেকে ডাইরেক্ট ডাউনলোড লিংক জেনারেট করার লজিক
+            const driveMatch = fileUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || fileUrl.match(/id=([a-zA-Z0-9_-]+)/);
+            if (driveMatch && driveMatch[1]) {
+                const gId = driveMatch[1];
+                directDownloadUrl = `https://drive.google.com/uc?export=download&id=${gId}`;
+                if (!cleanTitle) {
+                    cleanTitle = `GDrive_Media_${gId.substring(0, 6)}.mp4`;
+                }
+            } else if (!cleanTitle) {
+                cleanTitle = `Media_File_${fileId}.mp4`;
+            }
+
+            let fileSize = '750.00 MB';
+            // ফাইল ম্যানেজারে আগে দেখানোর জন্য এবং ডুপ্লিকেট চেক করতে ডিফল্ট স্ট্যাটাস 'Processing' রাখা হলো
+            let fileStatus = 'Processing';
+
+            // Abyss বা অন্যান্য সার্ভারে পুশ করার লজিক
+            if (uploadType === 'abyss' || uploadType === 'gdrive') {
                 const { data: settingData } = await supabase
                     .from('settings')
                     .select('value')
@@ -41,44 +60,58 @@ export async function POST(request) {
                 const abyssUploadUrl = `http://up.abyss.to/${apiKey}`;
                 
                 try {
-                    const response = await fetch(abyssUploadUrl, {
+                    const abyssRes = await fetch(abyssUploadUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: fileUrl, name: autoTitle })
+                        body: JSON.stringify({ url: directDownloadUrl, name: cleanTitle })
                     });
-                    const result = await response.json();
-                    if (result.url) {
-                        finalDownloadUrl = result.url;
+                    const abyssResult = await abyssRes.json();
+                    if (abyssResult.url) {
+                        directDownloadUrl = abyssResult.url;
+                        fileStatus = 'Active'; // আপলোড সফল হলে স্ট্যাটাস Active হবে
                     }
-                } catch (abyssErr) {
-                    console.error('Abyss server error:', abyssErr);
+                } catch (err) {
+                    console.error('Server Mirror Error:', err);
                 }
+            } else {
+                fileStatus = 'Active';
             }
 
-            const newFileRecord = {
+            // সিস্টেমের নিজস্ব ডোমেইন দিয়ে ডাউনলোড ও এম্বেড লিংক তৈরি
+            const systemDownloadLink = `${baseUrl}/file/${fileId}`;
+            const systemEmbedLink = `${baseUrl}/embed/${fileId}`;
+
+            const fileRecord = {
                 id: fileId,
-                name: autoTitle,
+                name: cleanTitle,
                 size: fileSize,
                 quality: '1080p WEB-DL',
                 date: new Date().toISOString().split('T')[0],
-                status: 'Active',
-                url: finalDownloadUrl,
+                status: fileStatus,
+                url: systemDownloadLink,
+                embed_url: systemEmbedLink,
+                original_url: directDownloadUrl,
                 user_id: userId || null
             };
 
+            // Supabase ডাটাবেজে পার্মানেন্টলি সেভ করা
             const { error: dbError } = await supabase
                 .from('files')
-                .insert([newFileRecord]);
+                .insert([fileRecord]);
 
             if (!dbError) {
-                insertedFiles.push(newFileRecord);
+                processedFiles.push(fileRecord);
             }
         }
 
-        return NextResponse.json({ success: true, count: insertedFiles.length, files: insertedFiles });
+        return NextResponse.json({ 
+            success: true, 
+            count: processedFiles.length, 
+            files: processedFiles 
+        });
 
     } catch (err) {
-        console.error('Upload API Error:', err);
+        console.error('API Critical Error:', err);
         return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
     }
 }
