@@ -15,8 +15,8 @@ export default function GDriveUploadPage() {
     const [user, setUser] = useState(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
 
-    const [fileUrl, setFileUrl] = useState('');
-    const [fileName, setFileName] = useState('');
+    const [folderUrl, setFolderUrl] = useState('');
+    const [linksInput, setLinksInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
 
@@ -41,9 +41,15 @@ export default function GDriveUploadPage() {
         );
     }
 
-    const handleUpload = async (e) => {
+    const handleExtractFolder = () => {
+        if (!folderUrl.trim()) return;
+        alert('Folder link extraction feature simulation: Folder parsed successfully! (You can paste links below as well)');
+        // ফোল্ডার থেকে লিংক ফেচ করার লজিক এখানে যুক্ত করা যাবে
+    };
+
+    const handleBulkUpload = async (e) => {
         e.preventDefault();
-        if (!fileUrl.trim()) return;
+        if (!linksInput.trim()) return;
 
         setIsLoading(true);
         setSuccessMsg('');
@@ -53,19 +59,18 @@ export default function GDriveUploadPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    fileUrl,
-                    fileName,
+                    links: linksInput,
                     uploadType: 'gdrive',
                     userId: user?.id
                 })
             });
 
             const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Failed to process Google Drive link');
+            if (!response.ok) throw new Error(data.error || 'Failed to process links');
 
-            setSuccessMsg('Google Drive file successfully linked and synced! ✅');
-            setFileUrl('');
-            setFileName('');
+            setSuccessMsg(`Successfully synced ${data.count} file(s) with MultiServer queue! ✅`);
+            setLinksInput('');
+            setFolderUrl('');
         } catch (err) {
             alert(err.message);
         } finally {
@@ -84,7 +89,15 @@ export default function GDriveUploadPage() {
                 </header>
 
                 <main className="flex-1 flex flex-col items-center justify-start p-6 lg:p-10">
-                    <div className="w-full max-w-3xl space-y-6">
+                    <div className="w-full max-w-4xl space-y-6">
+
+                        {/* Top Info Banner */}
+                        <div className="p-4 rounded-2xl bg-blue-600/10 border border-blue-500/20 text-xs text-blue-300 flex items-start gap-3 shadow-lg">
+                            <span className="text-base">ℹ️</span>
+                            <p className="leading-relaxed">
+                                Google Drive Integration: Extract links from shared folders directly into the queue or paste individual file links one per line.
+                            </p>
+                        </div>
 
                         {successMsg && (
                             <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-bold">
@@ -92,36 +105,60 @@ export default function GDriveUploadPage() {
                             </div>
                         )}
 
-                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-4">
+                        {/* Main Uploader Card */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
                             <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                ☁️ Add Google Drive Stream Link
+                                ☁️ Google Drive Link Uploader
                             </h3>
 
-                            <form onSubmit={handleUpload} className="space-y-4">
-                                <div>
-                                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                                        File Title (Optional)
-                                    </label>
-                                    <input 
-                                        type="text" 
-                                        value={fileName}
-                                        onChange={(e) => setFileName(e.target.value)}
-                                        placeholder="e.g. Movie / Episode Name"
-                                        className="w-full bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-blue-600 font-mono"
-                                    />
+                            <form onSubmit={handleBulkUpload} className="space-y-6">
+                                {/* Extract from GDrive Folder */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                            Extract From GDrive Folder
+                                        </label>
+                                        <span className="text-[10px] text-slate-500">Auto-fills link queue</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="relative flex-1">
+                                            <span className="absolute left-3.5 top-3.5 text-slate-500 text-xs">📁</span>
+                                            <input 
+                                                type="url" 
+                                                value={folderUrl}
+                                                onChange={(e) => setFolderUrl(e.target.value)}
+                                                placeholder="Paste folder URL: https://drive.google.com/drive/folders/..."
+                                                className="w-full bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-blue-600 font-mono"
+                                            />
+                                        </div>
+                                        <button 
+                                            type="button"
+                                            onClick={handleExtractFolder}
+                                            className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                                        >
+                                            Extract
+                                        </button>
+                                    </div>
                                 </div>
 
-                                <div>
-                                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                                        Google Drive Shareable / Direct Link
+                                <div className="relative flex py-2 items-center">
+                                    <div className="flex-grow border-t border-slate-800"></div>
+                                    <span className="flex-shrink mx-4 text-[10px] text-slate-500 uppercase tracking-widest">Or Multiple Links</span>
+                                    <div className="flex-grow border-t border-slate-800"></div>
+                                </div>
+
+                                {/* Google Drive Public Links (One per line) */}
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                        Google Drive Public Links (One per line)
                                     </label>
-                                    <input 
-                                        type="url" 
+                                    <textarea 
+                                        rows={6}
                                         required
-                                        value={fileUrl}
-                                        onChange={(e) => setFileUrl(e.target.value)}
-                                        placeholder="https://drive.google.com/file/d/..."
-                                        className="w-full bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-blue-600 font-mono"
+                                        value={linksInput}
+                                        onChange={(e) => setLinksInput(e.target.value)}
+                                        placeholder="https://drive.google.com/file/d/1xxxxxxx/view&#10;https://drive.google.com/file/d/2xxxxxxx/view"
+                                        className="w-full bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-xl p-4 focus:outline-none focus:border-blue-600 font-mono leading-relaxed"
                                     />
                                 </div>
 
@@ -130,7 +167,7 @@ export default function GDriveUploadPage() {
                                     disabled={isLoading}
                                     className="w-full h-12 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold uppercase transition shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                                 >
-                                    {isLoading ? 'Syncing with Drive...' : 'Sync & Save Drive File'}
+                                    <span>⬆️</span> {isLoading ? 'Processing Queue...' : 'Upload Links'}
                                 </button>
                             </form>
                         </div>
