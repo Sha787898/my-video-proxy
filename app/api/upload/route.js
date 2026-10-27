@@ -51,6 +51,7 @@ export async function POST(request) {
 
             const resData = await workerRes.json();
             const fileInfo = resData.data || {};
+            const workerResults = fileInfo.results || {};
 
             let formattedSize = 'Unknown Size';
             if (fileInfo.size) {
@@ -60,26 +61,32 @@ export async function POST(request) {
                     : (bytes / (1024 * 1024)).toFixed(2) + ' MB';
             }
 
-            // Generate a proper download/stream link fallback
-            const fileId = fileInfo.id || Math.random().toString(36).substring(2, 10);
-            const generatedDownloadLink = fileInfo.results?.pixeldrain 
-                ? `https://pixeldrain.com/u/${fileInfo.results.pixeldrain}`
-                : fileInfo.results?.gofile 
-                ? `https://gofile.io/d/${fileInfo.results.gofile}`
-                : `https://drive.google.com/uc?export=download&id=${link.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] || ''}`;
+            // Pick the first successful remote mirror link from worker results
+            let bestMirrorLink = 'Processing Mirror Links...';
+            if (workerResults.pixeldrain && !workerResults.pixeldrain.startsWith('Failed')) {
+                bestMirrorLink = `https://pixeldrain.com/u/${workerResults.pixeldrain}`;
+            } else if (workerResults.gofile && !workerResults.gofile.startsWith('Failed')) {
+                bestMirrorLink = `https://gofile.io/d/${workerResults.gofile}`;
+            } else if (workerResults.abyss && !workerResults.abyss.startsWith('Failed')) {
+                bestMirrorLink = `https://hydrax.net/${workerResults.abyss}`;
+            } else if (workerResults.vidmoly && !workerResults.vidmoly.startsWith('Failed')) {
+                bestMirrorLink = `https://vidmoly.me/w/${workerResults.vidmoly}`;
+            } else if (workerResults.mixdrop && !workerResults.mixdrop.startsWith('Failed')) {
+                bestMirrorLink = `https://mixdrop.ag/f/${workerResults.mixdrop}`;
+            }
 
             const formattedResult = {
-                id: fileId,
+                id: fileInfo.id || Math.random().toString(36).substring(2, 10),
                 name: fileInfo.title || 'GDrive_Video.mp4',
                 size: formattedSize,
                 status: resData.status === 'success' ? 'Active' : 'error',
-                download_link: generatedDownloadLink,
-                url: generatedDownloadLink,
+                download_link: bestMirrorLink,
+                url: bestMirrorLink,
                 original_url: link,
-                results: fileInfo.results || {}
+                results: workerResults
             };
 
-            // Optional Supabase logging
+            // Save to Supabase for local history
             try {
                 await supabase.from('files').insert([{
                     id: formattedResult.id,
@@ -88,7 +95,7 @@ export async function POST(request) {
                     quality: '1080p WEB-DL',
                     date: new Date().toISOString().split('T')[0],
                     status: formattedResult.status,
-                    download_link: generatedDownloadLink,
+                    download_link: bestMirrorLink,
                     original_url: link,
                     user_id: userId || null
                 }]);
