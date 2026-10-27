@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Sidebar from '../../components/Sidebar'; // আপনার পাথ অনুযায়ী সাইডবার পাথ ঠিক করে নিতে পারেন
+import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -73,8 +73,6 @@ export default function GDriveUploadPage() {
             });
 
             const data = await response.json();
-            console.log('Upload API Response:', data); // ব্রাউজার কনসোলে রেসপন্স দেখতে পাবেন
-
             if (!response.ok) throw new Error(data.error || 'Failed to process links');
 
             setSuccessMsg(`Completed! Successfully processed and queued ${data.count} file(s). 🎉`);
