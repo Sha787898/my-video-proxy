@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../../components/Sidebar'; // আপনার পাথ অনুযায়ী সাইডবার পাথ ঠিক করে নিতে পারেন
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -50,31 +50,39 @@ export default function GDriveUploadPage() {
 
     const handleBulkUpload = async (e) => {
         e.preventDefault();
-        if (!linksInput.trim()) return;
+        if (!linksInput.trim()) {
+            alert('Please enter at least one link.');
+            return;
+        }
 
         setIsLoading(true);
         setSuccessMsg('');
         setUploadedFiles([]);
 
         try {
+            const payload = {
+                links: linksInput,
+                uploadType: 'gdrive',
+                userId: user?.id || null
+            };
+
             const response = await fetch('/api/upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    links: linksInput,
-                    uploadType: 'gdrive',
-                    userId: user?.id
-                })
+                body: JSON.stringify(payload)
             });
 
             const data = await response.json();
+            console.log('Upload API Response:', data); // ব্রাউজার কনসোলে রেসপন্স দেখতে পাবেন
+
             if (!response.ok) throw new Error(data.error || 'Failed to process links');
 
             setSuccessMsg(`Completed! Successfully processed and queued ${data.count} file(s). 🎉`);
             setUploadedFiles(data.files || []);
             setLinksInput('');
         } catch (err) {
-            alert(err.message);
+            console.error('Upload Error:', err);
+            alert('Error: ' + err.message);
         } finally {
             setIsLoading(false);
         }
@@ -101,68 +109,24 @@ export default function GDriveUploadPage() {
                 <main className="flex-1 flex flex-col items-center justify-start p-6 lg:p-10 space-y-6">
                     <div className="w-full max-w-4xl space-y-6">
 
-                        {/* Top Info Banner */}
-                        <div className="p-4 rounded-2xl bg-blue-600/10 border border-blue-500/20 text-xs text-blue-300 flex items-start gap-3 shadow-lg backdrop-blur-md">
-                            <span className="text-base">ℹ️</span>
-                            <p className="leading-relaxed">
-                                Google Drive Integration: Paste your public Google Drive file links below (one link per line). They will be processed and added to your File Manager with 'Processing' status.
-                            </p>
-                        </div>
-
                         {successMsg && (
                             <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-bold flex items-center gap-2 shadow-lg">
                                 <span>✅</span> {successMsg}
                             </div>
                         )}
 
-                        {/* Main Uploader Form */}
-                        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 backdrop-blur-xl">
+                        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
                             <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                                 ☁️ Google Drive Bulk Link Mirror
                             </h3>
 
                             <form onSubmit={handleBulkUpload} className="space-y-6">
                                 <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                            Extract From GDrive Folder
-                                        </label>
-                                        <span className="text-[10px] text-blue-400 font-bold">Auto-fills link queue</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="relative flex-1">
-                                            <span className="absolute left-4 top-3.5 text-slate-500 text-xs">📁</span>
-                                            <input 
-                                                type="url" 
-                                                value={folderUrl}
-                                                onChange={(e) => setFolderUrl(e.target.value)}
-                                                placeholder="https://drive.google.com/drive/folders/..."
-                                                className="w-full bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-2xl pl-10 pr-4 py-3.5 focus:outline-none focus:border-blue-500 font-mono transition"
-                                            />
-                                        </div>
-                                        <button 
-                                            type="button"
-                                            onClick={handleExtractFolder}
-                                            className="px-6 py-3.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-2xl transition cursor-pointer shadow-lg"
-                                        >
-                                            Extract
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="relative flex py-2 items-center">
-                                    <div className="flex-grow border-t border-slate-800"></div>
-                                    <span className="flex-shrink mx-4 text-[10px] text-slate-500 uppercase tracking-widest font-bold">Or Multiple Links</span>
-                                    <div className="flex-grow border-t border-slate-800"></div>
-                                </div>
-
-                                <div className="space-y-2">
                                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                                         Google Drive Public Links (One per line)
                                     </label>
                                     <textarea 
                                         rows={6}
-                                        required
                                         value={linksInput}
                                         onChange={(e) => setLinksInput(e.target.value)}
                                         placeholder={`https://drive.google.com/file/d/1xxxxxxx/view\nhttps://drive.google.com/file/d/2xxxxxxx/view`}
@@ -180,9 +144,8 @@ export default function GDriveUploadPage() {
                             </form>
                         </div>
 
-                        {/* Generated Links Results */}
                         {uploadedFiles.length > 0 && (
-                            <div className="space-y-4 animate-fade-in">
+                            <div className="space-y-4">
                                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider px-2">
                                     ✨ Successfully Queued Files ({uploadedFiles.length})
                                 </h3>
