@@ -13,9 +13,9 @@ const DEFAULT_NODES = [
     { id: 'vidmoly', name: 'Vidmoly.me', limit: 'Unlimited', icon: '⚡', status: 'ONLINE', active: true, key: '', customDomain: '' },
     { id: 'abyss', name: 'Abyss.to / LoadMyFile', limit: 'Unlimited', icon: '🌊', status: 'ONLINE', active: true, key: '', customDomain: '' },
     { id: 'gcloud', name: 'Google Cloud Drive', limit: '15 GB', icon: '☁️', status: 'ONLINE', active: true, key: '', customDomain: '' },
-    { id: 'pixeldrain', name: 'Pixeldrain', limit: '10 GB', icon: '🧪', status: 'ONLINE', active: true, key: '', customDomain: '' },
-    { id: 'vikingfile', name: 'VikingFile', limit: '100 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'gofile', name: 'GoFile', limit: '500 GB', icon: '📁', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'pixeldrain', name: 'Pixeldrain', limit: '10 GB', icon: '🧪', status: 'ONLINE', active: true, key: '', customDomain: '', pdlink: true },
+    { id: 'vikingfile', name: 'VikingFile', limit: '100 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
+    { id: 'gofile', name: 'GoFile', limit: '500 GB', icon: '📁', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
     { id: 'voe', name: 'VOE.sx', limit: 'Unlimited', icon: '🚀', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'sendnow', name: 'Send.now', limit: 'Unlimited', icon: '📤', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'streamhg', name: 'StreamHG', limit: 'Unlimited', icon: '📺', status: 'ONLINE', active: false, key: '', customDomain: '' },
@@ -24,9 +24,9 @@ const DEFAULT_NODES = [
     { id: 'dropload', name: 'DropLoad', limit: 'Unlimited', icon: '📦', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'ruby', name: 'Ruby.video', limit: 'Unlimited', icon: '💎', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'byse', name: 'Byse', limit: 'Unlimited', icon: '🔗', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'mixdrop', name: 'MixDrop', limit: 'Unlimited', icon: '🔀', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'buzzheavier', name: 'BuzzHeavier', limit: 'Unlimited', icon: '🐝', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'mega', name: 'MEGA', limit: '20 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '' }
+    { id: 'mixdrop', name: 'MixDrop', limit: 'Unlimited', icon: '🔀', status: 'ONLINE', active: false, key: '', customDomain: '', email: '' },
+    { id: 'buzzheavier', name: 'BuzzHeavier', limit: 'Unlimited', icon: '🐝', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
+    { id: 'mega', name: 'MEGA', limit: '20 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true }
 ];
 
 export default function ManageSitesPage() {
@@ -60,10 +60,15 @@ export default function ManageSitesPage() {
                 setNodes(prevNodes => prevNodes.map(node => {
                     const foundKey = settingsData.find(s => s.key === `${node.id}_api_key`);
                     const foundDomain = settingsData.find(s => s.key === `${node.id}_domain`);
+                    const foundActive = settingsData.find(s => s.key === `${node.id}_active`);
+                    const foundEmail = settingsData.find(s => s.key === `${node.id}_email`);
                     return {
                         ...node,
                         key: foundKey ? foundKey.value : node.key,
-                        customDomain: foundDomain ? foundDomain.value : node.customDomain
+                        customDomain: foundDomain ? foundDomain.value : node.customDomain,
+                        // সেভ করা থাকলে সেটাই, না থাকলে ডিফল্ট
+                        active: foundActive ? foundActive.value === 'true' : node.active,
+                        email: foundEmail ? foundEmail.value : node.email
                     };
                 }));
             }
@@ -79,20 +84,40 @@ export default function ManageSitesPage() {
         );
     }
 
-    const toggleNodeActive = (id) => {
-        setNodes(prev => prev.map(node => node.id === id ? { ...node, active: !node.active } : node));
+    const toggleNodeActive = async (id) => {
+        if (!user) return;
+        const current = nodes.find(n => n.id === id);
+        const nextActive = !current.active;
+
+        // সাথে সাথে UI আপডেট
+        setNodes(prev => prev.map(node => node.id === id ? { ...node, active: nextActive } : node));
+
+        // ডাটাবেজে সেভ (এটাই আপলোডের সময় ব্যবহার হয়)
+        const { error } = await supabase
+            .from('settings')
+            .upsert({
+                user_id: user.id,
+                key: `${id}_active`,
+                value: String(nextActive)
+            }, { onConflict: 'user_id,key' });
+
+        if (error) {
+            // সেভ না হলে আগের অবস্থায় ফেরত
+            setNodes(prev => prev.map(node => node.id === id ? { ...node, active: !nextActive } : node));
+            alert('Failed to save: ' + error.message);
+        }
     };
 
     const handleOpenModal = (node, type) => {
         setActiveModal({ type, node });
-        setInputValue(type === 'key' ? node.key || '' : node.customDomain || '');
+        setInputValue(type === 'key' ? node.key || '' : type === 'email' ? node.email || '' : node.customDomain || '');
     };
 
     const handleSaveModal = async () => {
         if (!activeModal || !user) return;
         const { node, type } = activeModal;
 
-        const targetSettingKey = type === 'key' ? `${node.id}_api_key` : `${node.id}_domain`;
+        const targetSettingKey = type === 'key' ? `${node.id}_api_key` : type === 'email' ? `${node.id}_email` : `${node.id}_domain`;
 
         // Supabase-e upsert (Insert or Update) korar logic
         const { error } = await supabase
@@ -101,7 +126,7 @@ export default function ManageSitesPage() {
                 user_id: user.id,
                 key: targetSettingKey,
                 value: inputValue
-            }, { onConflict: ['user_id', 'key'] });
+            }, { onConflict: 'user_id,key' });
 
         if (error) {
             alert('Failed to save: ' + error.message);
@@ -110,13 +135,15 @@ export default function ManageSitesPage() {
 
         const updatedNodes = nodes.map(n => {
             if (n.id === node.id) {
-                return type === 'key' ? { ...n, key: inputValue } : { ...n, customDomain: inputValue };
+                if (type === 'key') return { ...n, key: inputValue };
+                if (type === 'email') return { ...n, email: inputValue };
+                return { ...n, customDomain: inputValue };
             }
             return n;
         });
 
         setNodes(updatedNodes);
-        setSaveStatus(`Successfully updated ${type === 'key' ? 'API Key' : 'Custom Domain'} for ${node.name}`);
+        setSaveStatus(`Successfully updated ${type === 'key' ? 'API Key' : type === 'email' ? 'Email' : 'Custom Domain'} for ${node.name}`);
         setTimeout(() => setSaveStatus(''), 3000);
         setActiveModal(null);
     };
@@ -191,6 +218,11 @@ export default function ManageSitesPage() {
                                         </div>
 
                                         <div className="flex items-center gap-3 self-end sm:self-auto">
+                                            {node.pdlink ? (
+                                                <span className="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-[11px] font-bold text-slate-500">
+                                                    🔗 via PDLink (no key needed)
+                                                </span>
+                                            ) : (
                                             <button 
                                                 onClick={() => handleOpenModal(node, 'key')}
                                                 className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
@@ -201,6 +233,20 @@ export default function ManageSitesPage() {
                                             >
                                                 <span>🔑</span> {node.key ? 'Edit Key' : '+ Add Key'}
                                             </button>
+                                            )}
+
+                                            {node.id === 'mixdrop' && (
+                                                <button 
+                                                    onClick={() => handleOpenModal(node, 'email')}
+                                                    className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                                        node.email 
+                                                            ? 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800' 
+                                                            : 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20'
+                                                    }`}
+                                                >
+                                                    <span>✉️</span> {node.email ? 'Edit Email' : '+ Add Email'}
+                                                </button>
+                                            )}
 
                                             <button 
                                                 onClick={() => handleOpenModal(node, 'domain')}
@@ -233,7 +279,7 @@ export default function ManageSitesPage() {
                     <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 sm:p-8 space-y-4 shadow-2xl">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                             <h3 className="text-xs font-bold text-white uppercase tracking-wider truncate">
-                                {activeModal.type === 'key' ? 'Set API Key for ' : 'Set Custom Domain for '}
+                                {activeModal.type === 'key' ? 'Set API Key for ' : activeModal.type === 'email' ? 'Set Account Email for ' : 'Set Custom Domain for '}
                                 <span className="text-blue-400">{activeModal.node.name}</span>
                             </h3>
                             <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white text-sm cursor-pointer">✕</button>
@@ -241,11 +287,11 @@ export default function ManageSitesPage() {
 
                         <div className="space-y-1.5">
                             <label className="text-[10px] text-slate-400 uppercase">
-                                {activeModal.type === 'key' ? 'API Key / Token' : 'Custom Proxy / Mirror Domain'}
+                                {activeModal.type === 'key' ? 'API Key / Token' : activeModal.type === 'email' ? 'Account Email' : 'Custom Proxy / Mirror Domain'}
                             </label>
                             <input 
                                 type={activeModal.type === 'key' ? 'password' : 'text'}
-                                placeholder={activeModal.type === 'key' ? 'Paste API Key here...' : 'https://cdn.yourdomain.com'}
+                                placeholder={activeModal.type === 'key' ? 'Paste API Key here...' : activeModal.type === 'email' ? 'you@example.com' : 'https://cdn.yourdomain.com'}
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-blue-600 font-mono"

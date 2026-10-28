@@ -61,7 +61,10 @@ export default function DriveUploadPage() {
         try {
             const response = await fetch('/api/upload', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+                },
                 body: JSON.stringify({
                     links: fullDriveUrl,
                     fileName: customTitle,
