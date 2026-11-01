@@ -3,6 +3,7 @@
 import { use, Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
+import { resolveMirrors } from '../../utils/mirrors';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -42,9 +43,9 @@ function FileDownloadContent({ params }) {
     const fileName = fileData?.name || 'MultiServer_Video_Media_Node_File.mkv';
     const fileSize = fileData?.size || '1.45 GB';
     const fileQuality = fileData?.quality || '1080p FHD';
-    const mirrors = fileData?.mirrors || [];
+    const mirrors = resolveMirrors(fileData?.mirrors, fileData?.domains);
     // ডাউনলোড বাটন: আগে download-type মিরর, না থাকলে যেকোনো মিরর
-    const mainDownload = mirrors.find((m) => m.type === 'download') || mirrors[0];
+    const mainDownload = mirrors.find((m) => m.type === 'download') || mirrors.find((m) => m.type === 'stream');
     const directDownloadUrl = mainDownload?.url || '#';
     const hasPlayer = mirrors.some((m) => m.embed);
 

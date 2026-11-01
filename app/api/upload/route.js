@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { SERVERS, PDLINK_SERVERS, buildMirror, resolveMirrors, domainsFromSettings } from '../../utils/mirrors';
 
 // Vercel-এ অনেক লিংক একসাথে দিলে timeout এড়াতে (বিল্ড এরর দিলে এই লাইনটা মুছে দিন)
 export const maxDuration = 60;
@@ -12,9 +13,6 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 //   SITE_SECRET  = (একটা লম্বা random লেখা; Worker-এও একই SITE_SECRET দিন)
 const WORKER_URL = process.env.WORKER_URL || 'https://multiserver-worker.shabidalhasan.workers.dev';
 const SITE_SECRET = process.env.SITE_SECRET;
-// PDLink-এর শেয়ার লিংক: https://pdlk.site/g/<share_id>  (PDLink API-র আসল রেসপন্স থেকে)
-const PDLINK_SHARE_BASE = process.env.PDLINK_SHARE_BASE || 'https://pdlk.site/g/';
-
 // manage-sites এর server id  ->  Worker-এর key এর নাম
 const KEY_MAP = {
     voe: 'voe_key',
@@ -29,10 +27,31 @@ const KEY_MAP = {
     abyss: 'abyss_key',
     gcloud: 'gcloud_key',
     mixdrop: 'mixdrop_key',
+    vidara: 'vidara_key',
+    filepress: 'filepress_key',
+    streamp2p: 'p2p_key',
+    player4me: 'p4me_key',
+    upnshare: 'upnshare_key',
+    rpmshare: 'rpmshare_key',
+    streamtape: 'streamtape_key',
 };
 
-// এই ৫টা সার্ভার Worker-এ PDLink দিয়ে যায় (আলাদা key লাগে না)
-const PDLINK_SERVERS = ['gofile', 'pixeldrain', 'vikingfile', 'buzzheavier', 'mega'];
+// Worker-এর result-এ কিছু সার্ভারের নাম আলাদা
+const RESULT_KEY = {
+    filepress: 'fp_id',
+    streamp2p: 'p2p_task',
+    player4me: 'p4me_task',
+    upnshare: 'upn_task',
+    rpmshare: 'rpmshare_task',
+    streamtape: 'streamtape_task',
+};
+const STATUS_KEY = {
+    streamp2p: 'p2p_status',
+    player4me: 'p4me_status',
+    upnshare: 'upn_status',
+    rpmshare: 'rpmshare_status',
+    streamtape: 'streamtape_status',
+};
 
 // settings-এ `${id}_active` সেভ না থাকলে এই ডিফল্ট
 const DEFAULT_ACTIVE = {
@@ -40,54 +59,9 @@ const DEFAULT_ACTIVE = {
     vikingfile: false, gofile: false, voe: false, sendnow: false, streamhg: false,
     earnvids: false, turboviplay: false, dropload: false, ruby: false, byse: false,
     mixdrop: false, buzzheavier: false, mega: false,
+    vidara: false, filepress: false, streamp2p: false, player4me: false,
+    upnshare: false, rpmshare: false, streamtape: false,
 };
-
-// প্রতিটি সার্ভারের লিংকের গঠন. {c} = Worker থেকে পাওয়া code/id
-//   type 'stream'   => প্লেয়ার/embed হয় (embed লিংক বানানো হয়)
-//   type 'download' => শুধু ডাউনলোড/স্টোরেজ লিংক
-// ✅ = নিশ্চিত, ⚠️ = আন্দাজ (প্রতিটা সার্ভারের ড্যাশবোর্ডে নিজের embed লিংক দেখে মিলিয়ে নিন)
-const SERVERS = {
-    vidmoly:     { name: 'Vidmoly',      type: 'stream',   host: 'https://vidmoly.org',       view: '/w/{c}', embed: '/embed-{c}.html' },                                   // ✅
-    abyss:       { name: 'Abyss',        type: 'stream',   host: 'https://player.abyssplayer.com',       view: '/{c}',   embedHost: 'https://abysscdn.com', embed: '/?v={c}' },      // ✅
-    voe:         { name: 'VOE',          type: 'stream',   host: 'https://voe.sx',           view: '/{c}',   embed: '/e/{c}' },                                            // ✅
-    mixdrop:     { name: 'MixDrop',      type: 'stream',   host: 'https://mixdrop.ag',       view: '/f/{c}', embed: '/e/{c}' },                                            // ✅
-    streamhg:    { name: 'StreamHG',     type: 'stream',   host: 'https://streamhg.com',     view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
-    earnvids:    { name: 'EarnVids',     type: 'stream',   host: 'https://earnvids.com',     view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
-    dropload:    { name: 'DropLoad',     type: 'stream',   host: 'https://dropload.io',      view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
-    ruby:        { name: 'Ruby',         type: 'stream',   host: 'https://streamruby.com',   view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
-    byse:        { name: 'Byse',         type: 'stream',   host: 'https://byse.sx',          view: '/{c}',   embed: '/e/{c}' },                                            // ⚠️
-    turboviplay: { name: 'TurboViPlay',  type: 'stream',   host: 'https://turboviplay.com',  view: '/{c}',   embed: '/embed/{c}' },                                        // ⚠️
-    pixeldrain:  { name: 'Pixeldrain',   type: 'download', host: 'https://pixeldrain.com',   view: '/u/{c}' },                                                             // ✅
-    gofile:      { name: 'GoFile',       type: 'download', host: 'https://gofile.io',        view: '/d/{c}' },                                                             // ✅
-    vikingfile:  { name: 'VikingFile',   type: 'download', host: 'https://vikingfile.com',   view: '/f/{c}' },                                                             // ⚠️
-    buzzheavier: { name: 'BuzzHeavier',  type: 'download', host: 'https://buzzheavier.com',  view: '/{c}' },                                                               // ⚠️
-    sendnow:     { name: 'Send.now',     type: 'download', host: 'https://send.now',         view: '/{c}' },                                                               // ⚠️
-    mega:        { name: 'MEGA',         type: 'download', host: '',                         view: '{c}' },
-    gcloud:      { name: 'Google Cloud', type: 'download', host: '',                         view: '{c}' },
-};
-
-// Worker-এর result (code বা পুরো URL) থেকে mirror অবজেক্ট বানায়; ব্যর্থ হলে null
-function buildMirror(serverId, rawCode, customDomain) {
-    const cfg = SERVERS[serverId];
-    if (!cfg) return null;
-    if (rawCode === null || rawCode === undefined) return null;
-    const code = String(rawCode).trim();
-    if (!code || code.startsWith('Failed')) return null;
-
-    const fill = (tpl) => tpl.replace('{c}', code);
-    const isUrl = /^https?:\/\//i.test(code);
-    const host = (customDomain || cfg.host || '').replace(/\/$/, '');
-    const embedHost = (customDomain || cfg.embedHost || cfg.host || '').replace(/\/$/, '');
-
-    return {
-        id: serverId,
-        name: cfg.name,
-        type: cfg.type,
-        code,
-        url: isUrl ? code : `${host}${fill(cfg.view)}`,
-        embed: cfg.type === 'stream' && cfg.embed && !isUrl ? `${embedHost}${fill(cfg.embed)}` : null,
-    };
-}
 
 function formatSize(sizeVal) {
     const bytes = parseInt(sizeVal, 10);
@@ -156,6 +130,8 @@ export async function POST(request) {
         }
         const mixEmail = get('mixdrop_email');
         if (mixEmail) keys.mixdrop_email = mixEmail;
+        const stLogin = get('streamtape_login');
+        if (stLogin) keys.streamtape_login = stLogin;
 
         if (activeServers.length === 0) {
             return NextResponse.json({ error: 'কোনো সার্ভার চালু নেই। Manage Sites থেকে অন্তত একটা সার্ভার ON করুন।' }, { status: 400 });
@@ -202,14 +178,17 @@ export async function POST(request) {
             const mirrors = [];
             const failed = [];
             for (const id of activeServers) {
-                const m = buildMirror(id, results[id], get(`${id}_domain`));
+                const m = buildMirror(id, results[RESULT_KEY[id] || id]);
                 if (m) {
                     mirrors.push(m);
                 } else {
-                    const raw = results[id];
+                    const raw = results[RESULT_KEY[id] || id];
+                    const stat = STATUS_KEY[id] ? results[STATUS_KEY[id]] : null;
                     const reason = typeof raw === 'string' && raw.startsWith('Failed')
                         ? raw
-                        : (KEY_MAP[id] && !keys[KEY_MAP[id]] ? 'API key missing' : 'No result');
+                        : (stat && String(stat).startsWith('Failed')
+                            ? String(stat)
+                            : (KEY_MAP[id] && !keys[KEY_MAP[id]] ? 'API key missing' : 'No result'));
                     failed.push({ id, name: SERVERS[id]?.name || id, reason });
                 }
             }
@@ -227,13 +206,15 @@ export async function POST(request) {
                     name: 'PDLink (' + pdMirrors.map((m) => m.name).join(' / ') + ')',
                     type: 'download',
                     code,
-                    url: /^https?:\/\//i.test(code) ? code : `${PDLINK_SHARE_BASE}${code}`,
-                    embed: null,
                 });
             }
 
+            // দেখানোর জন্য বর্তমান ডোমেইন দিয়ে লিংক বানাই (ডাটাবেজে শুধু code যায়)
+            const domains = domainsFromSettings(rows);
+            const resolved = resolveMirrors(mirrors, domains);
+
             // সেরা ডাউনলোড লিংক: আগে download-type, না থাকলে যেকোনো একটা
-            const bestDownload = mirrors.find((m) => m.type === 'download') || mirrors[0] || null;
+            const bestDownload = resolved.find((m) => m.type === 'download') || resolved.find((m) => m.type === 'stream') || null;
             const best = bestDownload?.url || null;
 
             const fileResult = {
@@ -241,12 +222,12 @@ export async function POST(request) {
                 id: info.id || Math.random().toString(36).substring(2, 10),
                 name: info.title || 'GDrive_Video.mp4',
                 size: formatSize(info.size),
-                status: mirrors.length > 0 ? 'Active' : 'Processing',
+                status: resolved.some((m) => m.type !== 'task') ? 'Active' : 'Processing',
                 download_link: best || 'Processing Mirror Links...',
                 url: best || 'Processing Mirror Links...',
                 original_url: link,
                 already_exists: !!resData.exists,
-                mirrors,
+                mirrors: resolved,
                 failed,
                 results,
             };
@@ -266,7 +247,7 @@ export async function POST(request) {
                 embed_url: `${siteOrigin}/embed/${fileResult.id}`,
                 original_url: link,
                 user_id: userId,
-                mirrors,
+                mirrors, // শুধু {id,name,type,code}
             };
             // কোনো কলাম টেবিলে না থাকলে সেটা বাদ দিয়ে আবার চেষ্টা (বাকি তথ্য অন্তত সেভ হোক)
             const missingCols = [];

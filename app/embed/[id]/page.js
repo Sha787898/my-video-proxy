@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
+import { resolveMirrors } from '../../utils/mirrors';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -29,7 +30,8 @@ async function EmbedContent({ params }) {
     }
 
     // শুধু যেসব সার্ভারে প্লেয়ার (embed) আছে
-    const currentServers = (file.mirrors || [])
+    // ডোমেইন বদলালে এখানেই নতুন ডোমেইন দিয়ে লিংক বানানো হয়
+    const currentServers = resolveMirrors(file.mirrors, file.domains)
         .filter((m) => m.embed)
         .map((m) => ({ key: m.id, name: m.name, url: m.embed, icon: 'fa-play' }));
 

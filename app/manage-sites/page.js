@@ -24,9 +24,16 @@ const DEFAULT_NODES = [
     { id: 'dropload', name: 'DropLoad', limit: 'Unlimited', icon: '📦', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'ruby', name: 'Ruby.video', limit: 'Unlimited', icon: '💎', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'byse', name: 'Byse', limit: 'Unlimited', icon: '🔗', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'mixdrop', name: 'MixDrop', limit: 'Unlimited', icon: '🔀', status: 'ONLINE', active: false, key: '', customDomain: '', email: '' },
+    { id: 'mixdrop', name: 'MixDrop', limit: 'Unlimited', icon: '🔀', status: 'ONLINE', active: false, key: '', customDomain: '', email: '', extraField: 'email', extraLabel: 'Email' },
     { id: 'buzzheavier', name: 'BuzzHeavier', limit: 'Unlimited', icon: '🐝', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
-    { id: 'mega', name: 'MEGA', limit: '20 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true }
+    { id: 'mega', name: 'MEGA', limit: '20 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
+    { id: 'vidara', name: 'Vidara', limit: 'Unlimited', icon: '🎬', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'filepress', name: 'Filepress', limit: 'Unlimited', icon: '🗂️', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'streamp2p', name: 'StreamP2P', limit: 'Unlimited', icon: '📡', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'player4me', name: 'Player4Me', limit: 'Unlimited', icon: '▶️', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'upnshare', name: 'UpnShare', limit: 'Unlimited', icon: '⬆️', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'rpmshare', name: 'RPMShare', limit: 'Unlimited', icon: '🎞️', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'streamtape', name: 'Streamtape', limit: 'Unlimited', icon: '📼', status: 'ONLINE', active: false, key: '', customDomain: '', email: '', extraField: 'login', extraLabel: 'Login' }
 ];
 
 export default function ManageSitesPage() {
@@ -61,7 +68,7 @@ export default function ManageSitesPage() {
                     const foundKey = settingsData.find(s => s.key === `${node.id}_api_key`);
                     const foundDomain = settingsData.find(s => s.key === `${node.id}_domain`);
                     const foundActive = settingsData.find(s => s.key === `${node.id}_active`);
-                    const foundEmail = settingsData.find(s => s.key === `${node.id}_email`);
+                    const foundEmail = settingsData.find(s => s.key === `${node.id}_${node.extraField || 'email'}`);
                     return {
                         ...node,
                         key: foundKey ? foundKey.value : node.key,
@@ -117,7 +124,7 @@ export default function ManageSitesPage() {
         if (!activeModal || !user) return;
         const { node, type } = activeModal;
 
-        const targetSettingKey = type === 'key' ? `${node.id}_api_key` : type === 'email' ? `${node.id}_email` : `${node.id}_domain`;
+        const targetSettingKey = type === 'key' ? `${node.id}_api_key` : type === 'email' ? `${node.id}_${node.extraField || 'email'}` : `${node.id}_domain`;
 
         // Supabase-e upsert (Insert or Update) korar logic
         const { error } = await supabase
@@ -143,7 +150,7 @@ export default function ManageSitesPage() {
         });
 
         setNodes(updatedNodes);
-        setSaveStatus(`Successfully updated ${type === 'key' ? 'API Key' : type === 'email' ? 'Email' : 'Custom Domain'} for ${node.name}`);
+        setSaveStatus(`Successfully updated ${type === 'key' ? 'API Key' : type === 'email' ? node.extraLabel : 'Custom Domain'} for ${node.name}`);
         setTimeout(() => setSaveStatus(''), 3000);
         setActiveModal(null);
     };
@@ -235,7 +242,7 @@ export default function ManageSitesPage() {
                                             </button>
                                             )}
 
-                                            {node.id === 'mixdrop' && (
+                                            {node.extraField && (
                                                 <button 
                                                     onClick={() => handleOpenModal(node, 'email')}
                                                     className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
@@ -244,7 +251,7 @@ export default function ManageSitesPage() {
                                                             : 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20'
                                                     }`}
                                                 >
-                                                    <span>✉️</span> {node.email ? 'Edit Email' : '+ Add Email'}
+                                                    <span>✉️</span> {node.email ? `Edit ${node.extraLabel}` : `+ Add ${node.extraLabel}`}
                                                 </button>
                                             )}
 
@@ -279,7 +286,7 @@ export default function ManageSitesPage() {
                     <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 sm:p-8 space-y-4 shadow-2xl">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                             <h3 className="text-xs font-bold text-white uppercase tracking-wider truncate">
-                                {activeModal.type === 'key' ? 'Set API Key for ' : activeModal.type === 'email' ? 'Set Account Email for ' : 'Set Custom Domain for '}
+                                {activeModal.type === 'key' ? 'Set API Key for ' : activeModal.type === 'email' ? `Set ${activeModal.node.extraLabel} for ` : 'Set Custom Domain for '}
                                 <span className="text-blue-400">{activeModal.node.name}</span>
                             </h3>
                             <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white text-sm cursor-pointer">✕</button>
@@ -287,11 +294,11 @@ export default function ManageSitesPage() {
 
                         <div className="space-y-1.5">
                             <label className="text-[10px] text-slate-400 uppercase">
-                                {activeModal.type === 'key' ? 'API Key / Token' : activeModal.type === 'email' ? 'Account Email' : 'Custom Proxy / Mirror Domain'}
+                                {activeModal.type === 'key' ? 'API Key / Token' : activeModal.type === 'email' ? activeModal.node.extraLabel : 'Custom Proxy / Mirror Domain'}
                             </label>
                             <input 
                                 type={activeModal.type === 'key' ? 'password' : 'text'}
-                                placeholder={activeModal.type === 'key' ? 'Paste API Key here...' : activeModal.type === 'email' ? 'you@example.com' : 'https://cdn.yourdomain.com'}
+                                placeholder={activeModal.type === 'key' ? 'Paste API Key here...' : activeModal.type === 'email' ? (activeModal.node.extraField === 'login' ? 'Account login / username' : 'you@example.com') : 'https://cdn.yourdomain.com'}
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-blue-600 font-mono"

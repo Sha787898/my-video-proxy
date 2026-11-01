@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
+import { resolveMirrors, domainsFromSettings } from '../utils/mirrors';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -16,6 +17,7 @@ export default function FileManagerPage() {
     const [loadingAuth, setLoadingAuth] = useState(true);
     
     const [files, setFiles] = useState([]);
+    const [domains, setDomains] = useState({});
     const [searchQuery, setSearchQuery] = useState('');
     const [editingFileId, setEditingFileId] = useState(null);
     const [newFileName, setNewFileName] = useState('');
@@ -29,6 +31,12 @@ export default function FileManagerPage() {
             }
             setUser(session.user);
             fetchFiles(session.user.id);
+            // ডোমেইন সেটিং পড়ি, যাতে সব লিংক বর্তমান ডোমেইনে দেখায়
+            const { data: settingsRows } = await supabase
+                .from('settings')
+                .select('key, value')
+                .eq('user_id', session.user.id);
+            setDomains(domainsFromSettings(settingsRows));
             setLoadingAuth(false);
         }
         checkAuthAndFetchFiles();
@@ -45,6 +53,8 @@ export default function FileManagerPage() {
             setFiles(data);
         }
     };
+
+    const mirrorsOf = (file) => resolveMirrors(file.mirrors, domains);
 
     const copyToClipboard = (text) => {
         navigator.clipboard.writeText(text);
@@ -246,11 +256,11 @@ export default function FileManagerPage() {
                                     </div>
 
                                     {/* সব সার্ভারের মিরর লিংক */}
-                                    {Array.isArray(file.mirrors) && file.mirrors.length > 0 ? (
+                                    {mirrorsOf(file).length > 0 ? (
                                         <div className="space-y-2 pt-1">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Server Links ({file.mirrors.length})</label>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Server Links ({mirrorsOf(file).length})</label>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                {file.mirrors.map((m) => (
+                                                {mirrorsOf(file).map((m) => (
                                                     <div key={m.id} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2">
                                                         <span className="text-[10px] font-bold text-white w-24 shrink-0 truncate">{m.name}</span>
                                                         <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 truncate flex-1 hover:underline">{m.url}</a>
