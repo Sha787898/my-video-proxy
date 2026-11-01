@@ -12,6 +12,9 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 //   SITE_SECRET  = (একটা লম্বা random লেখা; Worker-এও একই SITE_SECRET দিন)
 const WORKER_URL = process.env.WORKER_URL || 'https://multiserver-worker.shabidalhasan.workers.dev';
 const SITE_SECRET = process.env.SITE_SECRET;
+// PDLink-এর শেয়ার লিংকের শুরু (⚠️ আন্দাজ). PDLink ড্যাশবোর্ডে একটা শেয়ার লিংক দেখে ঠিক করুন,
+// তারপর Vercel-এ PDLINK_SHARE_BASE সেট করুন, যেমন: https://pdlink.site/
+const PDLINK_SHARE_BASE = process.env.PDLINK_SHARE_BASE || 'https://pdlink.site/';
 
 // manage-sites এর server id  ->  Worker-এর key এর নাম
 const KEY_MAP = {
@@ -45,8 +48,8 @@ const DEFAULT_ACTIVE = {
 //   type 'download' => শুধু ডাউনলোড/স্টোরেজ লিংক
 // ✅ = নিশ্চিত, ⚠️ = আন্দাজ (প্রতিটা সার্ভারের ড্যাশবোর্ডে নিজের embed লিংক দেখে মিলিয়ে নিন)
 const SERVERS = {
-    vidmoly:     { name: 'Vidmoly',      type: 'stream',   host: 'https://vidmoly.org',       view: '/w/{c}', embed: '/embed-{c}.html' },                                   // ✅
-    abyss:       { name: 'Abyss',        type: 'stream',   host: 'https://player.abyssplayer.com',       view: '/{c}',   embedHost: 'https://abysscdn.com', embed: '/?v={c}' },      // ✅
+    vidmoly:     { name: 'Vidmoly',      type: 'stream',   host: 'https://vidmoly.me',       view: '/w/{c}', embed: '/embed-{c}.html' },                                   // ✅
+    abyss:       { name: 'Abyss',        type: 'stream',   host: 'https://hydrax.net',       view: '/{c}',   embedHost: 'https://abysscdn.com', embed: '/?v={c}' },      // ✅
     voe:         { name: 'VOE',          type: 'stream',   host: 'https://voe.sx',           view: '/{c}',   embed: '/e/{c}' },                                            // ✅
     mixdrop:     { name: 'MixDrop',      type: 'stream',   host: 'https://mixdrop.ag',       view: '/f/{c}', embed: '/e/{c}' },                                            // ✅
     streamhg:    { name: 'StreamHG',     type: 'stream',   host: 'https://streamhg.com',     view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
@@ -212,6 +215,24 @@ export async function POST(request) {
                 }
             }
 
+            // PDLink-এর ৫টা সার্ভার একই share id দেয় (আলাদা আলাদা হোস্টের id নয়)।
+            // তাই pixeldrain.com/u/<share id> এর মতো লিংক ভুল। সবগুলোকে একটা PDLink লিংকে একত্র করি।
+            const pdMirrors = mirrors.filter((m) => PDLINK_SERVERS.includes(m.id) && !/^https?:\/\//i.test(m.code));
+            if (pdMirrors.length > 0) {
+                const code = pdMirrors[0].code;
+                for (const m of pdMirrors) {
+                    mirrors.splice(mirrors.indexOf(m), 1);
+                }
+                mirrors.push({
+                    id: 'pdlink',
+                    name: 'PDLink (' + pdMirrors.map((m) => m.name).join(' / ') + ')',
+                    type: 'download',
+                    code,
+                    url: `${PDLINK_SHARE_BASE}${code}`,
+                    embed: null,
+                });
+            }
+
             // সেরা ডাউনলোড লিংক: আগে download-type, না থাকলে যেকোনো একটা
             const bestDownload = mirrors.find((m) => m.type === 'download') || mirrors[0] || null;
             const best = bestDownload?.url || null;
@@ -244,14 +265,23 @@ export async function POST(request) {
                 user_id: userId,
                 mirrors,
             };
-            let { error: dbErr } = await supabase.from('files').upsert([row], { onConflict: 'id' });
-            if (dbErr && /mirrors/i.test(dbErr.message || '')) {
-                // `mirrors` কলাম এখনো যোগ করা হয়নি => বাকি তথ্য অন্তত সেভ করি
-                const { mirrors: _omit, ...rowNoMirrors } = row;
-                const retry = await supabase.from('files').upsert([rowNoMirrors], { onConflict: 'id' });
-                dbErr = retry.error
-                    ? retry.error
-                    : { message: "files টেবিলে 'mirrors' কলাম নেই। SQL চালিয়ে কলামটা যোগ করুন, নইলে embed/download কাজ করবে না।" };
+            // কোনো কলাম টেবিলে না থাকলে সেটা বাদ দিয়ে আবার চেষ্টা (বাকি তথ্য অন্তত সেভ হোক)
+            const missingCols = [];
+            let dbErr = null;
+            for (let attempt = 0; attempt < 8; attempt++) {
+                const res = await supabase.from('files').upsert([row], { onConflict: 'id' });
+                dbErr = res.error;
+                if (!dbErr) break;
+                const m = (dbErr.message || '').match(/'([A-Za-z0-9_]+)' column/);
+                if (m && m[1] in row && m[1] !== 'id') {
+                    missingCols.push(m[1]);
+                    delete row[m[1]];
+                    continue;
+                }
+                break;
+            }
+            if (missingCols.length > 0 && !dbErr) {
+                dbErr = { message: `files টেবিলে এই কলামগুলো নেই: ${missingCols.join(', ')}। SQL চালিয়ে যোগ করুন (embed/download এর জন্য 'mirrors' জরুরি)।` };
             }
             if (dbErr) {
                 console.error('Supabase save error:', dbErr.message);
