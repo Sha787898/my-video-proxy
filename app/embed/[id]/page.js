@@ -14,7 +14,18 @@ async function EmbedContent({ params }) {
     const { data: file, error } = await supabase.rpc('public_file', { p_id: id });
 
     if (error || !file) {
-        notFound();
+        // ডিবাগ: 404 এর বদলে আসল কারণ দেখাই (ঠিক হয়ে গেলে notFound() ব্যবহার করতে পারেন)
+        return (
+            <div style={{ background: '#05070d', color: '#f8fafc', minHeight: '100vh', padding: 24, fontFamily: 'monospace', fontSize: 13 }}>
+                <p style={{ color: '#f87171', fontWeight: 700 }}>Player unavailable</p>
+                <p style={{ marginTop: 8 }}>File ID: {id}</p>
+                <p style={{ marginTop: 8, color: '#fbbf24' }}>
+                    {error
+                        ? `Database error: ${error.message}`
+                        : 'এই ID-র কোনো ফাইল ডাটাবেজে পাওয়া যায়নি।'}
+                </p>
+            </div>
+        );
     }
 
     // শুধু যেসব সার্ভারে প্লেয়ার (embed) আছে
