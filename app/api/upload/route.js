@@ -213,6 +213,14 @@ export async function POST(request) {
                 });
             }
 
+            if (info.pending || info.status === 'Processing') {
+                failed.push({
+                    id: 'pending',
+                    name: 'কিছু সার্ভার',
+                    reason: 'এখনো চলছে (বড় ফাইল) — ১-২ মিনিট পরে একই Drive লিংক আবার দিন, বাকি লিংক যোগ হবে',
+                });
+            }
+
             // দেখানোর জন্য বর্তমান ডোমেইন দিয়ে লিংক বানাই (ডাটাবেজে শুধু code যায়)
             const domains = domainsFromSettings(rows);
             const resolved = resolveMirrors(mirrors, domains);
