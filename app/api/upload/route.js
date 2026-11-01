@@ -48,7 +48,7 @@ const DEFAULT_ACTIVE = {
 // ✅ = নিশ্চিত, ⚠️ = আন্দাজ (প্রতিটা সার্ভারের ড্যাশবোর্ডে নিজের embed লিংক দেখে মিলিয়ে নিন)
 const SERVERS = {
     vidmoly:     { name: 'Vidmoly',      type: 'stream',   host: 'https://vidmoly.me',       view: '/w/{c}', embed: '/embed-{c}.html' },                                   // ✅
-    abyss:       { name: 'Abyss',        type: 'stream',   host: 'https://hydrax.net',       view: '/{c}',   embedHost: 'https://abysscdn.com', embed: '/?v={c}' },      // ✅
+    abyss:       { name: 'Abyss',        type: 'stream',   host: 'https://player.abyssplayer.com',       view: '/{c}',   embedHost: 'https://abysscdn.com', embed: '/?v={c}' },      // ✅
     voe:         { name: 'VOE',          type: 'stream',   host: 'https://voe.sx',           view: '/{c}',   embed: '/e/{c}' },                                            // ✅
     mixdrop:     { name: 'MixDrop',      type: 'stream',   host: 'https://mixdrop.ag',       view: '/f/{c}', embed: '/e/{c}' },                                            // ✅
     streamhg:    { name: 'StreamHG',     type: 'stream',   host: 'https://streamhg.com',     view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
