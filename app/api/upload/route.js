@@ -12,9 +12,8 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 //   SITE_SECRET  = (একটা লম্বা random লেখা; Worker-এও একই SITE_SECRET দিন)
 const WORKER_URL = process.env.WORKER_URL || 'https://multiserver-worker.shabidalhasan.workers.dev';
 const SITE_SECRET = process.env.SITE_SECRET;
-// PDLink-এর শেয়ার লিংকের শুরু (⚠️ আন্দাজ). PDLink ড্যাশবোর্ডে একটা শেয়ার লিংক দেখে ঠিক করুন,
-// তারপর Vercel-এ PDLINK_SHARE_BASE সেট করুন, যেমন: https://pdlink.site/
-const PDLINK_SHARE_BASE = process.env.PDLINK_SHARE_BASE || 'https://pdlink.site/';
+// PDLink-এর শেয়ার লিংক: https://pdlk.site/g/<share_id>  (PDLink API-র আসল রেসপন্স থেকে)
+const PDLINK_SHARE_BASE = process.env.PDLINK_SHARE_BASE || 'https://pdlk.site/g/';
 
 // manage-sites এর server id  ->  Worker-এর key এর নাম
 const KEY_MAP = {
@@ -217,7 +216,7 @@ export async function POST(request) {
 
             // PDLink-এর ৫টা সার্ভার একই share id দেয় (আলাদা আলাদা হোস্টের id নয়)।
             // তাই pixeldrain.com/u/<share id> এর মতো লিংক ভুল। সবগুলোকে একটা PDLink লিংকে একত্র করি।
-            const pdMirrors = mirrors.filter((m) => PDLINK_SERVERS.includes(m.id) && !/^https?:\/\//i.test(m.code));
+            const pdMirrors = mirrors.filter((m) => PDLINK_SERVERS.includes(m.id));
             if (pdMirrors.length > 0) {
                 const code = pdMirrors[0].code;
                 for (const m of pdMirrors) {
@@ -228,7 +227,7 @@ export async function POST(request) {
                     name: 'PDLink (' + pdMirrors.map((m) => m.name).join(' / ') + ')',
                     type: 'download',
                     code,
-                    url: `${PDLINK_SHARE_BASE}${code}`,
+                    url: /^https?:\/\//i.test(code) ? code : `${PDLINK_SHARE_BASE}${code}`,
                     embed: null,
                 });
             }
@@ -253,6 +252,7 @@ export async function POST(request) {
             };
 
             // ---------- Supabase-এ সেভ (সবসময়: ফাইল ম্যানেজার/embed/download এখান থেকেই পড়ে) ----------
+            const siteOrigin = new URL(request.url).origin;
             const row = {
                 id: fileResult.id,
                 name: fileResult.name,
@@ -261,6 +261,9 @@ export async function POST(request) {
                 date: new Date().toISOString().split('T')[0],
                 status: fileResult.status,
                 download_link: best,
+                // পুরনো টেবিলে `url` NOT NULL কলাম আছে, তাই সবসময় একটা মান দিই
+                url: best || `${siteOrigin}/file/${fileResult.id}`,
+                embed_url: `${siteOrigin}/embed/${fileResult.id}`,
                 original_url: link,
                 user_id: userId,
                 mirrors,
