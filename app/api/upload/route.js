@@ -188,7 +188,11 @@ export async function POST(request) {
                         ? raw
                         : (stat && String(stat).startsWith('Failed')
                             ? String(stat)
-                            : (KEY_MAP[id] && !keys[KEY_MAP[id]] ? 'API key missing' : 'No result'));
+                            : (KEY_MAP[id] && !keys[KEY_MAP[id]]
+                                ? 'API key missing'
+                                : (SERVERS[id]?.type === 'stream' || SERVERS[id]?.type === 'task'
+                                    ? 'No result (Worker-এ PROXY_WORKERS সেট আছে কি?)'
+                                    : 'No result')));
                     failed.push({ id, name: SERVERS[id]?.name || id, reason });
                 }
             }
