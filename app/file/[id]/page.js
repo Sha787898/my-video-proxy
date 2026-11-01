@@ -19,11 +19,7 @@ function FileDownloadContent({ params }) {
     useEffect(() => {
         async function fetchFileRecord() {
             if (id && id !== 'default') {
-                const { data, error } = await supabase
-                    .from('files')
-                    .select('*')
-                    .eq('id', id)
-                    .single();
+                const { data, error } = await supabase.rpc('public_file', { p_id: id });
 
                 if (!error && data) {
                     setFileData(data);
@@ -46,7 +42,11 @@ function FileDownloadContent({ params }) {
     const fileName = fileData?.name || 'MultiServer_Video_Media_Node_File.mkv';
     const fileSize = fileData?.size || '1.45 GB';
     const fileQuality = fileData?.quality || '1080p FHD';
-    const directDownloadUrl = fileData?.original_url || '#';
+    const mirrors = fileData?.mirrors || [];
+    // ডাউনলোড বাটন: আগে download-type মিরর, না থাকলে যেকোনো মিরর
+    const mainDownload = mirrors.find((m) => m.type === 'download') || mirrors[0];
+    const directDownloadUrl = mainDownload?.url || '#';
+    const hasPlayer = mirrors.some((m) => m.embed);
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4 relative overflow-hidden font-mono">
@@ -66,13 +66,39 @@ function FileDownloadContent({ params }) {
                     </div>
                 </div>
 
-                <div className="aspect-video w-full bg-slate-900 rounded-xl overflow-hidden border border-slate-700 relative shadow-inner">
-                    <iframe 
-                        src={`/embed/${id}`} 
-                        className="w-full h-full border-0" 
-                        allowFullScreen
-                    ></iframe>
-                </div>
+                {hasPlayer && (
+                    <div className="aspect-video w-full bg-slate-900 rounded-xl overflow-hidden border border-slate-700 relative shadow-inner">
+                        <iframe 
+                            src={`/embed/${id}`} 
+                            className="w-full h-full border-0" 
+                            allowFullScreen
+                        ></iframe>
+                    </div>
+                )}
+
+                {!fileData && (
+                    <p className="text-xs text-rose-400">File not found.</p>
+                )}
+
+                {mirrors.length > 0 && (
+                    <div className="space-y-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">All Download Mirrors</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {mirrors.map((m) => (
+                                <a
+                                    key={m.id}
+                                    href={m.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-blue-500 text-xs text-slate-200 font-bold flex items-center justify-between transition"
+                                >
+                                    <span>{m.name}</span>
+                                    <span className="text-[10px] text-blue-400">{m.type === 'stream' ? '▶ Watch' : '📥 Download'}</span>
+                                </a>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <div className="flex flex-col sm:flex-row gap-3 pt-2">
                     <a 
@@ -81,7 +107,7 @@ function FileDownloadContent({ params }) {
                         rel="noopener noreferrer"
                         className="flex-1 bg-blue-600 hover:bg-blue-500 text-white h-11 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition shadow-lg cursor-pointer"
                     >
-                        📥 Download File (Direct)
+                        📥 Download File
                     </a>
                     <Link 
                         href="/remote-upload" 

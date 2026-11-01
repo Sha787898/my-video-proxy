@@ -51,6 +51,12 @@ export default function FileManagerPage() {
         alert('Link copied to clipboard! 📋');
     };
 
+    // নিজের সাইটের ডাউনলোড পেজ ও embed পেজ
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const pageLink = (file) => `${origin}/file/${file.id}`;
+    const embedLink = (file) => `${origin}/embed/${file.id}`;
+    const iframeCode = (file) => `<iframe src="${embedLink(file)}" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
+
     // ১. ফাইল রিনেম করার ফাংশন
     const handleRename = async (fileId) => {
         if (!newFileName.trim()) return;
@@ -169,7 +175,7 @@ export default function FileManagerPage() {
                                                         </button>
                                                     </div>
                                                 )}
-                                                <p className="text-[10px] text-slate-400 mt-0.5">Size: {file.size} | Date: {file.date}</p>
+                                                <p className="text-[10px] text-slate-400 mt-0.5">Size: {file.size} | Date: {file.date} | ID: {file.id}</p>
                                             </div>
                                         </div>
 
@@ -208,11 +214,11 @@ export default function FileManagerPage() {
                                                 <input 
                                                     type="text" 
                                                     readOnly 
-                                                    value={file.url} 
+                                                    value={pageLink(file)} 
                                                     className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono"
                                                 />
                                                 <button 
-                                                    onClick={() => copyToClipboard(file.url)}
+                                                    onClick={() => copyToClipboard(pageLink(file))}
                                                     className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition cursor-pointer"
                                                 >
                                                     Copy
@@ -226,11 +232,11 @@ export default function FileManagerPage() {
                                                 <input 
                                                     type="text" 
                                                     readOnly 
-                                                    value={file.embed_url || `${file.url}/embed`} 
+                                                    value={embedLink(file)} 
                                                     className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono"
                                                 />
                                                 <button 
-                                                    onClick={() => copyToClipboard(file.embed_url || `${file.url}/embed`)}
+                                                    onClick={() => copyToClipboard(iframeCode(file))}
                                                     className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition cursor-pointer"
                                                 >
                                                     Copy
@@ -238,6 +244,27 @@ export default function FileManagerPage() {
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* সব সার্ভারের মিরর লিংক */}
+                                    {Array.isArray(file.mirrors) && file.mirrors.length > 0 ? (
+                                        <div className="space-y-2 pt-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Server Links ({file.mirrors.length})</label>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                {file.mirrors.map((m) => (
+                                                    <div key={m.id} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2">
+                                                        <span className="text-[10px] font-bold text-white w-24 shrink-0 truncate">{m.name}</span>
+                                                        <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 truncate flex-1 hover:underline">{m.url}</a>
+                                                        <button onClick={() => copyToClipboard(m.url)} className="text-[10px] text-slate-300 hover:text-white cursor-pointer">Copy</button>
+                                                        {m.embed && (
+                                                            <button onClick={() => copyToClipboard(m.embed)} className="text-[10px] text-indigo-400 hover:text-indigo-300 cursor-pointer" title="Copy embed link">Embed</button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-[10px] text-amber-400">কোনো সার্ভার লিংক সেভ হয়নি (Processing বা mirrors কলাম নেই)।</p>
+                                    )}
                                 </div>
                             ))
                         )}

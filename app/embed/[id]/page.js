@@ -10,21 +10,17 @@ async function EmbedContent({ params }) {
     const resolvedParams = await params;
     const { id } = resolvedParams;
 
-    // Database theke file data fetch kora
-    const { data: file, error } = await supabase
-        .from('files')
-        .select('*')
-        .eq('id', id)
-        .single();
+    // পাবলিক ভিউয়ারও দেখতে পাবে: files টেবিল সরাসরি নয়, public_file() ফাংশন দিয়ে (শুধু নিরাপদ কলাম)
+    const { data: file, error } = await supabase.rpc('public_file', { p_id: id });
 
     if (error || !file) {
         notFound();
     }
 
-    const currentServers = [
-        { key: 'abyss', name: 'Abyss (Default)', url: file.original_url || 'https://abyssplayer.com/', icon: 'fa-play' },
-        { key: 'vidmoly', name: 'Vidmoly', url: file.original_url?.includes('vidmoly') ? file.original_url : 'https://vidmoly.me/', icon: 'fa-play' }
-    ];
+    // শুধু যেসব সার্ভারে প্লেয়ার (embed) আছে
+    const currentServers = (file.mirrors || [])
+        .filter((m) => m.embed)
+        .map((m) => ({ key: m.id, name: m.name, url: m.embed, icon: 'fa-play' }));
 
     return (
         <html lang="en">
@@ -81,7 +77,7 @@ async function EmbedContent({ params }) {
 
             <div id="uiOverlay">
                 <button className="menu-trigger" id="menuBtn">
-                    <i className="fas fa-server" id="menuIcon"></i> <span id="activeServerName">Abyss</span>
+                    <i className="fas fa-server" id="menuIcon"></i> <span id="activeServerName">Server</span>
                 </button>
                 <div className="server-overlay" id="serverMenu">
                     <div className="server-overlay-header"><span>Select streaming server</span></div>
@@ -102,13 +98,17 @@ async function EmbedContent({ params }) {
                 const statusText = document.getElementById('statusText');
 
                 function initPlayer() {
-                    if (!currentServers || currentServers.length === 0) return;
+                    if (!currentServers || currentServers.length === 0) {
+                        centerSpinner.classList.add('hidden');
+                        document.getElementById('errorBox').style.display = 'flex';
+                        return;
+                    }
                     
                     serverButtonsContainer.innerHTML = "";
                     currentServers.forEach((srv, index) => {
                         const btn = document.createElement('button');
                         btn.className = \`server-item \${index === 0 ? 'active' : ''}\`;
-                        btn.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;"><i class="fas \{srv.icon}"></i> \${srv.name}</div>\`;
+                        btn.innerHTML = \`<div style="display:flex;align-items:center;gap:8px;"><i class="fas \${srv.icon}"></i> \${srv.name}</div>\`;
                         btn.onclick = () => {
                             serverMenu.classList.remove('open');
                             iframe.src = srv.url;

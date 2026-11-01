@@ -40,41 +40,51 @@ const DEFAULT_ACTIVE = {
     mixdrop: false, buzzheavier: false, mega: false,
 };
 
-// সফল result code থেকে দেখার লিংক বানানো
-const LINK_BUILDERS = {
-    pixeldrain: (c) => `https://pixeldrain.com/u/${c}`,
-    gofile: (c) => `https://gofile.io/d/${c}`,
-    abyss: (c) => `https://hydrax.net/${c}`,
-    vidmoly: (c) => `https://vidmoly.me/w/${c}`,
-    mixdrop: (c) => `https://mixdrop.ag/f/${c}`,
-    voe: (c) => `https://voe.sx/${c}`,
-    vikingfile: (c) => `https://vikingfile.com/f/${c}`,
-    buzzheavier: (c) => `https://buzzheavier.com/${c}`,
-    sendnow: (c) => `https://send.now/${c}`,
-    streamhg: (c) => `https://streamhg.com/${c}`,
-    earnvids: (c) => `https://earnvids.com/${c}`,
-    turboviplay: (c) => `https://turboviplay.com/${c}`,
-    dropload: (c) => `https://dropload.io/${c}`,
-    ruby: (c) => `https://streamruby.com/${c}`,
-    byse: (c) => `https://byse.sx/${c}`,
-    mega: (c) => c,
-    gcloud: (c) => c,
+// প্রতিটি সার্ভারের লিংকের গঠন. {c} = Worker থেকে পাওয়া code/id
+//   type 'stream'   => প্লেয়ার/embed হয় (embed লিংক বানানো হয়)
+//   type 'download' => শুধু ডাউনলোড/স্টোরেজ লিংক
+// ✅ = নিশ্চিত, ⚠️ = আন্দাজ (প্রতিটা সার্ভারের ড্যাশবোর্ডে নিজের embed লিংক দেখে মিলিয়ে নিন)
+const SERVERS = {
+    vidmoly:     { name: 'Vidmoly',      type: 'stream',   host: 'https://vidmoly.me',       view: '/w/{c}', embed: '/embed-{c}.html' },                                   // ✅
+    abyss:       { name: 'Abyss',        type: 'stream',   host: 'https://hydrax.net',       view: '/{c}',   embedHost: 'https://abysscdn.com', embed: '/?v={c}' },      // ✅
+    voe:         { name: 'VOE',          type: 'stream',   host: 'https://voe.sx',           view: '/{c}',   embed: '/e/{c}' },                                            // ✅
+    mixdrop:     { name: 'MixDrop',      type: 'stream',   host: 'https://mixdrop.ag',       view: '/f/{c}', embed: '/e/{c}' },                                            // ✅
+    streamhg:    { name: 'StreamHG',     type: 'stream',   host: 'https://streamhg.com',     view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
+    earnvids:    { name: 'EarnVids',     type: 'stream',   host: 'https://earnvids.com',     view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
+    dropload:    { name: 'DropLoad',     type: 'stream',   host: 'https://dropload.io',      view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
+    ruby:        { name: 'Ruby',         type: 'stream',   host: 'https://streamruby.com',   view: '/{c}',   embed: '/embed-{c}.html' },                                   // ⚠️
+    byse:        { name: 'Byse',         type: 'stream',   host: 'https://byse.sx',          view: '/{c}',   embed: '/e/{c}' },                                            // ⚠️
+    turboviplay: { name: 'TurboViPlay',  type: 'stream',   host: 'https://turboviplay.com',  view: '/{c}',   embed: '/embed/{c}' },                                        // ⚠️
+    pixeldrain:  { name: 'Pixeldrain',   type: 'download', host: 'https://pixeldrain.com',   view: '/u/{c}' },                                                             // ✅
+    gofile:      { name: 'GoFile',       type: 'download', host: 'https://gofile.io',        view: '/d/{c}' },                                                             // ✅
+    vikingfile:  { name: 'VikingFile',   type: 'download', host: 'https://vikingfile.com',   view: '/f/{c}' },                                                             // ⚠️
+    buzzheavier: { name: 'BuzzHeavier',  type: 'download', host: 'https://buzzheavier.com',  view: '/{c}' },                                                               // ⚠️
+    sendnow:     { name: 'Send.now',     type: 'download', host: 'https://send.now',         view: '/{c}' },                                                               // ⚠️
+    mega:        { name: 'MEGA',         type: 'download', host: '',                         view: '{c}' },
+    gcloud:      { name: 'Google Cloud', type: 'download', host: '',                         view: '{c}' },
 };
 
-const SERVER_LABELS = {
-    vidmoly: 'Vidmoly', abyss: 'Abyss', gcloud: 'Google Cloud', pixeldrain: 'Pixeldrain',
-    vikingfile: 'VikingFile', gofile: 'GoFile', voe: 'VOE', sendnow: 'Send.now',
-    streamhg: 'StreamHG', earnvids: 'EarnVids', turboviplay: 'TurboViPlay', dropload: 'DropLoad',
-    ruby: 'Ruby', byse: 'Byse', mixdrop: 'MixDrop', buzzheavier: 'BuzzHeavier', mega: 'MEGA',
-};
+// Worker-এর result (code বা পুরো URL) থেকে mirror অবজেক্ট বানায়; ব্যর্থ হলে null
+function buildMirror(serverId, rawCode, customDomain) {
+    const cfg = SERVERS[serverId];
+    if (!cfg) return null;
+    if (rawCode === null || rawCode === undefined) return null;
+    const code = String(rawCode).trim();
+    if (!code || code.startsWith('Failed')) return null;
 
-function buildLink(serverId, code, customDomain) {
-    if (!code || typeof code !== 'string') return null;
-    if (code.startsWith('Failed')) return null;
-    if (/^https?:\/\//i.test(code)) return code; // Worker/PDLink পুরো লিংক দিলে সেটাই
-    if (customDomain) return `${customDomain.replace(/\/$/, '')}/${code}`;
-    const b = LINK_BUILDERS[serverId];
-    return b ? b(code) : code;
+    const fill = (tpl) => tpl.replace('{c}', code);
+    const isUrl = /^https?:\/\//i.test(code);
+    const host = (customDomain || cfg.host || '').replace(/\/$/, '');
+    const embedHost = (customDomain || cfg.embedHost || cfg.host || '').replace(/\/$/, '');
+
+    return {
+        id: serverId,
+        name: cfg.name,
+        type: cfg.type,
+        code,
+        url: isUrl ? code : `${host}${fill(cfg.view)}`,
+        embed: cfg.type === 'stream' && cfg.embed && !isUrl ? `${embedHost}${fill(cfg.embed)}` : null,
+    };
 }
 
 function formatSize(sizeVal) {
@@ -190,26 +200,28 @@ export async function POST(request) {
             const mirrors = [];
             const failed = [];
             for (const id of activeServers) {
-                const code = results[id];
-                const customDomain = get(`${id}_domain`);
-                const linkUrl = buildLink(id, code, customDomain);
-                if (linkUrl) {
-                    mirrors.push({ id, name: SERVER_LABELS[id] || id, code, url: linkUrl });
+                const m = buildMirror(id, results[id], get(`${id}_domain`));
+                if (m) {
+                    mirrors.push(m);
                 } else {
-                    const reason = typeof code === 'string' && code.startsWith('Failed')
-                        ? code
+                    const raw = results[id];
+                    const reason = typeof raw === 'string' && raw.startsWith('Failed')
+                        ? raw
                         : (KEY_MAP[id] && !keys[KEY_MAP[id]] ? 'API key missing' : 'No result');
-                    failed.push({ id, name: SERVER_LABELS[id] || id, reason });
+                    failed.push({ id, name: SERVERS[id]?.name || id, reason });
                 }
             }
 
-            const best = mirrors[0]?.url || null;
+            // সেরা ডাউনলোড লিংক: আগে download-type, না থাকলে যেকোনো একটা
+            const bestDownload = mirrors.find((m) => m.type === 'download') || mirrors[0] || null;
+            const best = bestDownload?.url || null;
+
             const fileResult = {
                 ok: true,
                 id: info.id || Math.random().toString(36).substring(2, 10),
                 name: info.title || 'GDrive_Video.mp4',
                 size: formatSize(info.size),
-                status: best ? 'Active' : 'error',
+                status: mirrors.length > 0 ? 'Active' : 'Processing',
                 download_link: best || 'Processing Mirror Links...',
                 url: best || 'Processing Mirror Links...',
                 original_url: link,
@@ -219,20 +231,31 @@ export async function POST(request) {
                 results,
             };
 
-            // Supabase-এ হিস্টরি সেভ (শুধু সফল হলে, আর আগে থেকে না থাকলে)
-            if (best && !resData.exists) {
-                const { error: dbErr } = await supabase.from('files').insert([{
-                    id: fileResult.id,
-                    name: fileResult.name,
-                    size: fileResult.size,
-                    quality: '1080p WEB-DL',
-                    date: new Date().toISOString().split('T')[0],
-                    status: fileResult.status,
-                    download_link: best,
-                    original_url: link,
-                    user_id: userId,
-                }]);
-                if (dbErr) console.error('Supabase insert warning:', dbErr.message);
+            // ---------- Supabase-এ সেভ (সবসময়: ফাইল ম্যানেজার/embed/download এখান থেকেই পড়ে) ----------
+            const row = {
+                id: fileResult.id,
+                name: fileResult.name,
+                size: fileResult.size,
+                quality: '1080p WEB-DL',
+                date: new Date().toISOString().split('T')[0],
+                status: fileResult.status,
+                download_link: best,
+                original_url: link,
+                user_id: userId,
+                mirrors,
+            };
+            let { error: dbErr } = await supabase.from('files').upsert([row], { onConflict: 'id' });
+            if (dbErr && /mirrors/i.test(dbErr.message || '')) {
+                // `mirrors` কলাম এখনো যোগ করা হয়নি => বাকি তথ্য অন্তত সেভ করি
+                const { mirrors: _omit, ...rowNoMirrors } = row;
+                const retry = await supabase.from('files').upsert([rowNoMirrors], { onConflict: 'id' });
+                dbErr = retry.error
+                    ? retry.error
+                    : { message: "files টেবিলে 'mirrors' কলাম নেই। SQL চালিয়ে কলামটা যোগ করুন, নইলে embed/download কাজ করবে না।" };
+            }
+            if (dbErr) {
+                console.error('Supabase save error:', dbErr.message);
+                fileResult.db_error = dbErr.message;
             }
 
             return fileResult;

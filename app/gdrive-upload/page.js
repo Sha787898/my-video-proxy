@@ -85,7 +85,7 @@ export default function GDriveUploadPage() {
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Failed to process links');
 
-            setSuccessMsg(`Completed! Successfully processed and queued ${data.count} file(s). 🎉`);
+            setSuccessMsg(`Completed! Successfully processed and queued ${data.count} file(s). 🎉` + (data.errors?.length ? ` (${data.errors.length} failed: ${data.errors[0].error})` : '') + (data.missingKeys?.length ? ` ⚠️ API key নেই: ${data.missingKeys.join(', ')}` : ''));
             setUploadedFiles(data.files || []);
             setLinksInput('');
         } catch (err) {
@@ -210,16 +210,47 @@ export default function GDriveUploadPage() {
                                                     <p className="text-[10px] text-slate-400 mt-0.5">Status: {file.status} | Size: {file.size}</p>
                                                 </div>
                                             </div>
-                                            <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20">Processing</span>
+                                            <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20">{file.status}</span>
+                                        </div>
+
+                                        {file.db_error && (
+                                            <p className="text-[11px] text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2">⚠️ Database: {file.db_error}</p>
+                                        )}
+
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Download Page</label>
+                                            <div className="flex items-center gap-2">
+                                                <input type="text" readOnly value={`${window.location.origin}/file/${file.id}`} className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono" />
+                                                <button onClick={() => copyToClipboard(`${window.location.origin}/file/${file.id}`)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition">Copy</button>
+                                            </div>
                                         </div>
 
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Download Link</label>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Embed Player</label>
                                             <div className="flex items-center gap-2">
-                                                <input type="text" readOnly value={file.url} className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono" />
-                                                <button onClick={() => copyToClipboard(file.url)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition">Copy</button>
+                                                <input type="text" readOnly value={`${window.location.origin}/embed/${file.id}`} className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono" />
+                                                <button onClick={() => copyToClipboard(`${window.location.origin}/embed/${file.id}`)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition">Copy</button>
                                             </div>
                                         </div>
+
+                                        {file.mirrors && file.mirrors.length > 0 && (
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase">Server Links ({file.mirrors.length})</label>
+                                                {file.mirrors.map((m) => (
+                                                    <div key={m.id} className="flex items-center gap-2 text-[11px]">
+                                                        <span className="w-24 shrink-0 font-bold text-white truncate">{m.name}</span>
+                                                        <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 truncate flex-1 hover:underline">{m.url}</a>
+                                                        <button onClick={() => copyToClipboard(m.url)} className="text-slate-300 hover:text-white">Copy</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {file.failed && file.failed.length > 0 && (
+                                            <p className="text-[10px] text-amber-400">
+                                                ব্যর্থ/বাদ: {file.failed.map((f) => `${f.name} (${f.reason})`).join(', ')}
+                                            </p>
+                                        )}
                                     </div>
                                 ))}
                             </div>
