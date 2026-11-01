@@ -213,6 +213,23 @@ export async function POST(request) {
                 });
             }
 
+            // আগে সফল হওয়া কিন্তু এবার Worker-এ না আসা লিংক (যেমন Vidara) মুছে না ফেলে রেখে দিই
+            try {
+                const fileId = info.id;
+                if (fileId) {
+                    const { data: prev } = await supabase.from('files').select('mirrors').eq('id', fileId).maybeSingle();
+                    if (prev && Array.isArray(prev.mirrors)) {
+                        for (const pm of prev.mirrors) {
+                            if (pm && pm.id && pm.code && !mirrors.some((m) => m.id === pm.id)) {
+                                mirrors.push({ id: pm.id, name: pm.name, type: pm.type, code: pm.code });
+                                const fi = failed.findIndex((f) => f.id === pm.id);
+                                if (fi >= 0) failed.splice(fi, 1);
+                            }
+                        }
+                    }
+                }
+            } catch (e) { /* ignore */ }
+
             if (info.pending || info.status === 'Processing') {
                 failed.push({
                     id: 'pending',
