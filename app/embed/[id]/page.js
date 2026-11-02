@@ -41,7 +41,7 @@ async function EmbedContent({ params }) {
         return <Message title="No player server" lines={[`File: ${file.name}`, 'এই ফাইলের কোনো স্ট্রিমিং সার্ভারের লিংক নেই (mirrors খালি বা সবগুলো ডাউনলোড-টাইপ)।']} />;
     }
 
-    return <EmbedPlayer servers={servers} title={file.name} downloadHref={`/file/${file.id}`} />;
+    return <EmbedPlayer servers={servers} title={file.name} downloadHref={`/file/${file.id}`} fileId={file.id} />;
 }
 
 export default function EmbedPage({ params }) {
