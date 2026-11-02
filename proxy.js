@@ -18,13 +18,15 @@ export function proxy(request) {
     const host = (request.headers.get('host') || '').toLowerCase();
     const { pathname, search } = request.nextUrl;
     const isEmbedPath = pathname === '/embed' || pathname.startsWith('/embed/');
+    const isApiPath = pathname === '/api/embed-src'; // the player asks this for the real server URL
     const isFilePath = pathname.startsWith('/file/'); // public download page, safe to show on the player host too
 
     if (host === embedHost) {
-        if (!isEmbedPath && !isFilePath) return new NextResponse('Not found', { status: 404 });
+        if (!isEmbedPath && !isFilePath && !isApiPath) return new NextResponse('Not found', { status: 404 });
         const res = NextResponse.next();
         res.headers.set('X-Content-Type-Options', 'nosniff');
         res.headers.set('Referrer-Policy', 'origin');
+        res.headers.set('X-Robots-Tag', 'noindex, nofollow');
         return res;
     }
 

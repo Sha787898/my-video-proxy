@@ -35,7 +35,7 @@ async function EmbedContent({ params }) {
     // ডোমেইন বদলালে এখানেই নতুন ডোমেইন দিয়ে লিংক বানানো হয়; শুধু যেসব সার্ভারে প্লেয়ার (embed) আছে
     const servers = resolveMirrors(file.mirrors, file.domains)
         .filter((m) => m.embed)
-        .map((m) => ({ key: m.id, name: m.name, url: m.embed }));
+        .map((m) => ({ key: m.id, name: m.name })); // no host URLs in the page source: the player asks /api/embed-src for the active one
 
     if (servers.length === 0) {
         return <Message title="No player server" lines={[`File: ${file.name}`, 'This file has no streaming-server links (mirrors are empty or download-only).']} />;

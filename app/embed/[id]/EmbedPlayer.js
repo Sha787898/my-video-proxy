@@ -40,6 +40,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     const [reloadKey, setReloadKey] = useState(0);
     const [prefs, setPrefs] = useState(DEFAULT_PREFS);
     const [view, setView] = useState({ fit: 'fit', zoom: 1, rot: 0 });
+    const [urls, setUrls] = useState({});
     const [box, setBox] = useState({ w: 0, h: 0 });
 
     // Watch Party
@@ -65,6 +66,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     const level = prefs.block ? ((prefs.sb || {})[current.key] || 'strict') : 'off';
     const sandboxOn = level !== 'off';
     const guardOn = prefs.guard || level === 'off';
+    const curUrl = urls[current.key] || current.url || '';
 
     const say = useCallback((msg) => {
         setToast(msg);
@@ -129,6 +131,23 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
             if (!/viewport-fit/.test(c)) m.setAttribute('content', `${c}, viewport-fit=cover`);
         } catch (e) { /* ignore */ }
     }, []);
+
+    // ---------- fetch the real host URL of the active server on demand ----------
+    useEffect(() => {
+        const key = current.key;
+        if (current.url || urls[key]) return undefined;
+        let dead = false;
+        fetch('/api/embed-src', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: fileId, key }) })
+            .then((r) => r.json())
+            .then((d) => {
+                if (dead) return;
+                if (d && d.url) setUrls((u) => ({ ...u, [key]: d.url }));
+                else say('Could not load this server');
+            })
+            .catch(() => { if (!dead) say('Network error, try Retry'); });
+        return () => { dead = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [current.key, fileId, reloadKey]);
 
     // ---------- loading hint ----------
     useEffect(() => {
@@ -530,10 +549,10 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
 
             <iframe
                 ref={frameRef}
-                key={`${current.url}-${reloadKey}-${level}`}
+                key={`${curUrl}-${reloadKey}-${level}`}
                 style={frameStyle}
                 className="ep-frame"
-                src={current.url}
+                src={curUrl || 'about:blank'}
                 allow="autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write"
                 allowFullScreen
                 // blocks pop-up / new-tab ads and redirects (no allow-popups, no allow-top-navigation)
@@ -541,7 +560,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 webkitallowfullscreen="true"
                 mozallowfullscreen="true"
                 referrerPolicy="origin"
-                onLoad={() => { setLoaded(true); setSlow(false); }}
+                onLoad={() => { if (curUrl) { setLoaded(true); setSlow(false); } }}
             />
 
             {/* When the UI is hidden the thin top strip wakes it up (the iframe swallows mouse events) */}
