@@ -12,11 +12,12 @@ const sb = createClient(
 
 const LS_SERVER = 'ms_player_server';
 const LS_PREFS = 'ms_player_prefs';
-const DEFAULT_PREFS = { download: true, fullscreen: true, party: true, title: true, block: true, guard: false };
+const DEFAULT_PREFS = { download: true, fullscreen: true, party: true, title: true, block: true, guard: false, view: true, noSandbox: [] };
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
 const Ico = {
+    crop: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14" /></svg>,
     chevron: <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor"><path d="M5 7L1 3h8z" /></svg>,
     play: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><polygon points="6 4 20 12 6 20 6 4" /></svg>,
     link: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1" /><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1" /></svg>,
@@ -38,6 +39,8 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     const [nowShow, setNowShow] = useState(true);
     const [reloadKey, setReloadKey] = useState(0);
     const [prefs, setPrefs] = useState(DEFAULT_PREFS);
+    const [view, setView] = useState({ fit: 'fit', zoom: 1, rot: 0 });
+    const [box, setBox] = useState({ w: 0, h: 0 });
 
     // Watch Party
     const [room, setRoom] = useState(null);
@@ -58,6 +61,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
 
     serversRef.current = servers;
     const current = servers[active] || servers[0];
+    const sandboxOn = prefs.block && !(prefs.noSandbox || []).includes(current.key);
 
     const say = useCallback((msg) => {
         setToast(msg);
@@ -101,13 +105,35 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
         return () => window.removeEventListener('beforeunload', h);
     }, [prefs.guard]);
 
+    // ---------- measure the stage (used for crop / zoom / rotate) ----------
+    useEffect(() => {
+        const el = rootRef.current;
+        if (!el) return undefined;
+        const upd = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+        upd();
+        let ro;
+        if (typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(upd); ro.observe(el); }
+        window.addEventListener('resize', upd);
+        return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', upd); };
+    }, []);
+
+    // let the player extend under the camera cut-out / notch on phones
+    useEffect(() => {
+        try {
+            let m = document.querySelector('meta[name=viewport]');
+            if (!m) { m = document.createElement('meta'); m.name = 'viewport'; document.head.appendChild(m); }
+            const c = m.getAttribute('content') || 'width=device-width, initial-scale=1';
+            if (!/viewport-fit/.test(c)) m.setAttribute('content', `${c}, viewport-fit=cover`);
+        } catch (e) { /* ignore */ }
+    }, []);
+
     // ---------- loading hint ----------
     useEffect(() => {
         setLoaded(false);
         setSlow(false);
         const t = setTimeout(() => setSlow(true), 12000);
         return () => clearTimeout(t);
-    }, [active, reloadKey, prefs.block]);
+    }, [active, reloadKey, sandboxOn]);
 
     // ---------- "Now playing" badge: shows on load / server change / reload, then fades out ----------
     useEffect(() => {
@@ -208,13 +234,22 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
         wake();
     };
 
-    const toggleFullscreen = () => {
+    const toggleFullscreen = async () => {
         const el = rootRef.current;
         if (!el) return;
+        const d = document;
         try {
-            if (!document.fullscreenElement) el.requestFullscreen && el.requestFullscreen();
-            else document.exitFullscreen && document.exitFullscreen();
-        } catch (e) { /* ignore */ }
+            if (!(d.fullscreenElement || d.webkitFullscreenElement)) {
+                const req = el.requestFullscreen || el.webkitRequestFullscreen;
+                if (!req) { say('This browser has no fullscreen for pages. Use the player\'s own button.'); return; }
+                await req.call(el);
+                try { if (window.innerHeight > window.innerWidth) await window.screen.orientation.lock('landscape'); } catch (e) { /* not supported */ }
+            } else {
+                try { window.screen.orientation.unlock(); } catch (e) { /* ignore */ }
+                const ex = d.exitFullscreen || d.webkitExitFullscreen;
+                if (ex) ex.call(d);
+            }
+        } catch (e) { say('Fullscreen was blocked by the browser'); }
     };
 
     const copy = async (text, msg) => {
@@ -255,6 +290,26 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
         if (chRef.current) chRef.current.send({ type: 'broadcast', event: 'countdown', payload: {} });
         runCountdown();
     };
+
+    // crop / zoom / rotate applied to the player frame
+    const swap = view.rot % 180 !== 0;
+    const iw = swap ? box.h : box.w;
+    const ih = swap ? box.w : box.h;
+    let sx = 1;
+    let sy = 1;
+    if (iw > 0 && ih > 0) {
+        const r = iw / ih;
+        const a = 16 / 9;
+        if (view.fit === 'fill') { sx = Math.max(r / a, a / r); sy = sx; }
+        else if (view.fit === 'stretch') { if (r > a) sx = r / a; else sy = a / r; }
+    }
+    sx *= view.zoom;
+    sy *= view.zoom;
+    const transformed = view.fit !== 'fit' || view.zoom !== 1 || view.rot !== 0;
+    const frameStyle = box.w > 0 ? {
+        right: 'auto', bottom: 'auto', left: '50%', top: '50%', width: iw, height: ih,
+        transform: `translate(-50%, -50%) rotate(${view.rot}deg) scale(${sx}, ${sy})`,
+    } : undefined;
 
     const togglePanel = (name) => setPanel((p) => (p === name ? null : name));
 
@@ -373,8 +428,29 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 @keyframes ep-fade { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
                 .ep-toast { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 6px 12px; border-radius: 999px; background: rgba(10,10,13,.95); border: 1px solid var(--line); color: #f3f4f6; font-size: 10.5px; font-weight: 600; pointer-events: none; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
 
+
+                /* compact overrides */
+                .ep-top { padding-top: max(8px, env(safe-area-inset-top)); padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+                .ep-panel { width: min(176px, calc(100vw - 16px)); }
+                .ep-panel.right { width: min(192px, calc(100vw - 16px)); }
+                .ep-list { max-height: min(40vh, 190px); padding: 3px 5px 5px; gap: 1px; }
+                .ep-row { height: 23px; padding: 0 6px 0 9px; gap: 7px; }
+                .ep-row .rn { font-size: 9.5px; letter-spacing: .08em; }
+                .ep-row .ri svg { width: 9px; height: 9px; }
+                .ep-ph { padding: 6px 7px 6px 9px; }
+                .ep-ph .s { max-width: 88px; }
+                .ep-dl { height: 24px; padding: 0 4px 0 8px; margin-bottom: 3px; gap: 4px; }
+                .ep-dl a { flex: 1; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #ff9aa0; }
+                .ep-dl a svg { width: 11px; height: 11px; }
+                .ep-mini { margin-left: 0; padding: 3px 6px; }
+                .ep-seg { display: flex; gap: 3px; }
+                .ep-seg button { flex: 1; height: 24px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,255,255,.04); color: #b6bac6; font-size: 10px; font-weight: 600; cursor: pointer; font-family: inherit; transition: .2s; }
+                .ep-seg button:hover { background: rgba(255,255,255,.09); color: #fff; transform: translateY(-1px); }
+                .ep-seg button.on { border-color: rgba(212,68,76,.6); background: var(--acsoft); color: #ffb3b8; }
+                .ep-rng { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: #a3a8b6; }
+                .ep-rng b { color: #fff; float: right; font-weight: 600; }
+                .ep-rng input { width: 100%; accent-color: #d4444c; }
                 @media (max-width: 480px) {
-                    .ep-top { padding: 6px; }
                     .ep-now .t { font-size: 12px; }
                     .ep-cd .big { font-size: 60px; }
                 }
@@ -382,13 +458,16 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
 
             <iframe
                 ref={frameRef}
-                key={`${current.url}-${reloadKey}-${prefs.block ? 'b' : 'o'}`}
+                key={`${current.url}-${reloadKey}-${sandboxOn ? 'b' : 'o'}`}
+                style={frameStyle}
                 className="ep-frame"
                 src={current.url}
                 allow="autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write"
                 allowFullScreen
                 // blocks pop-up / new-tab ads and redirects (no allow-popups, no allow-top-navigation)
-                sandbox={prefs.block ? 'allow-scripts allow-same-origin allow-forms allow-presentation' : undefined}
+                sandbox={sandboxOn ? 'allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock allow-pointer-lock' : undefined}
+                webkitallowfullscreen="true"
+                mozallowfullscreen="true"
                 referrerPolicy="origin"
                 onLoad={() => { setLoaded(true); setSlow(false); }}
             />
@@ -410,8 +489,8 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     <button type="button" className="ep-pill" onClick={() => choose((active + 1) % servers.length)}>Next server</button>
                                 )}
                                 <button type="button" className="ep-pill" onClick={() => setReloadKey((k) => k + 1)}>Retry</button>
-                                {prefs.block && (
-                                    <button type="button" className="ep-pill" onClick={() => { setPref('block', false); setPref('guard', true); }} title="Some players refuse to run inside a sandbox. Redirect guard turns on instead.">Sandbox off + Redirect guard</button>
+                                {sandboxOn && (
+                                    <button type="button" className="ep-pill" onClick={() => { setPref('noSandbox', [...(prefs.noSandbox || []), current.key]); setPref('guard', true); }} title="Some players refuse to run inside a sandbox. Redirect guard turns on instead.">Sandbox off for this server</button>
                                 )}
                             </div>
                         </div>
@@ -460,17 +539,14 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                             <div className="ep-list">
                                 {prefs.download && downloadHref && (
                                     <div className="ep-dl">
-                                        <span style={{ color: '#fca5a5', display: 'flex' }}>{Ico.link}</span>
-                                        <div>
-                                            <a href={downloadHref} target="_blank" rel="noopener noreferrer">Download</a>
-                                            <small>Click to download</small>
-                                        </div>
+                                        <a href={downloadHref} target="_blank" rel="noopener noreferrer">{Ico.link} Download</a>
                                         <button
                                             type="button"
                                             className="ep-mini"
+                                            title="Copy download link"
                                             onClick={() => copy(`${window.location.origin}${downloadHref}`, 'Download link copied')}
                                         >
-                                            {Ico.copy} Copy
+                                            {Ico.copy}
                                         </button>
                                     </div>
                                 )}
@@ -506,6 +582,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     ['fullscreen', 'Fullscreen button', 'Show on top bar'],
                                     ['party', 'Watch Party', 'Show on top bar'],
                                     ['title', 'Title overlay', 'Now playing badge'],
+                                    ['view', 'Frame controls', 'Fit, zoom & rotate button'],
                                 ].map(([key, label, desc]) => (
                                     <button
                                         key={key}
@@ -515,6 +592,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                             const nextVal = !prefs[key];
                                             setPref(key, nextVal);
                                             if (key === 'party' && !nextVal) leaveRoom(true);
+                                            if (key === 'block' && nextVal) setPref('noSandbox', []);
                                         }}
                                     >
                                         <span className="l"><b>{label}</b><i>{desc}</i></span>
@@ -539,6 +617,9 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                     )}
                     {prefs.fullscreen && (
                         <button type="button" className="ep-ico" title="Fullscreen" onClick={toggleFullscreen}>{Ico.full}</button>
+                    )}
+                    {prefs.view && (
+                        <button type="button" className={`ep-ico ${transformed ? 'live' : ''}`} title="Frame: fit, zoom, rotate" onClick={() => togglePanel('view')}>{Ico.crop}</button>
                     )}
 
                     {panel === 'party' && (
@@ -580,6 +661,33 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                         </div>
                     )}
 
+
+                    {panel === 'view' && (
+                        <div className="ep-panel right">
+                            <div className="ep-ph">
+                                <div className="ic">{Ico.crop}</div>
+                                <div className="t">Frame</div>
+                                <button type="button" className="x" onClick={() => setPanel(null)}>{Ico.x}</button>
+                            </div>
+                            <div className="ep-pbody">
+                                <div className="ep-seg">
+                                    {[['fit', 'Fit'], ['fill', 'Fill'], ['stretch', 'Stretch']].map(([k, l]) => (
+                                        <button key={k} type="button" className={view.fit === k ? 'on' : ''} onClick={() => setView((v) => ({ ...v, fit: k }))}>{l}</button>
+                                    ))}
+                                </div>
+                                <label className="ep-rng">
+                                    <span>Zoom <b>{Math.round(view.zoom * 100)}%</b></span>
+                                    <input type="range" min="1" max="2" step="0.05" value={view.zoom} onChange={(e) => setView((v) => ({ ...v, zoom: Number(e.target.value) }))} />
+                                </label>
+                                <div className="ep-seg">
+                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 270) % 360 }))}>⟲ 90°</button>
+                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 90) % 360 }))}>⟳ 90°</button>
+                                    <button type="button" onClick={() => setView({ fit: 'fit', zoom: 1, rot: 0 })}>Reset</button>
+                                </div>
+                                <div className="ep-note">Fill crops the black bars. Stretch pulls the picture to the screen. Rotate helps when auto-rotate is off. Player controls move with the frame.</div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
