@@ -1,5 +1,6 @@
 'use client';
 
+import { embedBase } from '../../utils/embedOrigin';
 import { use, Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
@@ -70,7 +71,8 @@ function FileDownloadContent({ params }) {
                 {hasPlayer && (
                     <div className="aspect-video w-full bg-slate-900 rounded-xl overflow-hidden border border-slate-700 relative shadow-inner">
                         <iframe 
-                            src={`/embed/${id}`} 
+                            src={`${embedBase('')}/embed/${id}`}
+                            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
                             className="w-full h-full border-0" 
                             allowFullScreen
                         ></iframe>

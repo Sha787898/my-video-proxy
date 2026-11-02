@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { embedBase } from '../../utils/embedOrigin';
 import { createClient } from '@supabase/supabase-js';
 import { SERVERS, PDLINK_SERVERS, buildMirror, resolveMirrors, domainsFromSettings } from '../../utils/mirrors';
 
@@ -273,7 +274,7 @@ export async function POST(request) {
                 download_link: best,
                 // পুরনো টেবিলে `url` NOT NULL কলাম আছে, তাই সবসময় একটা মান দিই
                 url: best || `${siteOrigin}/file/${fileResult.id}`,
-                embed_url: `${siteOrigin}/embed/${fileResult.id}`,
+                embed_url: `${embedBase(siteOrigin)}/embed/${fileResult.id}`,
                 original_url: link,
                 user_id: userId,
                 mirrors, // শুধু {id,name,type,code}

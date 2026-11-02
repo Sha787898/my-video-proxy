@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { embedBase } from '../utils/embedOrigin';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
@@ -228,8 +229,8 @@ export default function GDriveUploadPage() {
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase">Embed Player</label>
                                             <div className="flex items-center gap-2">
-                                                <input type="text" readOnly value={`${window.location.origin}/embed/${file.id}`} className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono" />
-                                                <button onClick={() => copyToClipboard(`${window.location.origin}/embed/${file.id}`)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition">Copy</button>
+                                                <input type="text" readOnly value={`${embedBase(window.location.origin)}/embed/${file.id}`} className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3.5 py-2 font-mono" />
+                                                <button onClick={() => copyToClipboard(`${embedBase(window.location.origin)}/embed/${file.id}`)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition">Copy</button>
                                             </div>
                                         </div>
 

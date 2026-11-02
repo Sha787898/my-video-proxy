@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 const sb = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    { realtime: { params: { eventsPerSecond: 5 } } }
+    { realtime: { params: { eventsPerSecond: 5 } }, auth: { persistSession: false, autoRefreshToken: false } }
 );
 
 const LS_SERVER = 'ms_player_server';
