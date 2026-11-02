@@ -29,7 +29,7 @@ async function EmbedContent({ params }) {
         return <Message title="Player unavailable" lines={[`File ID: ${id}`, `Database error: ${error.message}`]} />;
     }
     if (!file) {
-        return <Message title="Player unavailable" lines={[`File ID: ${id}`, 'এই ID-র কোনো ফাইল ডাটাবেজে পাওয়া যায়নি।']} />;
+        return <Message title="Player unavailable" lines={[`File ID: ${id}`, 'No file with this ID was found in the database.']} />;
     }
 
     // ডোমেইন বদলালে এখানেই নতুন ডোমেইন দিয়ে লিংক বানানো হয়; শুধু যেসব সার্ভারে প্লেয়ার (embed) আছে
@@ -38,7 +38,7 @@ async function EmbedContent({ params }) {
         .map((m) => ({ key: m.id, name: m.name, url: m.embed }));
 
     if (servers.length === 0) {
-        return <Message title="No player server" lines={[`File: ${file.name}`, 'এই ফাইলের কোনো স্ট্রিমিং সার্ভারের লিংক নেই (mirrors খালি বা সবগুলো ডাউনলোড-টাইপ)।']} />;
+        return <Message title="No player server" lines={[`File: ${file.name}`, 'This file has no streaming-server links (mirrors are empty or download-only).']} />;
     }
 
     return <EmbedPlayer servers={servers} title={file.name} downloadHref={`/file/${file.id}`} fileId={file.id} />;
