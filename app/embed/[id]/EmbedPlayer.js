@@ -11,8 +11,8 @@ const sb = createClient(
 );
 
 const LS_SERVER = 'ms_player_server';
-const LS_PREFS = 'ms_player_prefs';
-const DEFAULT_PREFS = { download: true, fullscreen: true, party: true, title: true, block: true, guard: false, view: true, noSandbox: [] };
+const LS_PREFS = 'ms_player_prefs_v2'; // v2: ignores old saved settings that could leave the pop-up blocker switched off
+const DEFAULT_PREFS = { download: true, fullscreen: true, party: true, title: true, block: true, guard: false, view: true, sb: {} };
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
@@ -61,7 +61,10 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
 
     serversRef.current = servers;
     const current = servers[active] || servers[0];
-    const sandboxOn = prefs.block && !(prefs.noSandbox || []).includes(current.key);
+    // protection level per server: strict (no pop-ups, no redirects) | relaxed (pop-ups allowed, page redirects still blocked) | off
+    const level = prefs.block ? ((prefs.sb || {})[current.key] || 'strict') : 'off';
+    const sandboxOn = level !== 'off';
+    const guardOn = prefs.guard || level === 'off';
 
     const say = useCallback((msg) => {
         setToast(msg);
@@ -99,11 +102,11 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
 
     // ---------- redirect guard: asks before the page is navigated away (e.g. by an ad script) ----------
     useEffect(() => {
-        if (!prefs.guard) return undefined;
+        if (!guardOn) return undefined;
         const h = (e) => { e.preventDefault(); e.returnValue = ''; return ''; };
         window.addEventListener('beforeunload', h);
         return () => window.removeEventListener('beforeunload', h);
-    }, [prefs.guard]);
+    }, [guardOn]);
 
     // ---------- measure the stage (used for crop / zoom / rotate) ----------
     useEffect(() => {
@@ -311,6 +314,11 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
         transform: `translate(-50%, -50%) rotate(${view.rot}deg) scale(${sx}, ${sy})`,
     } : undefined;
 
+    const setLevel = (lv) => {
+        if (lv !== 'off' && !prefs.block) setPref('block', true);
+        setPref('sb', { ...(prefs.sb || {}), [current.key]: lv });
+    };
+
     const togglePanel = (name) => setPanel((p) => (p === name ? null : name));
 
     return (
@@ -506,6 +514,8 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-ico.live { border-color: rgba(34,197,94,.6); color: #86efac; }
                 .ep-badge { background: #16a34a; }
                 .ep-sw.on { background: #22c55e; }
+                .ep-lv { padding: 8px 8px 6px; margin-top: 4px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+                .ep-lvl { font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #a3a8b6; }
                 @media (max-height: 380px) {
                     .ep-row { height: 28px; }
                     .ep-set { padding: 5px 8px; }
@@ -520,14 +530,14 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
 
             <iframe
                 ref={frameRef}
-                key={`${current.url}-${reloadKey}-${sandboxOn ? 'b' : 'o'}`}
+                key={`${current.url}-${reloadKey}-${level}`}
                 style={frameStyle}
                 className="ep-frame"
                 src={current.url}
                 allow="autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write"
                 allowFullScreen
                 // blocks pop-up / new-tab ads and redirects (no allow-popups, no allow-top-navigation)
-                sandbox={sandboxOn ? 'allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock allow-pointer-lock' : undefined}
+                sandbox={level === 'off' ? undefined : `allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock allow-pointer-lock${level === 'relaxed' ? ' allow-popups allow-modals' : ''}`}
                 webkitallowfullscreen="true"
                 mozallowfullscreen="true"
                 referrerPolicy="origin"
@@ -552,7 +562,14 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                 )}
                                 <button type="button" className="ep-pill" onClick={() => setReloadKey((k) => k + 1)}>Retry</button>
                                 {sandboxOn && (
-                                    <button type="button" className="ep-pill" onClick={() => { setPref('noSandbox', [...(prefs.noSandbox || []), current.key]); setPref('guard', true); }} title="Some players refuse to run inside a sandbox. Redirect guard turns on instead.">Sandbox off for this server</button>
+                                    <button
+                                        type="button"
+                                        className="ep-pill"
+                                        onClick={() => setLevel(level === 'strict' ? 'relaxed' : 'off')}
+                                        title="Some players refuse to run inside a strict sandbox"
+                                    >
+                                        {level === 'strict' ? 'Try relaxed blocker' : 'Blocker off + redirect guard'}
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -639,7 +656,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                             <div className="ep-scroll" style={{ padding: 4 }}>
                                 {[
                                     ['block', 'Pop-up blocker', 'Sandbox: blocks new tabs & redirects'],
-                                    ['guard', 'Redirect guard', 'Asks before leaving; use if a host refuses sandbox'],
+                                    ['guard', 'Redirect guard', 'Always ask before leaving (auto-on when blocker is off)'],
                                     ['download', 'Download link', 'Show in server menu'],
                                     ['fullscreen', 'Fullscreen button', 'Show on top bar'],
                                     ['party', 'Watch Party', 'Show on top bar'],
@@ -653,13 +670,22 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                             const nextVal = !prefs[key];
                                             setPref(key, nextVal);
                                             if (key === 'party' && !nextVal) leaveRoom(true);
-                                            if (key === 'block' && nextVal) setPref('noSandbox', []);
+                                            if (key === 'block' && nextVal) setPref('sb', {});
                                         }}
                                     >
                                         <span className="l"><b>{label}</b><i>{desc}</i></span>
                                         <span className={`ep-sw ${prefs[key] ? 'on' : ''}`} />
                                     </button>
                                 ))}
+                                <div className="ep-lv">
+                                    <div className="ep-lvl">Protection · {current.name}</div>
+                                    <div className="ep-seg">
+                                        {[['strict', 'Strict'], ['relaxed', 'Relaxed'], ['off', 'Off']].map(([k, l]) => (
+                                            <button key={k} type="button" className={level === k ? 'on' : ''} onClick={() => setLevel(k)}>{l}</button>
+                                        ))}
+                                    </div>
+                                    <div className="ep-note">Strict blocks pop-ups and redirects. Relaxed allows pop-ups but still blocks page redirects. Off: only the redirect guard helps. Saved per server.</div>
+                                </div>
                                 <button type="button" className="ep-set" onClick={() => setPanel('view')}>
                                     <span className="l"><b>Frame{transformed ? ' •' : ''}</b><i>Fit, zoom &amp; rotate</i></span>
                                     <span style={{ opacity: 0.6, fontSize: 14 }}>›</span>
