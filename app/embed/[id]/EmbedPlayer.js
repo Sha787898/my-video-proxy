@@ -450,6 +450,40 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-rng { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: #a3a8b6; }
                 .ep-rng b { color: #fff; float: right; font-weight: 600; }
                 .ep-rng input { width: 100%; accent-color: #d4444c; }
+
+                /* v4: roomier rows, responsive widths, no text selection, fresh top scrim */
+                .ep-root, .ep-root * { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+                .ep-join input { -webkit-user-select: text; user-select: text; }
+                .ep-top::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 72px; background: linear-gradient(180deg, rgba(0,0,0,.55), transparent); pointer-events: none; z-index: -1; }
+                .ep-panel { width: clamp(190px, 46vw, 244px); max-width: calc(100vw - 16px); }
+                .ep-panel.right { width: clamp(196px, 48vw, 252px); }
+                .ep-list { max-height: min(48vh, 270px); padding: 5px 6px 7px; gap: 2px; }
+                .ep-ph { gap: 10px; padding: 9px 10px 9px 11px; }
+                .ep-ph .t { font-size: 12px; }
+                .ep-ph .s { font-size: 9.5px; max-width: clamp(90px, 28vw, 130px); }
+                .ep-ph .n { margin-left: auto; font-size: 10px; padding: 2px 7px; }
+                .ep-ph .g, .ep-ph .x { width: 26px; height: 26px; }
+                .ep-ph .n + .g { margin-left: 8px; }
+                .ep-row { height: 31px; padding: 0 9px 0 12px; gap: 9px; }
+                .ep-row .rn { font-size: 11px; letter-spacing: .08em; }
+                .ep-row .ri svg { width: 11px; height: 11px; }
+                .ep-row .cur { font-size: 8.5px; }
+                .ep-row:hover { padding-left: 16px; }
+                .ep-dl { height: 30px; padding: 0 5px 0 10px; margin-bottom: 4px; }
+                .ep-dl a { font-size: 10.5px; }
+                .ep-dl a svg { width: 12px; height: 12px; }
+                .ep-set .l b { font-size: 11px; }
+                .ep-set .l i { font-size: 9px; }
+                .ep-set { padding: 7px 9px; }
+                .ep-seg button { height: 28px; font-size: 10.5px; }
+                .ep-pill { height: 30px; font-size: 11.5px; }
+                .ep-ico { width: 30px; height: 30px; }
+                .ep-panel { top: 38px; }
+                @media (max-height: 380px) {
+                    .ep-list { max-height: 34vh; }
+                    .ep-row { height: 27px; }
+                    .ep-ph { padding: 6px 8px; }
+                }
                 @media (max-width: 480px) {
                     .ep-now .t { font-size: 12px; }
                     .ep-cd .big { font-size: 60px; }
@@ -582,7 +616,6 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     ['fullscreen', 'Fullscreen button', 'Show on top bar'],
                                     ['party', 'Watch Party', 'Show on top bar'],
                                     ['title', 'Title overlay', 'Now playing badge'],
-                                    ['view', 'Frame controls', 'Fit, zoom & rotate button'],
                                 ].map(([key, label, desc]) => (
                                     <button
                                         key={key}
@@ -599,9 +632,40 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                         <span className={`ep-sw ${prefs[key] ? 'on' : ''}`} />
                                     </button>
                                 ))}
+                                <button type="button" className="ep-set" onClick={() => setPanel('view')}>
+                                    <span className="l"><b>Frame{transformed ? ' •' : ''}</b><i>Fit, zoom &amp; rotate</i></span>
+                                    <span style={{ opacity: 0.6, fontSize: 14 }}>›</span>
+                                </button>
                             </div>
                             <div className="ep-tip">
                                 Ads drawn inside the video itself need a browser ad blocker (uBlock Origin, Brave, AdGuard).
+                            </div>
+                        </div>
+                    )}
+
+                    {panel === 'view' && (
+                        <div className="ep-panel left">
+                            <div className="ep-ph">
+                                <button type="button" className="g" title="Back" onClick={() => setPanel('settings')}>‹</button>
+                                <div className="t">Frame</div>
+                                <button type="button" className="x" onClick={() => setPanel(null)}>{Ico.x}</button>
+                            </div>
+                            <div className="ep-pbody">
+                                <div className="ep-seg">
+                                    {[['fit', 'Fit'], ['fill', 'Fill'], ['stretch', 'Stretch']].map(([k, l]) => (
+                                        <button key={k} type="button" className={view.fit === k ? 'on' : ''} onClick={() => setView((v) => ({ ...v, fit: k }))}>{l}</button>
+                                    ))}
+                                </div>
+                                <label className="ep-rng">
+                                    <span>Zoom <b>{Math.round(view.zoom * 100)}%</b></span>
+                                    <input type="range" min="1" max="2" step="0.05" value={view.zoom} onChange={(e) => setView((v) => ({ ...v, zoom: Number(e.target.value) }))} />
+                                </label>
+                                <div className="ep-seg">
+                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 270) % 360 }))}>⟲ 90°</button>
+                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 90) % 360 }))}>⟳ 90°</button>
+                                    <button type="button" onClick={() => setView({ fit: 'fit', zoom: 1, rot: 0 })}>Reset</button>
+                                </div>
+                                <div className="ep-note">Fill crops the black bars. Stretch pulls the picture to the screen. Rotate helps when auto-rotate is off. Player controls move with the frame.</div>
                             </div>
                         </div>
                     )}
@@ -617,9 +681,6 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                     )}
                     {prefs.fullscreen && (
                         <button type="button" className="ep-ico" title="Fullscreen" onClick={toggleFullscreen}>{Ico.full}</button>
-                    )}
-                    {prefs.view && (
-                        <button type="button" className={`ep-ico ${transformed ? 'live' : ''}`} title="Frame: fit, zoom, rotate" onClick={() => togglePanel('view')}>{Ico.crop}</button>
                     )}
 
                     {panel === 'party' && (
@@ -661,33 +722,6 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                         </div>
                     )}
 
-
-                    {panel === 'view' && (
-                        <div className="ep-panel right">
-                            <div className="ep-ph">
-                                <div className="ic">{Ico.crop}</div>
-                                <div className="t">Frame</div>
-                                <button type="button" className="x" onClick={() => setPanel(null)}>{Ico.x}</button>
-                            </div>
-                            <div className="ep-pbody">
-                                <div className="ep-seg">
-                                    {[['fit', 'Fit'], ['fill', 'Fill'], ['stretch', 'Stretch']].map(([k, l]) => (
-                                        <button key={k} type="button" className={view.fit === k ? 'on' : ''} onClick={() => setView((v) => ({ ...v, fit: k }))}>{l}</button>
-                                    ))}
-                                </div>
-                                <label className="ep-rng">
-                                    <span>Zoom <b>{Math.round(view.zoom * 100)}%</b></span>
-                                    <input type="range" min="1" max="2" step="0.05" value={view.zoom} onChange={(e) => setView((v) => ({ ...v, zoom: Number(e.target.value) }))} />
-                                </label>
-                                <div className="ep-seg">
-                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 270) % 360 }))}>⟲ 90°</button>
-                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 90) % 360 }))}>⟳ 90°</button>
-                                    <button type="button" onClick={() => setView({ fit: 'fit', zoom: 1, rot: 0 })}>Reset</button>
-                                </div>
-                                <div className="ep-note">Fill crops the black bars. Stretch pulls the picture to the screen. Rotate helps when auto-rotate is off. Player controls move with the frame.</div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
