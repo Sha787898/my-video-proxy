@@ -8,6 +8,16 @@
 // এই ৫টা সার্ভার Worker-এ PDLink দিয়ে যায় (আলাদা key লাগে না)
 export const PDLINK_SERVERS = ['gofile', 'pixeldrain', 'vikingfile', 'buzzheavier', 'mega'];
 
+// settings-এ `${id}_active` সেভ না থাকলে এই ডিফল্ট (কোন সার্ভার চালু ধরা হবে)
+export const DEFAULT_ACTIVE = {
+    vidmoly: true, abyss: true, gcloud: true, pixeldrain: true,
+    vikingfile: false, gofile: false, voe: false, sendnow: false, streamhg: false,
+    earnvids: false, turboviplay: false, dropload: false, ruby: false, byse: false,
+    mixdrop: false, buzzheavier: false, mega: false,
+    vidara: false, filepress: false, streamp2p: false, player4me: false,
+    upnshare: false, rpmshare: false, streamtape: false,
+};
+
 // PDLink-এর শেয়ার লিংক: https://pdlk.site/g/<share_id>
 export const PDLINK_SHARE_BASE = 'https://pdlk.site/g/';
 
@@ -33,7 +43,7 @@ export const SERVERS = {
     sendnow:     { name: 'Send.now',     type: 'download', host: 'https://send.now',           view: '/{c}' },                             // ⚠️
     mega:        { name: 'MEGA',         type: 'download', host: '',                           view: '{c}' },
     gcloud:      { name: 'Google Cloud', type: 'download', host: '',                           view: '{c}' },
-    vidara:      { name: 'Vidara',       type: 'stream',   host: 'https://vidara.so',          view: '/v/{c}', embed: '/v/{c}' },      // ✅ view (docs), ⚠️ embed
+    vidara:      { name: 'Vidara',       type: 'stream',   host: 'https://vidara.so',          view: '/v/{c}', embed: '/e/{c}' },      // ✅ view (docs), ⚠️ embed
     filepress:   { name: 'Filepress',    type: 'download', host: 'https://filebee.xyz',        view: '/file/{c}' },                        // ⚠️
 
     // type 'task' = রিমোট-আপলোড শুরু হয়েছে, Worker শুধু task id পায়; চূড়ান্ত ভিডিও লিংক হোস্টের স্ট্যাটাস API দিয়ে পরে আনতে হয়
