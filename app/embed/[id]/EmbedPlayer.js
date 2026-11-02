@@ -484,6 +484,34 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                     .ep-row { height: 27px; }
                     .ep-ph { padding: 6px 8px; }
                 }
+
+                /* v5: scrollable panels on small screens, green = live/on status, red = brand accent */
+                .ep-panel { display: flex; flex-direction: column; max-height: calc(100vh - 46px); max-height: calc(100dvh - 46px); }
+                .ep-panel > * { flex-shrink: 0; }
+                .ep-panel > .ep-list, .ep-panel > .ep-scroll, .ep-panel > .ep-pbody { flex-shrink: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(212,68,76,.4) transparent; }
+                .ep-scroll::-webkit-scrollbar, .ep-pbody::-webkit-scrollbar { width: 3px; }
+                .ep-scroll::-webkit-scrollbar-thumb, .ep-pbody::-webkit-scrollbar-thumb { background: rgba(212,68,76,.4); border-radius: 999px; }
+                .ep-list { max-height: min(60vh, 320px); max-height: min(60dvh, 320px); }
+                .ep-ph { padding: 9px 14px 9px 12px; }
+                .ep-ph .n + .g { margin-left: 8px; margin-right: 2px; }
+                .ep-row { height: 34px; padding: 0 10px 0 13px; box-shadow: inset 0 -1px 0 rgba(255,255,255,.045); }
+                .ep-row:last-child { box-shadow: none; }
+                .ep-row .ri { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,.05); align-items: center; justify-content: center; }
+                .ep-row.on .ri { background: rgba(212,68,76,.2); }
+                .ep-row .cur { display: inline-flex; align-items: center; gap: 5px; color: #4ade80; font-weight: 700; letter-spacing: .12em; }
+                .ep-row .cur::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.9); animation: ep-pulse 2s ease-in-out infinite; }
+                .ep-dl { height: 32px; }
+                .ep-dot { background: #22c55e; box-shadow: 0 0 7px rgba(34,197,94,.85); }
+                .ep-live { color: #86efac; }
+                .ep-ico.live { border-color: rgba(34,197,94,.6); color: #86efac; }
+                .ep-badge { background: #16a34a; }
+                .ep-sw.on { background: #22c55e; }
+                @media (max-height: 380px) {
+                    .ep-row { height: 28px; }
+                    .ep-set { padding: 5px 8px; }
+                    .ep-set .l i { display: none; }
+                    .ep-tip { display: none; }
+                }
                 @media (max-width: 480px) {
                     .ep-now .t { font-size: 12px; }
                     .ep-cd .big { font-size: 60px; }
@@ -608,7 +636,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                 <div className="t">Settings</div>
                                 <button type="button" className="x" onClick={() => setPanel(null)}>{Ico.x}</button>
                             </div>
-                            <div style={{ padding: 4 }}>
+                            <div className="ep-scroll" style={{ padding: 4 }}>
                                 {[
                                     ['block', 'Pop-up blocker', 'Sandbox: blocks new tabs & redirects'],
                                     ['guard', 'Redirect guard', 'Asks before leaving; use if a host refuses sandbox'],
