@@ -45,6 +45,8 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     const [locked, setLocked] = useState(false);
     const [holding, setHolding] = useState(false);
     const holdTimer = useRef(null);
+    const lockTimer = useRef(null);
+    const [lockShow, setLockShow] = useState(true);
     const [box, setBox] = useState({ w: 0, h: 0 });
 
     // Watch Party
@@ -350,10 +352,17 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
         setPref('sb', { ...(prefs.sb || {}), [current.key]: lv });
     };
 
+    // the unlock button fades out after 5 s; touching the screen brings it back
+    const pokeLock = () => {
+        setLockShow(true);
+        clearTimeout(lockTimer.current);
+        lockTimer.current = setTimeout(() => setLockShow(false), 5000);
+    };
+
     const startHold = () => {
         setHolding(true);
         clearTimeout(holdTimer.current);
-        holdTimer.current = setTimeout(() => { setLocked(false); setHolding(false); say('Unlocked'); }, 700);
+        holdTimer.current = setTimeout(() => { setLocked(false); setHolding(false); clearTimeout(lockTimer.current); say('Unlocked'); }, 700);
     };
     const endHold = () => { clearTimeout(holdTimer.current); setHolding(false); };
 
@@ -609,6 +618,12 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-lockbtn::before { content: ''; position: absolute; inset: 0; background: rgba(168,50,58,.55); transform: scaleX(0); transform-origin: left; }
                 .ep-lockbtn.hold::before { transform: scaleX(1); transition: transform .7s linear; }
                 .ep-lockbtn > * { position: relative; display: flex; }
+
+                /* v8: lock button hides after 5s, any touch shows it again */
+                .ep-lockbtn { height: 38px; padding: 0 16px 0 6px; gap: 10px; border-radius: 999px; background: linear-gradient(180deg, rgba(24,19,26,.74), rgba(8,8,11,.82)); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 8px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: #e6e8ee; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .3s ease, transform .3s ease; }
+                .ep-lockbtn.show { opacity: 1; pointer-events: auto; transform: none; }
+                .ep-lockbtn .lic { width: 26px; height: 26px; border-radius: 50%; background: rgba(168,50,58,.28); align-items: center; justify-content: center; color: #ffb3b8; transition: background .2s; }
+                .ep-lockbtn.hold .lic { background: rgba(168,50,58,.65); }
                 @media (max-width: 480px) {
                     .ep-now .t { font-size: 12px; }
                     .ep-cd .big { font-size: 60px; }
@@ -680,10 +695,10 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
             )}
 
             {locked && (
-                <div className="ep-lock" onClick={() => say('Screen locked. Hold the lock button to unlock')}>
+                <div className="ep-lock" onPointerDown={pokeLock}>
                     <button
                         type="button"
-                        className={`ep-lockbtn ${holding ? 'hold' : ''}`}
+                        className={`ep-lockbtn ${lockShow ? 'show' : ''} ${holding ? 'hold' : ''}`}
                         title="Hold to unlock"
                         onClick={(e) => e.stopPropagation()}
                         onContextMenu={(e) => e.preventDefault()}
@@ -692,7 +707,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                         onPointerLeave={endHold}
                         onPointerCancel={endHold}
                     >
-                        {Ico.lock}<span>Hold to unlock</span>
+                        <span className="lic">{Ico.lock}</span><span>Hold to unlock</span>
                     </button>
                 </div>
             )}
@@ -788,7 +803,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     type="button"
                                     className="ep-set"
                                     style={{ '--i': 6 }}
-                                    onClick={() => { setLocked(true); setPanel(null); say('Screen locked. Hold the lock button to unlock'); }}
+                                    onClick={() => { setLocked(true); setPanel(null); pokeLock(); say('Screen locked. Touch the screen to show the unlock button'); }}
                                 >
                                     <span className="l"><b>Lock screen</b><i>Touches can't reach the player</i></span>
                                     <span style={{ opacity: 0.7, display: 'flex' }}>{Ico.lock}</span>
