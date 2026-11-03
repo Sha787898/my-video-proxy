@@ -271,7 +271,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 const ex = d.exitFullscreen || d.webkitExitFullscreen;
                 if (ex) ex.call(d);
             }
-        } catch (e) { say('Fullscreen was blocked by the browser'); }
+        } catch (e) { say('Fullscreen is blocked here: the page that embeds this player needs allowfullscreen on its iframe'); }
     };
 
     const copy = async (text, msg) => {
@@ -541,6 +541,39 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                     .ep-set .l i { display: none; }
                     .ep-tip { display: none; }
                 }
+
+                /* v6: container-aware sizes, glass panels, darker muted red, rows that unfold one by one */
+                .ep-root { --ac: #a8323a; --ac-hi: #e0646b; --acsoft: rgba(168,50,58,.10); container-type: size; }
+                .ep-pill, .ep-ico { background: rgba(8,8,11,.5); }
+                .ep-panel { width: clamp(168px, 44cqw, 236px); max-width: calc(100cqw - 16px); max-height: calc(100cqh - 48px); background: linear-gradient(180deg, rgba(14,12,16,.6), rgba(6,6,9,.74)); border: 1px solid rgba(255,255,255,.08); border-top-color: rgba(168,50,58,.45); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2); box-shadow: 0 12px 34px rgba(0,0,0,.55); transform-origin: top center; animation: ep-unfold .32s cubic-bezier(.2,.8,.2,1) both; }
+                .ep-panel.right { width: clamp(176px, 46cqw, 244px); }
+                @keyframes ep-unfold { from { opacity: 0; transform: perspective(600px) rotateX(-18deg) scaleY(.6); } to { opacity: 1; transform: none; } }
+                .ep-list { --rh: 34px; perspective: 700px; max-height: min(calc(100cqh - 118px), 320px); }
+                .ep-row { height: var(--rh); transform-origin: top center; animation: ep-fold .42s cubic-bezier(.22,.9,.28,1) backwards; animation-delay: calc(var(--i, 0) * 70ms + 60ms); }
+                .ep-dl { --rh: 32px; overflow: hidden; transform-origin: top center; animation: ep-fold .42s cubic-bezier(.22,.9,.28,1) backwards; animation-delay: 60ms; }
+                @keyframes ep-fold { 0% { height: 0; opacity: 0; transform: rotateX(-90deg); } 55% { opacity: 1; } 100% { height: var(--rh); opacity: 1; transform: none; } }
+                .ep-scroll .ep-set { transform-origin: top center; overflow: hidden; animation: ep-fold2 .38s cubic-bezier(.22,.9,.28,1) backwards; animation-delay: calc(var(--i, 0) * 55ms + 60ms); }
+                @keyframes ep-fold2 { 0% { max-height: 0; opacity: 0; transform: rotateX(-90deg); } 100% { max-height: 72px; opacity: 1; transform: none; } }
+                .ep-row .rn { font-size: 11.5px; }
+                .ep-row .ri { width: 22px; height: 22px; }
+                @media (pointer: coarse) {
+                    .ep-list { --rh: 40px; }
+                    .ep-row .rn { font-size: 12px; }
+                    .ep-ico { width: 34px; height: 34px; }
+                    .ep-pill { height: 34px; }
+                    .ep-set { padding: 9px 10px; }
+                }
+                @container (max-height: 300px) {
+                    .ep-ph .s { display: none; }
+                    .ep-ph { padding: 6px 12px 6px 10px; }
+                    .ep-list { --rh: 32px; }
+                    .ep-dl { --rh: 28px; height: 28px; }
+                    .ep-tip, .ep-set .l i { display: none; }
+                    .ep-panel { top: 36px; }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    .ep-panel, .ep-row, .ep-dl, .ep-scroll .ep-set { animation: none; }
+                }
                 @media (max-width: 480px) {
                     .ep-now .t { font-size: 12px; }
                     .ep-cd .big { font-size: 60px; }
@@ -653,6 +686,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     <button
                                         key={s.key}
                                         type="button"
+                                        style={{ '--i': i + 1 }}
                                         className={`ep-row ${i === active ? 'on' : ''}`}
                                         onClick={() => choose(i)}
                                     >
@@ -680,10 +714,11 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     ['fullscreen', 'Fullscreen button', 'Show on top bar'],
                                     ['party', 'Watch Party', 'Show on top bar'],
                                     ['title', 'Title overlay', 'Now playing badge'],
-                                ].map(([key, label, desc]) => (
+                                ].map(([key, label, desc], idx) => (
                                     <button
                                         key={key}
                                         type="button"
+                                        style={{ '--i': idx }}
                                         className="ep-set"
                                         onClick={() => {
                                             const nextVal = !prefs[key];

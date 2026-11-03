@@ -81,7 +81,7 @@ export default function FileManagerPage() {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const pageLink = (f) => `${origin}/file/${f.id}`;
     const embedLink = (f) => `${embedBase(origin)}/embed/${f.id}`;
-    const iframeCode = (f) => `<iframe src="${embedLink(f)}" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
+    const iframeCode = (f) => `<iframe src="${embedLink(f)}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>`;
 
     const mirrorsOf = (f) => resolveMirrors(f.mirrors, domains);
 
