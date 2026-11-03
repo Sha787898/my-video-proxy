@@ -30,8 +30,8 @@ export const SERVERS = {
     abyss:       { name: 'Abyss',        type: 'stream',   host: 'https://player.abyssplayer.com', view: '/{c}', embed: '/{c}' },          // ✅
     voe:         { name: 'VOE',          type: 'stream',   host: 'https://voe.sx',             view: '/{c}',   embed: '/e/{c}' },          // ✅
     mixdrop:     { name: 'MixDrop',      type: 'stream',   host: 'https://mixdrop.ag',         view: '/f/{c}', embed: '/e/{c}' },          // ✅
-    streamhg:    { name: 'StreamHG',     type: 'stream',   host: 'https://streamhg.com',       view: '/{c}',   embed: '/embed-{c}.html' }, // ⚠️
-    earnvids:    { name: 'EarnVids',     type: 'stream',   host: 'https://earnvids.com',       view: '/{c}',   embed: '/embed-{c}.html' }, // ⚠️
+    streamhg:    { name: 'StreamHG',     type: 'stream',   host: 'https://hgcloud.to',       view: '/{c}',   embed: '/e/{c}.html' }, // ⚠️
+    earnvids:    { name: 'EarnVids',     type: 'stream',   host: 'https://morencius.com',       view: '/{c}',   embed: '/embed/{c}' }, // ⚠️
     dropload:    { name: 'DropLoad',     type: 'stream',   host: 'https://dropload.io',        view: '/{c}',   embed: '/embed-{c}.html' }, // ⚠️
     ruby:        { name: 'Ruby',         type: 'stream',   host: 'https://streamruby.com',     view: '/{c}',   embed: '/embed-{c}.html' }, // ⚠️
     byse:        { name: 'Byse',         type: 'stream',   host: 'https://byse.sx',            view: '/{c}',   embed: '/e/{c}' },          // ⚠️
