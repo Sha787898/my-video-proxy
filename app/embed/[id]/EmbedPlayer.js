@@ -11,8 +11,8 @@ const sb = createClient(
 );
 
 const LS_SERVER = 'ms_player_server';
-const LS_PREFS = 'ms_player_prefs_v2'; // v2: ignores old saved settings that could leave the pop-up blocker switched off
-const DEFAULT_PREFS = { download: true, fullscreen: true, party: true, title: true, block: true, guard: false, view: true, sb: {} };
+const LS_PREFS = 'ms_player_prefs_v3'; // v3: new defaults (Watch Party off, Vidara protection off); older saved settings are ignored once
+const DEFAULT_PREFS = { download: true, fullscreen: true, party: false, title: true, block: true, guard: false, view: true, sb: {} };
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
@@ -69,7 +69,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     serversRef.current = servers;
     const current = servers[active] || servers[0];
     // protection level per server: strict (no pop-ups, no redirects) | relaxed (pop-ups allowed, page redirects still blocked) | off
-    const level = prefs.block ? ((prefs.sb || {})[current.key] || 'strict') : 'off';
+    const level = prefs.block ? ((prefs.sb || {})[current.key] || (current.key === 'vidara' ? 'off' : 'strict')) : 'off';
     const sandboxOn = level !== 'off';
     const guardOn = prefs.guard; // only when the user switches it on: it also asks on a normal reload
     const curUrl = urls[current.key] || current.url || '';
@@ -94,6 +94,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
             const r = new URLSearchParams(window.location.search).get('room');
             if (r && /^[A-Za-z0-9]{4,10}$/.test(r)) {
                 setRoom(r.toUpperCase());
+                setPrefs((p) => ({ ...p, party: true })); // a room link always shows the Watch Party button
                 setPanel('party');
             }
         } catch (e) { /* ignore */ }
@@ -840,7 +841,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                             <button key={k} type="button" className={level === k ? 'on' : ''} onClick={() => setLevel(k)}>{l}</button>
                                         ))}
                                     </div>
-                                    <div className="ep-note">Strict blocks pop-ups and redirects. Relaxed allows pop-ups but still blocks page redirects. Off: only the redirect guard helps. Saved per server.</div>
+                                    <div className="ep-note">Strict blocks pop-ups and redirects. Relaxed allows pop-ups but still blocks page redirects. Off: only the redirect guard helps. Saved per server. Vidara starts Off.</div>
                                 </div>
                                 <button type="button" className="ep-set" onClick={() => setPanel('view')}>
                                     <span className="l"><b>Frame{transformed ? ' •' : ''}</b><i>Fit, zoom &amp; rotate</i></span>
@@ -892,6 +893,14 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                     {prefs.fullscreen && (
                         <button type="button" className="ep-ico" title="Fullscreen" onClick={toggleFullscreen}>{Ico.full}</button>
                     )}
+                    <button
+                        type="button"
+                        className="ep-ico"
+                        title="Lock screen"
+                        onClick={() => { setLocked(true); setPanel(null); pokeLock(); say('Screen locked. Touch the screen to show the unlock button'); }}
+                    >
+                        {Ico.lock}
+                    </button>
 
                     {panel === 'party' && (
                         <div className="ep-panel right">
