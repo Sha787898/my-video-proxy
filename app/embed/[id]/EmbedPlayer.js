@@ -624,6 +624,31 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-lockbtn.show { opacity: 1; pointer-events: auto; transform: none; }
                 .ep-lockbtn .lic { width: 26px; height: 26px; border-radius: 50%; background: rgba(168,50,58,.28); align-items: center; justify-content: center; color: #ffb3b8; transition: background .2s; }
                 .ep-lockbtn.hold .lic { background: rgba(168,50,58,.65); }
+
+                /* v9: compact on small players (phones, small embedded boxes) */
+                @container (max-width: 520px) {
+                    .ep-panel { width: clamp(150px, 54cqw, 196px); top: 32px; border-radius: 10px; }
+                    .ep-panel.right { width: clamp(156px, 56cqw, 204px); }
+                    .ep-ph { padding: 5px 8px 5px 9px; gap: 6px; }
+                    .ep-ph .ic, .ep-ph .s { display: none; }
+                    .ep-ph .t { font-size: 10px; white-space: nowrap; letter-spacing: .04em; }
+                    .ep-ph .n { font-size: 8.5px; padding: 1px 5px; }
+                    .ep-ph .g, .ep-ph .x { width: 20px; height: 20px; }
+                    .ep-ph .g svg { width: 12px; height: 12px; }
+                    .ep-list { --rh: 29px; padding: 3px 4px 5px; max-height: calc(100cqh - 84px); }
+                    .ep-row { padding: 0 6px 0 10px; gap: 7px; }
+                    .ep-row .rn { font-size: 10px; letter-spacing: .06em; }
+                    .ep-row .ri { width: 17px; height: 17px; }
+                    .ep-row .ri svg { width: 8px; height: 8px; }
+                    .ep-row .cur { font-size: 7.5px; }
+                    .ep-dl { --rh: 26px; height: 26px; }
+                    .ep-dl a { font-size: 9.5px; }
+                    .ep-set { padding: 5px 8px; }
+                    .ep-set .l b { font-size: 10px; }
+                    .ep-lv { padding: 6px 6px 4px; }
+                    .ep-pill { height: 28px; font-size: 10.5px; padding: 0 9px; }
+                    .ep-ico { width: 28px; height: 28px; }
+                }
                 @media (max-width: 480px) {
                     .ep-now .t { font-size: 12px; }
                     .ep-cd .big { font-size: 60px; }
