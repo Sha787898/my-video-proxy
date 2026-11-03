@@ -18,6 +18,7 @@ const makeCode = () => Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Mat
 
 const Ico = {
     crop: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14" /></svg>,
+    lock: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></svg>,
     chevron: <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor"><path d="M5 7L1 3h8z" /></svg>,
     play: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><polygon points="6 4 20 12 6 20 6 4" /></svg>,
     link: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1" /><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1" /></svg>,
@@ -41,6 +42,9 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     const [prefs, setPrefs] = useState(DEFAULT_PREFS);
     const [view, setView] = useState({ fit: 'fit', zoom: 1, rot: 0 });
     const [urls, setUrls] = useState({});
+    const [locked, setLocked] = useState(false);
+    const [holding, setHolding] = useState(false);
+    const holdTimer = useRef(null);
     const [box, setBox] = useState({ w: 0, h: 0 });
 
     // Watch Party
@@ -65,7 +69,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     // protection level per server: strict (no pop-ups, no redirects) | relaxed (pop-ups allowed, page redirects still blocked) | off
     const level = prefs.block ? ((prefs.sb || {})[current.key] || 'strict') : 'off';
     const sandboxOn = level !== 'off';
-    const guardOn = prefs.guard || level === 'off';
+    const guardOn = prefs.guard; // only when the user switches it on: it also asks on a normal reload
     const curUrl = urls[current.key] || current.url || '';
 
     const say = useCallback((msg) => {
@@ -105,9 +109,17 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     // ---------- redirect guard: asks before the page is navigated away (e.g. by an ad script) ----------
     useEffect(() => {
         if (!guardOn) return undefined;
-        const h = (e) => { e.preventDefault(); e.returnValue = ''; return ''; };
+        const skip = { v: false };
+        const key = (e) => {
+            if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R'))) {
+                skip.v = true;
+                setTimeout(() => { skip.v = false; }, 1500);
+            }
+        };
+        const h = (e) => { if (skip.v) return undefined; e.preventDefault(); e.returnValue = ''; return ''; };
+        window.addEventListener('keydown', key, true);
         window.addEventListener('beforeunload', h);
-        return () => window.removeEventListener('beforeunload', h);
+        return () => { window.removeEventListener('keydown', key, true); window.removeEventListener('beforeunload', h); };
     }, [guardOn]);
 
     // ---------- measure the stage (used for crop / zoom / rotate) ----------
@@ -337,6 +349,13 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
         if (lv !== 'off' && !prefs.block) setPref('block', true);
         setPref('sb', { ...(prefs.sb || {}), [current.key]: lv });
     };
+
+    const startHold = () => {
+        setHolding(true);
+        clearTimeout(holdTimer.current);
+        holdTimer.current = setTimeout(() => { setLocked(false); setHolding(false); say('Unlocked'); }, 700);
+    };
+    const endHold = () => { clearTimeout(holdTimer.current); setHolding(false); };
 
     const togglePanel = (name) => setPanel((p) => (p === name ? null : name));
 
@@ -574,6 +593,22 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 @media (prefers-reduced-motion: reduce) {
                     .ep-panel, .ep-row, .ep-dl, .ep-scroll .ep-set { animation: none; }
                 }
+
+                /* v7: header never clips the gear, faster unfold, lock screen */
+                .ep-ph > div:not(.ic) { flex: 1; min-width: 0; }
+                .ep-ph .s { max-width: none; }
+                .ep-ph .n { margin-left: 0; flex-shrink: 0; }
+                .ep-ph .n + .g { margin-left: 2px; }
+                .ep-ph .g, .ep-ph .x { flex-shrink: 0; }
+                .ep-panel { animation-duration: .2s; }
+                .ep-row { animation-duration: .26s; animation-delay: calc(var(--i, 0) * 32ms + 20ms); }
+                .ep-dl { animation-duration: .26s; animation-delay: 20ms; }
+                .ep-scroll .ep-set { animation-duration: .24s; animation-delay: calc(var(--i, 0) * 28ms + 20ms); }
+                .ep-lock { position: absolute; inset: 0; z-index: 14; background: transparent; touch-action: none; cursor: not-allowed; }
+                .ep-lockbtn { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(8,8,11,.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: #d7dae2; font-family: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; cursor: pointer; overflow: hidden; touch-action: none; }
+                .ep-lockbtn::before { content: ''; position: absolute; inset: 0; background: rgba(168,50,58,.55); transform: scaleX(0); transform-origin: left; }
+                .ep-lockbtn.hold::before { transform: scaleX(1); transition: transform .7s linear; }
+                .ep-lockbtn > * { position: relative; display: flex; }
                 @media (max-width: 480px) {
                     .ep-now .t { font-size: 12px; }
                     .ep-cd .big { font-size: 60px; }
@@ -644,6 +679,24 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 </div>
             )}
 
+            {locked && (
+                <div className="ep-lock" onClick={() => say('Screen locked. Hold the lock button to unlock')}>
+                    <button
+                        type="button"
+                        className={`ep-lockbtn ${holding ? 'hold' : ''}`}
+                        title="Hold to unlock"
+                        onClick={(e) => e.stopPropagation()}
+                        onContextMenu={(e) => e.preventDefault()}
+                        onPointerDown={startHold}
+                        onPointerUp={endHold}
+                        onPointerLeave={endHold}
+                        onPointerCancel={endHold}
+                    >
+                        {Ico.lock}<span>Hold to unlock</span>
+                    </button>
+                </div>
+            )}
+
             {toast && <div className="ep-toast">{toast}</div>}
 
             <div className={`ep-top ${showUi ? '' : 'ep-off'}`}>
@@ -709,7 +762,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                             <div className="ep-scroll" style={{ padding: 4 }}>
                                 {[
                                     ['block', 'Pop-up blocker', 'Sandbox: blocks new tabs & redirects'],
-                                    ['guard', 'Redirect guard', 'Always ask before leaving (auto-on when blocker is off)'],
+                                    ['guard', 'Redirect guard', 'Asks before this page is left or reloaded'],
                                     ['download', 'Download link', 'Show in server menu'],
                                     ['fullscreen', 'Fullscreen button', 'Show on top bar'],
                                     ['party', 'Watch Party', 'Show on top bar'],
@@ -731,6 +784,15 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                         <span className={`ep-sw ${prefs[key] ? 'on' : ''}`} />
                                     </button>
                                 ))}
+                                <button
+                                    type="button"
+                                    className="ep-set"
+                                    style={{ '--i': 6 }}
+                                    onClick={() => { setLocked(true); setPanel(null); say('Screen locked. Hold the lock button to unlock'); }}
+                                >
+                                    <span className="l"><b>Lock screen</b><i>Touches can't reach the player</i></span>
+                                    <span style={{ opacity: 0.7, display: 'flex' }}>{Ico.lock}</span>
+                                </button>
                                 <div className="ep-lv">
                                     <div className="ep-lvl">Protection · {current.name}</div>
                                     <div className="ep-seg">
