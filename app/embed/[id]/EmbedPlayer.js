@@ -12,7 +12,7 @@ const sb = createClient(
 
 const LS_SERVER = 'ms_player_server';
 const LS_PREFS = 'ms_player_prefs_v3'; // v3: new defaults (Watch Party off, Vidara protection off); older saved settings are ignored once
-const DEFAULT_PREFS = { download: true, fullscreen: true, party: false, title: true, block: true, guard: false, view: true, sb: {} };
+const DEFAULT_PREFS = { download: true, fullscreen: true, lock: true, party: false, title: true, block: true, guard: false, view: true, sb: {} };
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
@@ -806,6 +806,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     ['guard', 'Redirect guard', 'Asks before this page is left or reloaded'],
                                     ['download', 'Download link', 'Show in server menu'],
                                     ['fullscreen', 'Fullscreen button', 'Show on top bar'],
+                                    ['lock', 'Lock button', 'Show on top bar'],
                                     ['party', 'Watch Party', 'Show on top bar'],
                                     ['title', 'Title overlay', 'Now playing badge'],
                                 ].map(([key, label, desc], idx) => (
@@ -828,7 +829,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                 <button
                                     type="button"
                                     className="ep-set"
-                                    style={{ '--i': 6 }}
+                                    style={{ '--i': 7 }}
                                     onClick={() => { setLocked(true); setPanel(null); pokeLock(); say('Screen locked. Touch the screen to show the unlock button'); }}
                                 >
                                     <span className="l"><b>Lock screen</b><i>Touches can't reach the player</i></span>
@@ -890,17 +891,19 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                             {room && peers > 0 && <span className="ep-badge">{peers}</span>}
                         </button>
                     )}
+                    {prefs.lock && (
+                        <button
+                            type="button"
+                            className="ep-ico"
+                            title="Lock screen"
+                            onClick={() => { setLocked(true); setPanel(null); pokeLock(); say('Screen locked. Touch the screen to show the unlock button'); }}
+                        >
+                            {Ico.lock}
+                        </button>
+                    )}
                     {prefs.fullscreen && (
                         <button type="button" className="ep-ico" title="Fullscreen" onClick={toggleFullscreen}>{Ico.full}</button>
                     )}
-                    <button
-                        type="button"
-                        className="ep-ico"
-                        title="Lock screen"
-                        onClick={() => { setLocked(true); setPanel(null); pokeLock(); say('Screen locked. Touch the screen to show the unlock button'); }}
-                    >
-                        {Ico.lock}
-                    </button>
 
                     {panel === 'party' && (
                         <div className="ep-panel right">
