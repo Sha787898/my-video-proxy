@@ -3,37 +3,47 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
+import { IconGear, IconUpload, IconKey, IconGlobe, IconMail, IconLink, IconCheckCircle, IconX, IconEye, IconEyeOff, IconServer, IconPlus, IconPencil } from '../components/Icons';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// Display-only grouping used for the type badge on each card
+const NODE_TYPE = {
+    vidmoly: 'stream', abyss: 'stream', voe: 'stream', streamhg: 'stream', earnvids: 'stream', turboviplay: 'stream',
+    dropload: 'stream', ruby: 'stream', byse: 'stream', vidara: 'stream', streamp2p: 'stream', player4me: 'stream',
+    upnshare: 'stream', rpmshare: 'stream', streamtape: 'stream',
+    gcloud: 'download', pixeldrain: 'download', vikingfile: 'download', gofile: 'download', sendnow: 'download',
+    mixdrop: 'download', buzzheavier: 'download', mega: 'download', filepress: 'download',
+};
+
 const DEFAULT_NODES = [
-    { id: 'vidmoly', name: 'Vidmoly.me', limit: 'Unlimited', icon: '⚡', status: 'ONLINE', active: true, key: '', customDomain: '' },
-    { id: 'abyss', name: 'Abyss.to / LoadMyFile', limit: 'Unlimited', icon: '🌊', status: 'ONLINE', active: true, key: '', customDomain: '' },
-    { id: 'gcloud', name: 'Google Cloud Drive', limit: '15 GB', icon: '☁️', status: 'ONLINE', active: true, key: '', customDomain: '' },
-    { id: 'pixeldrain', name: 'Pixeldrain', limit: '10 GB', icon: '🧪', status: 'ONLINE', active: true, key: '', customDomain: '', pdlink: true },
-    { id: 'vikingfile', name: 'VikingFile', limit: '100 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
-    { id: 'gofile', name: 'GoFile', limit: '500 GB', icon: '📁', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
-    { id: 'voe', name: 'VOE.sx', limit: 'Unlimited', icon: '🚀', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'sendnow', name: 'Send.now', limit: 'Unlimited', icon: '📤', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'streamhg', name: 'StreamHG', limit: 'Unlimited', icon: '📺', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'earnvids', name: 'EarnVids', limit: 'Unlimited', icon: '💰', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'turboviplay', name: 'TurboViPlay', limit: 'Unlimited', icon: '🔥', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'dropload', name: 'DropLoad', limit: 'Unlimited', icon: '📦', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'ruby', name: 'Ruby.video', limit: 'Unlimited', icon: '💎', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'byse', name: 'Byse', limit: 'Unlimited', icon: '🔗', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'mixdrop', name: 'MixDrop', limit: 'Unlimited', icon: '🔀', status: 'ONLINE', active: false, key: '', customDomain: '', email: '', extraField: 'email', extraLabel: 'Email' },
-    { id: 'buzzheavier', name: 'BuzzHeavier', limit: 'Unlimited', icon: '🐝', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
-    { id: 'mega', name: 'MEGA', limit: '20 GB', icon: '🛡️', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
-    { id: 'vidara', name: 'Vidara', limit: 'Unlimited', icon: '🎬', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'filepress', name: 'Filepress', limit: 'Unlimited', icon: '🗂️', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'streamp2p', name: 'StreamP2P', limit: 'Unlimited', icon: '📡', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'player4me', name: 'Player4Me', limit: 'Unlimited', icon: '▶️', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'upnshare', name: 'UpnShare', limit: 'Unlimited', icon: '⬆️', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'rpmshare', name: 'RPMShare', limit: 'Unlimited', icon: '🎞️', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'streamtape', name: 'Streamtape', limit: 'Unlimited', icon: '📼', status: 'ONLINE', active: false, key: '', customDomain: '', email: '', extraField: 'login', extraLabel: 'Login' }
+    { id: 'vidmoly', name: 'Vidmoly.me', limit: 'Unlimited', status: 'ONLINE', active: true, key: '', customDomain: '' },
+    { id: 'abyss', name: 'Abyss.to / LoadMyFile', limit: 'Unlimited', status: 'ONLINE', active: true, key: '', customDomain: '' },
+    { id: 'gcloud', name: 'Google Cloud Drive', limit: '15 GB', status: 'ONLINE', active: true, key: '', customDomain: '' },
+    { id: 'pixeldrain', name: 'Pixeldrain', limit: '10 GB', status: 'ONLINE', active: true, key: '', customDomain: '', pdlink: true },
+    { id: 'vikingfile', name: 'VikingFile', limit: '100 GB', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
+    { id: 'gofile', name: 'GoFile', limit: '500 GB', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
+    { id: 'voe', name: 'VOE.sx', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'sendnow', name: 'Send.now', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'streamhg', name: 'StreamHG', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'earnvids', name: 'EarnVids', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'turboviplay', name: 'TurboViPlay', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'dropload', name: 'DropLoad', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'ruby', name: 'Ruby.video', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'byse', name: 'Byse', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'mixdrop', name: 'MixDrop', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '', email: '', extraField: 'email', extraLabel: 'Email' },
+    { id: 'buzzheavier', name: 'BuzzHeavier', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
+    { id: 'mega', name: 'MEGA', limit: '20 GB', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
+    { id: 'vidara', name: 'Vidara', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'filepress', name: 'Filepress', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'streamp2p', name: 'StreamP2P', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'player4me', name: 'Player4Me', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'upnshare', name: 'UpnShare', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'rpmshare', name: 'RPMShare', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'streamtape', name: 'Streamtape', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '', email: '', extraField: 'login', extraLabel: 'Login' }
 ];
 
 export default function ManageSitesPage() {
@@ -45,6 +55,7 @@ export default function ManageSitesPage() {
     const [activeModal, setActiveModal] = useState(null);
     const [inputValue, setInputValue] = useState('');
     const [saveStatus, setSaveStatus] = useState('');
+    const [showSecret, setShowSecret] = useState(false);
 
     useEffect(() => {
         async function checkAuthAndFetch() {
@@ -85,8 +96,8 @@ export default function ManageSitesPage() {
 
     if (loadingAuth) {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-mono">
-                <p className="text-xs text-blue-400 animate-pulse">Checking authorization...</p>
+            <div className="ms-app flex items-center justify-center">
+                <p className="text-sm ms-muted flex items-center gap-2"><IconServer className="ms-spin" /> Checking authorization...</p>
             </div>
         );
     }
@@ -117,6 +128,7 @@ export default function ManageSitesPage() {
 
     const handleOpenModal = (node, type) => {
         setActiveModal({ type, node });
+        setShowSecret(false);
         setInputValue(type === 'key' ? node.key || '' : type === 'email' ? node.email || '' : node.customDomain || '');
     };
 
@@ -156,168 +168,176 @@ export default function ManageSitesPage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex font-mono">
+        <div className="ms-app flex">
             <Sidebar />
 
             <div className="flex-1 flex flex-col min-w-0">
-                <header className="h-16 border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <span className="text-xl">⚙️</span>
-                        <h1 className="text-sm font-bold text-white uppercase tracking-wider">Storage & Stream Nodes</h1>
+                <header className="ms-topbar">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0"><IconGear size={18} /></span>
+                        <h1 className="ms-h1 truncate">Storage &amp; Stream Nodes</h1>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-xs text-slate-400 hidden sm:inline">{user?.email}</span>
-                        <a href="/gdrive-upload" className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-lg shadow-blue-600/20 flex items-center gap-2">
-                            <span>⬆️</span> Upload New File
+                    <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-xs ms-muted hidden sm:inline truncate max-w-[200px]">{user?.email}</span>
+                        <a href="/gdrive-upload" className="ms-btn ms-btn-primary ms-btn-sm">
+                            <IconUpload size={15} /> <span className="hidden xs:inline sm:inline">Upload</span><span className="hidden md:inline">&nbsp;new file</span>
                         </a>
                     </div>
                 </header>
 
-                <main className="flex-1 flex flex-col items-center justify-start p-6 lg:p-10">
-                    <div className="w-full max-w-5xl space-y-6">
-                        {saveStatus && (
-                            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-bold flex items-center gap-2">
-                                <span>✅</span> {saveStatus}
-                            </div>
-                        )}
-
-                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xl">
-                            <div>
-                                <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                    <span>🗄️</span> Node & Storage Management
-                                </h2>
-                                <p className="text-xs text-slate-400 mt-1">
-                                    Configure operational nodes, attach your personal API keys, custom domains, and route uploads securely.
-                                </p>
-                            </div>
+                <main className="ms-main w-full max-w-7xl mx-auto space-y-5">
+                    {saveStatus && (
+                        <div className="ms-alert ms-alert-green ms-fade-up" role="status">
+                            <IconCheckCircle size={18} className="shrink-0 mt-0.5" />
+                            <span className="min-w-0 break-words">{saveStatus}</span>
                         </div>
+                    )}
 
-                        <div className="space-y-4">
-                            {nodes.map((node, index) => (
-                                <div 
-                                    key={node.id} 
-                                    className={`bg-slate-900 border rounded-3xl p-6 shadow-xl transition-all duration-200 ${
-                                        node.active ? 'border-slate-800 hover:border-slate-700' : 'border-slate-900 opacity-60'
-                                    }`}
+                    <section className="ms-card p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <h2 className="ms-h2 flex items-center gap-2"><IconServer size={14} /> Node &amp; storage management</h2>
+                            <p className="text-sm ms-muted mt-1.5">
+                                Turn servers on or off, attach your own API keys and custom domains. Changes to the switches are saved instantly.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <span className="ms-badge ms-badge-green"><span className="ms-pulse-dot" /> {nodes.filter(n => n.active).length} active</span>
+                            <span className="ms-badge">{nodes.length} total</span>
+                        </div>
+                    </section>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {nodes.map((node, index) => {
+                            const type = NODE_TYPE[node.id] || 'stream';
+                            return (
+                                <div
+                                    key={node.id}
+                                    className={`ms-card p-4 flex flex-col gap-4 min-w-0 transition-colors ${node.active ? 'border-emerald-500/30' : 'opacity-80'}`}
                                 >
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                        <div className="flex items-center gap-4">
-                                            <div className="text-xs text-slate-500 font-bold bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                                                #{String(index + 1).padStart(2, '0')}
-                                            </div>
-                                            <div className="w-12 h-12 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center text-xl shadow-lg">
-                                                {node.icon}
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className="text-xs font-bold text-white">{node.name}</h3>
-                                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                                        ● {node.status}
-                                                    </span>
-                                                </div>
-                                                <p className="text-[11px] text-slate-400 mt-0.5">
-                                                    Limit: <span className="text-slate-200 font-bold">{node.limit}</span>
-                                                    {node.customDomain && (
-                                                        <span className="ml-3 text-blue-400 font-bold">| Domain: {node.customDomain}</span>
-                                                    )}
-                                                </p>
+                                    <div className="flex items-start gap-3">
+                                        <span className="ms-code text-[11px] text-slate-500 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 shrink-0">
+                                            {String(index + 1).padStart(2, '0')}
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-sm font-bold text-white truncate" title={node.name}>{node.name}</h3>
+                                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                                <span className={`ms-badge ${type === 'download' ? 'ms-badge-amber' : 'ms-badge-blue'}`}>{type}</span>
+                                                <span className="ms-badge">Limit {node.limit}</span>
+                                                <span className={`ms-badge ${node.active ? 'ms-badge-green' : ''}`}>{node.active ? 'Active' : 'Off'}</span>
                                             </div>
                                         </div>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={node.active}
+                                            aria-label={`${node.active ? 'Disable' : 'Enable'} ${node.name}`}
+                                            onClick={() => toggleNodeActive(node.id)}
+                                            className={`relative shrink-0 w-12 h-7 rounded-full border transition-colors cursor-pointer ${
+                                                node.active ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-800 border-slate-700'
+                                            }`}
+                                        >
+                                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                                                node.active ? 'translate-x-5' : 'translate-x-0'
+                                            }`} />
+                                        </button>
+                                    </div>
 
-                                        <div className="flex items-center gap-3 self-end sm:self-auto">
-                                            {node.pdlink ? (
-                                                <span className="px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-[11px] font-bold text-slate-500">
-                                                    🔗 via PDLink (no key needed)
-                                                </span>
-                                            ) : (
-                                            <button 
+                                    {node.customDomain && (
+                                        <p className="text-xs text-blue-400 flex items-center gap-1.5 min-w-0">
+                                            <IconGlobe size={13} className="shrink-0" />
+                                            <span className="truncate ms-code">{node.customDomain}</span>
+                                        </p>
+                                    )}
+
+                                    <div className="flex flex-col gap-2 mt-auto">
+                                        {node.pdlink ? (
+                                            <div className="ms-alert ms-alert-blue !py-2.5 !text-xs items-center">
+                                                <IconLink size={15} className="shrink-0" />
+                                                <span>via PDLink (no key needed)</span>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                type="button"
                                                 onClick={() => handleOpenModal(node, 'key')}
-                                                className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                                                    node.key 
-                                                        ? 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800' 
-                                                        : 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20'
-                                                }`}
+                                                className={`ms-btn ms-btn-sm ms-btn-block justify-between ${node.key ? 'ms-btn-ghost' : 'ms-btn-primary'}`}
                                             >
-                                                <span>🔑</span> {node.key ? 'Edit Key' : '+ Add Key'}
+                                                <span className="flex items-center gap-2"><IconKey size={15} /> {node.key ? 'API key set' : 'Add API key'}</span>
+                                                {node.key ? <IconPencil size={14} /> : <IconPlus size={14} />}
                                             </button>
-                                            )}
+                                        )}
 
-                                            {node.extraField && (
-                                                <button 
-                                                    onClick={() => handleOpenModal(node, 'email')}
-                                                    className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                                                        node.email 
-                                                            ? 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800' 
-                                                            : 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20'
-                                                    }`}
-                                                >
-                                                    <span>✉️</span> {node.email ? `Edit ${node.extraLabel}` : `+ Add ${node.extraLabel}`}
-                                                </button>
-                                            )}
-
-                                            <button 
-                                                onClick={() => handleOpenModal(node, 'domain')}
-                                                className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer"
+                                        {node.extraField && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleOpenModal(node, 'email')}
+                                                className={`ms-btn ms-btn-sm ms-btn-block justify-between ${node.email ? 'ms-btn-ghost' : 'ms-btn-primary'}`}
                                             >
-                                                <span>🌐</span> Domain
+                                                <span className="flex items-center gap-2 min-w-0"><IconMail size={15} className="shrink-0" /> <span className="truncate">{node.email ? `${node.extraLabel}: ${node.email}` : `Add ${node.extraLabel}`}</span></span>
+                                                {node.email ? <IconPencil size={14} className="shrink-0" /> : <IconPlus size={14} className="shrink-0" />}
                                             </button>
+                                        )}
 
-                                            <button 
-                                                onClick={() => toggleNodeActive(node.id)}
-                                                className={`w-12 h-6 rounded-full transition-colors relative p-1 cursor-pointer ${
-                                                    node.active ? 'bg-blue-600' : 'bg-slate-800'
-                                                }`}
-                                            >
-                                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                                                    node.active ? 'translate-x-6' : 'translate-x-0'
-                                                }`} />
-                                            </button>
-                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleOpenModal(node, 'domain')}
+                                            className="ms-btn ms-btn-sm ms-btn-ghost ms-btn-block justify-between"
+                                        >
+                                            <span className="flex items-center gap-2"><IconGlobe size={15} /> {node.customDomain ? 'Edit custom domain' : 'Set custom domain'}</span>
+                                            <IconPencil size={14} />
+                                        </button>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                            );
+                        })}
                     </div>
                 </main>
             </div>
 
             {activeModal && (
-                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 sm:p-8 space-y-4 shadow-2xl">
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                            <h3 className="text-xs font-bold text-white uppercase tracking-wider truncate">
-                                {activeModal.type === 'key' ? 'Set API Key for ' : activeModal.type === 'email' ? `Set ${activeModal.node.extraLabel} for ` : 'Set Custom Domain for '}
-                                <span className="text-blue-400">{activeModal.node.name}</span>
-                            </h3>
-                            <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white text-sm cursor-pointer">✕</button>
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true">
+                    <div className="ms-card w-full max-w-md p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto ms-fade-up">
+                        <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+                            <div className="min-w-0">
+                                <h3 className="text-sm font-bold text-white">
+                                    {activeModal.type === 'key' ? 'Set API key' : activeModal.type === 'email' ? `Set ${activeModal.node.extraLabel}` : 'Set custom domain'}
+                                </h3>
+                                <p className="text-xs text-blue-400 mt-0.5 truncate">{activeModal.node.name}</p>
+                            </div>
+                            <button type="button" aria-label="Close" onClick={() => setActiveModal(null)} className="ms-btn ms-btn-ghost ms-btn-sm ms-btn-icon shrink-0">
+                                <IconX size={16} />
+                            </button>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] text-slate-400 uppercase">
-                                {activeModal.type === 'key' ? 'API Key / Token' : activeModal.type === 'email' ? activeModal.node.extraLabel : 'Custom Proxy / Mirror Domain'}
+                        <div>
+                            <label className="ms-label" htmlFor="node-input">
+                                {activeModal.type === 'key' ? 'API key / token' : activeModal.type === 'email' ? activeModal.node.extraLabel : 'Custom proxy / mirror domain'}
                             </label>
-                            <input 
-                                type={activeModal.type === 'key' ? 'password' : 'text'}
-                                placeholder={activeModal.type === 'key' ? 'Paste API Key here...' : activeModal.type === 'email' ? (activeModal.node.extraField === 'login' ? 'Account login / username' : 'you@example.com') : 'https://cdn.yourdomain.com'}
-                                value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-blue-600 font-mono"
-                            />
+                            <div className="relative">
+                                <input
+                                    id="node-input"
+                                    type={activeModal.type === 'key' && !showSecret ? 'password' : 'text'}
+                                    autoComplete="off"
+                                    placeholder={activeModal.type === 'key' ? 'Paste API key here...' : activeModal.type === 'email' ? (activeModal.node.extraField === 'login' ? 'Account login / username' : 'you@example.com') : 'https://cdn.yourdomain.com'}
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                    className={`ms-input ${activeModal.type === 'key' ? 'pr-12' : ''}`}
+                                />
+                                {activeModal.type === 'key' && (
+                                    <button
+                                        type="button"
+                                        aria-label={showSecret ? 'Hide key' : 'Show key'}
+                                        onClick={() => setShowSecret(v => !v)}
+                                        className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-slate-400 hover:text-white cursor-pointer"
+                                    >
+                                        {showSecret ? <IconEyeOff size={17} /> : <IconEye size={17} />}
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
-                        <div className="flex items-center gap-3 pt-2">
-                            <button 
-                                onClick={() => setActiveModal(null)}
-                                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition cursor-pointer"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={handleSaveModal}
-                                className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-600/25 cursor-pointer"
-                            >
-                                Save Changes
-                            </button>
+                        <div className="flex items-center gap-3 pt-1">
+                            <button type="button" onClick={() => setActiveModal(null)} className="ms-btn ms-btn-ghost flex-1">Cancel</button>
+                            <button type="button" onClick={handleSaveModal} className="ms-btn ms-btn-primary flex-1">Save changes</button>
                         </div>
                     </div>
                 </div>

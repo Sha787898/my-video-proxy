@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { embedBase } from '../utils/embedOrigin';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import {
+    IconFolder, IconUpload, IconSearch, IconFilm, IconChevronDown, IconChevronLeft, IconChevronRight, IconLink, IconCode,
+    IconPencil, IconWrench, IconTrash, IconCopy, IconExternal, IconAlert, IconInfo, IconActivity, IconInbox, IconCheck, IconX, IconRefresh,
+} from '../components/Icons';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
 import { resolveMirrors, domainsFromSettings, PDLINK_SERVERS, DEFAULT_ACTIVE } from '../utils/mirrors';
@@ -13,11 +17,15 @@ const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const STATUS_STYLE = {
-    Completed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25',
-    Partial: 'bg-amber-500/10 text-amber-400 border-amber-500/25',
-    Processing: 'bg-blue-500/10 text-blue-400 border-blue-500/25',
-    Failed: 'bg-rose-500/10 text-rose-400 border-rose-500/25',
+const STATUS_BADGE = {
+    Completed: 'ms-badge-green',
+    Partial: 'ms-badge-amber',
+    Processing: 'ms-badge-blue',
+    Failed: 'ms-badge-red',
+};
+
+const hostOf = (url) => {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
 };
 
 export default function FileManagerPage() {
@@ -33,6 +41,8 @@ export default function FileManagerPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
     const [pageSize, setPageSize] = useState(24);
+    const [sortBy, setSortBy] = useState('new');
+    const searchRef = useRef(null);
     const [page, setPage] = useState(1);
 
     const [selected, setSelected] = useState(new Set());
@@ -101,13 +111,28 @@ export default function FileManagerPage() {
 
     const filtered = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
-        return files.filter((f) => {
+        const list = files.filter((f) => {
             if (q && !(f.name || '').toLowerCase().includes(q)) return false;
             if (statusFilter !== 'All' && statusOf(f) !== statusFilter) return false;
             return true;
         });
+        if (sortBy === 'old') return [...list].reverse();
+        if (sortBy === 'name') return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
+        return list;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [files, searchQuery, statusFilter, activeIds]);
+    }, [files, searchQuery, statusFilter, activeIds, sortBy]);
+
+    // "/" jumps to the search box
+    useEffect(() => {
+        const onKey = (e) => {
+            const t = e.target;
+            if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+            if (searchRef.current) { e.preventDefault(); searchRef.current.focus(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
 
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
     const currentPage = Math.min(page, totalPages);
@@ -121,7 +146,7 @@ export default function FileManagerPage() {
         setTimeout(() => setNotice(''), 6000);
     };
 
-    const copyText = async (text, okMsg = 'Copied! 📋') => {
+    const copyText = async (text, okMsg = 'Copied') => {
         try {
             await navigator.clipboard.writeText(text);
             flash(okMsg);
@@ -169,7 +194,7 @@ export default function FileManagerPage() {
 
     const deleteFiles = async (ids) => {
         if (ids.length === 0) return;
-        if (!confirm(`${ids.length} টি ফাইল রেকর্ড ডিলিট করবেন? (সার্ভারে আপলোড করা ফাইল মুছবে না)`)) return;
+        if (!confirm(`Delete ${ids.length} file record(s)? Files already uploaded to the servers are not removed.`)) return;
         const { error } = await supabase.from('files').delete().in('id', ids);
         if (error) {
             alert('Failed to delete: ' + error.message);
@@ -187,7 +212,7 @@ export default function FileManagerPage() {
     const repairFiles = async (list) => {
         const withLink = list.filter((f) => f.original_url);
         if (withLink.length === 0) {
-            flash('এই ফাইলগুলোর original Drive লিংক সেভ নেই, Repair করা যাবে না।');
+            flash('These files have no saved original Drive link, so they cannot be repaired.');
             return;
         }
         setBusy(true);
@@ -206,9 +231,9 @@ export default function FileManagerPage() {
 
             const stillFailed = (data.files || []).reduce((n, f) => n + (f.failed?.length || 0), 0);
             flash(
-                `Repair শেষ: ${data.count} ফাইল চেক হয়েছে` +
-                (stillFailed ? `, ${stillFailed}টি সার্ভার এখনো ব্যর্থ/চলছে (আপলোড পেজে কারণ দেখুন)` : ', সব সার্ভার ঠিক ✅') +
-                (data.errors?.length ? ` | ত্রুটি: ${data.errors[0].error}` : '')
+                `Repair finished: ${data.count} file(s) checked` +
+                (stillFailed ? `, ${stillFailed} server(s) still failing or pending (see the upload page for reasons)` : ', all servers OK') +
+                (data.errors?.length ? ` | Error: ${data.errors[0].error}` : '')
             );
             await loadAll(user.id);
         } catch (e) {
@@ -222,67 +247,72 @@ export default function FileManagerPage() {
 
     if (loadingAuth) {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-mono">
-                <p className="text-xs text-blue-400 animate-pulse">Loading File Manager...</p>
+            <div className="ms-app flex items-center justify-center">
+                <div className="flex items-center gap-3 text-sm text-blue-400">
+                    <IconActivity size={18} className="ms-spin" />
+                    <span>Loading file manager…</span>
+                </div>
             </div>
         );
     }
 
+    const partialCount = files.filter((f) => statusOf(f) === 'Partial').length;
+
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex font-mono">
+        <div className="ms-app flex">
             <Sidebar />
 
             <div className="flex-1 flex flex-col min-w-0">
-                <header className="h-16 border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <span className="text-blue-500 text-lg">📁</span>
-                        <h1 className="text-xs font-extrabold text-white uppercase tracking-wider">Cloud File Manager</h1>
+                <header className="ms-topbar">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 shrink-0 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-400 flex items-center justify-center">
+                            <IconFolder size={18} />
+                        </span>
+                        <h1 className="ms-h1 truncate">File Manager</h1>
+                        <span className="ms-badge hidden sm:inline-flex">{files.length} files</span>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-xs text-slate-400 hidden sm:inline">{user?.email}</span>
-                        <Link
-                            href="/gdrive-upload"
-                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition shadow-lg shadow-blue-600/20"
-                        >
-                            ⬆️ Upload New File
-                        </Link>
-                    </div>
+                    <Link href="/gdrive-upload" className="ms-btn ms-btn-primary ms-btn-sm shrink-0">
+                        <IconUpload size={15} />
+                        <span className="hidden sm:inline">Upload new file</span>
+                        <span className="sm:hidden">Upload</span>
+                    </Link>
                 </header>
 
-                <main className="flex-1 p-4 lg:p-8 space-y-4 max-w-6xl w-full mx-auto">
+                <main className="ms-main flex-1 w-full max-w-6xl mx-auto space-y-4">
                     {notice && (
-                        <div className="p-3 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200">{notice}</div>
+                        <div className="ms-alert ms-alert-blue ms-fade-up" role="status">
+                            <IconInfo size={16} className="mt-0.5 shrink-0" />
+                            <span className="min-w-0 break-words">{notice}</span>
+                        </div>
                     )}
 
-                    {/* Toolbar */}
-                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 bg-slate-900/80 border border-slate-800 p-3 rounded-2xl">
-                        <input
-                            type="checkbox"
-                            checked={allVisibleSelected}
-                            onChange={toggleSelectAll}
-                            className="w-4 h-4 accent-blue-600 cursor-pointer self-center"
-                            title="Select all on this page"
-                        />
+                    {/* Search + filters */}
+                    <div className="ms-card p-3 sm:p-4 space-y-3">
                         <form
-                            className="flex flex-1 gap-2"
+                            className="flex gap-2"
                             onSubmit={(e) => { e.preventDefault(); setSearchQuery(searchInput); setPage(1); }}
                         >
-                            <input
-                                type="text"
-                                placeholder="Search by name..."
-                                value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
-                                className="flex-1 bg-slate-950 border border-slate-800 text-slate-100 text-xs rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500"
-                            />
-                            <button type="submit" className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl cursor-pointer">
-                                Search
-                            </button>
+                            <div className="relative flex-1 min-w-0">
+                                <IconSearch size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                <input
+                                    ref={searchRef}
+                                    type="search"
+                                    placeholder="Search by name"
+                                    value={searchInput}
+                                    onChange={(e) => setSearchInput(e.target.value)}
+                                    className="ms-input"
+                                    style={{ paddingLeft: 40 }}
+                                    aria-label="Search files by name"
+                                />
+                            </div>
+                            <button type="submit" className="ms-btn ms-btn-primary">Search</button>
                         </form>
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-2 gap-2 sm:flex">
                             <select
                                 value={statusFilter}
                                 onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-                                className="bg-slate-950 border border-slate-800 text-xs rounded-xl px-3 py-2.5 text-slate-200"
+                                className="ms-input sm:w-44"
+                                aria-label="Filter by status"
                             >
                                 <option>All</option>
                                 <option>Completed</option>
@@ -293,70 +323,53 @@ export default function FileManagerPage() {
                             <select
                                 value={pageSize}
                                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                                className="bg-slate-950 border border-slate-800 text-xs rounded-xl px-3 py-2.5 text-slate-200"
+                                className="ms-input sm:w-40"
+                                aria-label="Items per page"
                             >
                                 {[12, 24, 50, 100].map((n) => (
-                                    <option key={n} value={n}>{n} Items</option>
+                                    <option key={n} value={n}>{n} per page</option>
                                 ))}
+                            </select>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+                                className="ms-input col-span-2 sm:col-span-1 sm:w-44"
+                                aria-label="Sort files"
+                            >
+                                <option value="new">Newest first</option>
+                                <option value="old">Oldest first</option>
+                                <option value="name">Name A-Z</option>
                             </select>
                         </div>
                     </div>
 
-                    {/* Selection bar */}
-                    {selected.size > 0 && (
-                        <div className="flex flex-wrap items-center justify-between gap-3 bg-blue-600 rounded-2xl px-4 py-3">
-                            <span className="text-xs font-bold text-white">{selected.size} file(s) selected</span>
-                            <div className="flex flex-wrap gap-2">
+                    {/* Summary row */}
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-1 text-xs ms-muted">
+                        <label className="flex items-center gap-2.5 cursor-pointer select-none min-h-[32px]">
+                            <input type="checkbox" className="ms-check" checked={allVisibleSelected} onChange={toggleSelectAll} />
+                            <span>Select all on this page</span>
+                        </label>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <span><b className="text-white">{filtered.length}</b> file{filtered.length === 1 ? '' : 's'}</span>
+                            {partialCount > 0 && statusFilter !== 'Partial' && (
                                 <button
-                                    onClick={() => copyText(selectedFiles.map(pageLink).join('\n'), 'Download page links copied! 📋')}
-                                    className="px-3 py-1.5 rounded-lg bg-blue-400/40 hover:bg-blue-400/60 text-white text-xs font-bold cursor-pointer"
-                                >
-                                    🔗 Links
-                                </button>
-                                <button
-                                    onClick={() => copyText(selectedFiles.map(embedLink).join('\n'), 'Embed links copied! 📋')}
-                                    className="px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold cursor-pointer"
-                                >
-                                    ▶ Embeds
-                                </button>
-                                <button
-                                    disabled={busy}
-                                    onClick={() => repairFiles(selectedFiles)}
-                                    className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
-                                >
-                                    {busy ? '⏳ Repairing...' : '🛠 Repair'}
-                                </button>
-                                <button
-                                    onClick={() => deleteFiles(selectedFiles.map((f) => f.id))}
-                                    className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
-                                >
-                                    🗑 Delete
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Summary */}
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
-                        <span>
-                            Total: <span className="text-blue-400 font-bold">{filtered.length}</span> file(s)
-                            {filtered.some((f) => statusOf(f) === 'Partial') && (
-                                <button
+                                    type="button"
                                     onClick={() => { setStatusFilter('Partial'); setPage(1); }}
-                                    className="ml-3 text-amber-400 hover:underline cursor-pointer"
+                                    className="ms-badge ms-badge-amber cursor-pointer"
                                 >
-                                    ⚠ {files.filter((f) => statusOf(f) === 'Partial').length} partial — show
+                                    <IconAlert size={12} /> {partialCount} partial
                                 </button>
                             )}
-                        </span>
-                        <span>Page {currentPage} / {totalPages}</span>
+                            <span>Page {currentPage} / {totalPages}</span>
+                        </div>
                     </div>
 
                     {/* List */}
                     <div className="space-y-3">
                         {visible.length === 0 ? (
-                            <div className="text-center py-20 bg-slate-900/40 border border-slate-800/80 rounded-3xl">
-                                <p className="text-xs text-slate-500">No files found.</p>
+                            <div className="ms-card py-16 px-4 text-center">
+                                <IconInbox size={34} className="mx-auto text-slate-600" />
+                                <p className="mt-3 text-sm text-slate-400">No files found.</p>
                             </div>
                         ) : (
                             visible.map((file) => {
@@ -367,101 +380,136 @@ export default function FileManagerPage() {
                                 return (
                                     <div
                                         key={file.id}
-                                        className={`bg-slate-900 border rounded-2xl p-4 transition ${
-                                            selected.has(file.id) ? 'border-blue-500/60' : 'border-slate-800 hover:border-slate-700'
-                                        }`}
+                                        className={`ms-card p-3 sm:p-4 transition-colors ${selected.has(file.id) ? '!border-blue-400/50' : ''}`}
                                     >
-                                        <div className="flex flex-col md:flex-row md:items-center gap-3">
-                                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selected.has(file.id)}
-                                                    onChange={() => toggleSelect(file.id)}
-                                                    className="w-4 h-4 accent-blue-600 cursor-pointer shrink-0"
-                                                />
-                                                <span className="p-2.5 rounded-xl bg-purple-600/15 text-purple-300 text-sm shrink-0">🎞️</span>
-                                                <div className="min-w-0 flex-1">
-                                                    {editingFileId === file.id ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <input
-                                                                type="text"
-                                                                value={newFileName}
-                                                                onChange={(e) => setNewFileName(e.target.value)}
-                                                                className="flex-1 min-w-0 bg-slate-950 border border-blue-500 text-white text-xs px-2.5 py-1 rounded-lg"
-                                                            />
-                                                            <button onClick={() => handleRename(file.id)} className="px-3 py-1 bg-blue-600 text-white text-[10px] font-bold rounded-lg cursor-pointer">Save</button>
-                                                            <button onClick={() => setEditingFileId(null)} className="px-3 py-1 bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg cursor-pointer">Cancel</button>
+                                        <div className="flex items-start gap-3">
+                                            <input
+                                                type="checkbox"
+                                                className="ms-check mt-2.5"
+                                                checked={selected.has(file.id)}
+                                                onChange={() => toggleSelect(file.id)}
+                                                aria-label={`Select ${file.name}`}
+                                            />
+                                            <span className="w-10 h-10 shrink-0 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-400 flex items-center justify-center">
+                                                <IconFilm size={18} />
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                                {editingFileId === file.id ? (
+                                                    <div className="flex flex-col sm:flex-row gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={newFileName}
+                                                            onChange={(e) => setNewFileName(e.target.value)}
+                                                            onKeyDown={(e) => { if (e.key === 'Enter') handleRename(file.id); if (e.key === 'Escape') setEditingFileId(null); }}
+                                                            className="ms-input"
+                                                            autoFocus
+                                                            aria-label="New file name"
+                                                        />
+                                                        <div className="flex gap-2">
+                                                            <button type="button" onClick={() => handleRename(file.id)} className="ms-btn ms-btn-primary ms-btn-sm"><IconCheck size={14} /> Save</button>
+                                                            <button type="button" onClick={() => setEditingFileId(null)} className="ms-btn ms-btn-ghost ms-btn-sm"><IconX size={14} /> Cancel</button>
                                                         </div>
-                                                    ) : (
-                                                        <h4 className="text-xs font-bold text-white truncate" title={file.name}>{file.name}</h4>
-                                                    )}
-                                                    <p className="text-[10px] text-slate-400 mt-0.5">
-                                                        {file.size} • {file.date} • {ms.length} server{ms.length === 1 ? '' : 's'} • ID: {file.id}
-                                                    </p>
+                                                    </div>
+                                                ) : (
+                                                    <h3 className="text-sm font-semibold text-white leading-snug break-words" title={file.name}>{file.name}</h3>
+                                                )}
+                                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                                    <span className={`ms-badge ${STATUS_BADGE[st]}`} title={missing.length ? `Missing: ${missing.join(', ')}` : ''}>
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-current" /> {st}
+                                                    </span>
+                                                    {file.size && <span className="ms-badge">{file.size}</span>}
+                                                    {file.date && <span className="ms-badge">{file.date}</span>}
+                                                    <span className="ms-badge">{ms.length} server{ms.length === 1 ? '' : 's'}</span>
+                                                    <span className="ms-badge ms-code">ID {file.id}</span>
                                                 </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 self-end md:self-auto">
-                                                <span
-                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${STATUS_STYLE[st]}`}
-                                                    title={missing.length ? `লিংক নেই: ${missing.join(', ')}` : ''}
-                                                >
-                                                    ● {st}
-                                                </span>
-                                                <button onClick={() => toggleExpand(file.id)} title="Server links" className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs cursor-pointer">
-                                                    {isOpen ? '▲' : '▼'}
-                                                </button>
-                                                <button onClick={() => copyText(pageLink(file), 'Download page link copied! 📋')} title="Copy download page link" className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs cursor-pointer">🔗</button>
-                                                <button onClick={() => copyText(iframeCode(file), 'Embed iframe code copied! 📋')} title="Copy embed iframe code" className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs cursor-pointer">▶</button>
-                                                <button onClick={() => { setEditingFileId(file.id); setNewFileName(file.name || ''); }} title="Rename" className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs cursor-pointer">✏️</button>
-                                                <button
-                                                    disabled={busy}
-                                                    onClick={() => repairFiles([file])}
-                                                    title={missing.length ? `Repair: ${missing.join(', ')}` : 'Repair / re-check servers'}
-                                                    className={`w-8 h-8 rounded-lg text-xs cursor-pointer disabled:opacity-50 ${
-                                                        missing.length ? 'bg-purple-600 hover:bg-purple-500' : 'bg-slate-800 hover:bg-slate-700'
-                                                    }`}
-                                                >
-                                                    🛠
-                                                </button>
-                                                <button onClick={() => deleteFiles([file.id])} title="Delete" className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-rose-500/30 text-xs cursor-pointer">🗑</button>
                                             </div>
                                         </div>
 
+                                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                                            <button type="button" onClick={() => toggleExpand(file.id)} title="Server links" aria-expanded={isOpen} className="ms-btn ms-btn-ghost ms-btn-icon">
+                                                <IconChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                                            </button>
+                                            <button type="button" onClick={() => copyText(pageLink(file), 'Download page link copied')} title="Copy download page link" className="ms-btn ms-btn-ghost ms-btn-icon">
+                                                <IconLink size={16} />
+                                            </button>
+                                            <button type="button" onClick={() => copyText(iframeCode(file), 'Embed code copied')} title="Copy embed iframe code" className="ms-btn ms-btn-ghost ms-btn-icon">
+                                                <IconCode size={16} />
+                                            </button>
+                                            <button type="button" onClick={() => { setEditingFileId(file.id); setNewFileName(file.name || ''); }} title="Rename" className="ms-btn ms-btn-ghost ms-btn-icon">
+                                                <IconPencil size={16} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={busy}
+                                                onClick={() => repairFiles([file])}
+                                                title={missing.length ? `Repair: ${missing.join(', ')}` : 'Re-check servers'}
+                                                className={`ms-btn ms-btn-icon ${missing.length ? 'ms-btn-primary' : 'ms-btn-ghost'}`}
+                                            >
+                                                <IconWrench size={16} />
+                                            </button>
+                                            <button type="button" onClick={() => deleteFiles([file.id])} title="Delete" className="ms-btn ms-btn-danger ms-btn-icon">
+                                                <IconTrash size={16} />
+                                            </button>
+                                        </div>
+
                                         {isOpen && (
-                                            <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
+                                            <div className="mt-4 pt-4 border-t border-white/10 space-y-3 ms-fade-up">
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <input readOnly value={pageLink(file)} className="flex-1 min-w-0 bg-slate-950 border border-slate-800 text-slate-300 text-[11px] rounded-xl px-3 py-2" />
-                                                        <button onClick={() => copyText(pageLink(file), 'Download page link copied! 📋')} className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold rounded-xl cursor-pointer">Copy</button>
+                                                    <div>
+                                                        <span className="ms-label">Download page</span>
+                                                        <div className="flex gap-2">
+                                                            <input readOnly value={pageLink(file)} className="ms-input ms-code" onFocus={(e) => e.target.select()} />
+                                                            <button type="button" onClick={() => copyText(pageLink(file), 'Download page link copied')} className="ms-btn ms-btn-primary ms-btn-icon shrink-0" title="Copy">
+                                                                <IconCopy size={16} />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <input readOnly value={embedLink(file)} className="flex-1 min-w-0 bg-slate-950 border border-slate-800 text-slate-300 text-[11px] rounded-xl px-3 py-2" />
-                                                        <button onClick={() => copyText(iframeCode(file), 'Embed iframe code copied! 📋')} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl cursor-pointer">Embed</button>
+                                                    <div>
+                                                        <span className="ms-label">Embed player</span>
+                                                        <div className="flex gap-2">
+                                                            <input readOnly value={embedLink(file)} className="ms-input ms-code" onFocus={(e) => e.target.select()} />
+                                                            <button type="button" onClick={() => copyText(iframeCode(file), 'Embed code copied')} className="ms-btn ms-btn-primary ms-btn-icon shrink-0" title="Copy iframe code">
+                                                                <IconCode size={16} />
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
 
                                                 {ms.length > 0 ? (
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                         {ms.map((m) => (
-                                                            <div key={m.id} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2">
-                                                                <span className="text-[10px] font-bold text-white w-28 shrink-0 truncate">{m.name}</span>
-                                                                <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 truncate flex-1 hover:underline">{m.url}</a>
-                                                                <button onClick={() => copyText(m.url)} className="text-[10px] text-slate-300 hover:text-white cursor-pointer">Copy</button>
+                                                            <div key={m.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                                                                <div className="min-w-0 flex-1">
+                                                                    <p className="text-[13px] font-semibold text-white truncate">{m.name}</p>
+                                                                    <p className="text-[11px] ms-muted truncate">{hostOf(m.url) || m.type}</p>
+                                                                </div>
+                                                                <span className={`ms-badge ${m.embed ? 'ms-badge-blue' : ''}`}>{m.embed ? 'Stream' : 'Download'}</span>
+                                                                <a href={m.url} target="_blank" rel="noopener noreferrer" title="Open" aria-label={`Open ${m.name}`} className="ms-btn ms-btn-ghost ms-btn-sm ms-btn-icon">
+                                                                    <IconExternal size={14} />
+                                                                </a>
+                                                                <button type="button" onClick={() => copyText(m.url, `${m.name} link copied`)} title="Copy link" className="ms-btn ms-btn-ghost ms-btn-sm ms-btn-icon">
+                                                                    <IconCopy size={14} />
+                                                                </button>
                                                                 {m.embed && (
-                                                                    <button onClick={() => copyText(m.embed)} className="text-[10px] text-indigo-400 hover:text-indigo-300 cursor-pointer">Embed</button>
+                                                                    <button type="button" onClick={() => copyText(m.embed, `${m.name} embed link copied`)} title="Copy host embed link" className="ms-btn ms-btn-ghost ms-btn-sm ms-btn-icon">
+                                                                        <IconCode size={14} />
+                                                                    </button>
                                                                 )}
                                                             </div>
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <p className="text-[11px] text-amber-400">কোনো সার্ভার লিংক সেভ হয়নি। 🛠 Repair চাপুন।</p>
+                                                    <div className="ms-alert ms-alert-amber">
+                                                        <IconAlert size={16} className="mt-0.5 shrink-0" />
+                                                        <span>No server links are saved for this file yet. Press the repair button to try again.</span>
+                                                    </div>
                                                 )}
 
                                                 {missing.length > 0 && (
-                                                    <p className="text-[11px] text-amber-400">
-                                                        ⚠ লিংক নেই: {missing.join(', ')} — 🛠 Repair চাপলে শুধু এগুলো আবার চেষ্টা হবে।
-                                                    </p>
+                                                    <div className="ms-alert ms-alert-amber">
+                                                        <IconAlert size={16} className="mt-0.5 shrink-0" />
+                                                        <span className="min-w-0 break-words">Missing links: {missing.join(', ')}. Repair will retry only these servers.</span>
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
@@ -473,22 +521,35 @@ export default function FileManagerPage() {
 
                     {/* Pagination */}
                     {totalPages > 1 && (
-                        <div className="flex items-center justify-center gap-2 pt-2">
-                            <button
-                                disabled={currentPage <= 1}
-                                onClick={() => setPage(currentPage - 1)}
-                                className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs disabled:opacity-40 cursor-pointer"
-                            >
-                                ← Prev
+                        <div className="flex items-center justify-center gap-3 pt-2">
+                            <button type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)} className="ms-btn ms-btn-ghost">
+                                <IconChevronLeft size={16} /> Prev
                             </button>
-                            <span className="text-xs text-slate-400">{currentPage} / {totalPages}</span>
-                            <button
-                                disabled={currentPage >= totalPages}
-                                onClick={() => setPage(currentPage + 1)}
-                                className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs disabled:opacity-40 cursor-pointer"
-                            >
-                                Next →
+                            <span className="text-xs ms-muted tabular-nums">{currentPage} / {totalPages}</span>
+                            <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)} className="ms-btn ms-btn-ghost">
+                                Next <IconChevronRight size={16} />
                             </button>
+                        </div>
+                    )}
+
+                    {/* Selection bar: stays at the bottom of the screen while files are selected */}
+                    {selected.size > 0 && (
+                        <div className="sticky bottom-3 z-20 ms-card p-3 flex flex-wrap items-center justify-between gap-2 !border-blue-400/40 shadow-2xl shadow-black/50 backdrop-blur-xl">
+                            <span className="text-xs font-semibold text-white px-1">{selected.size} selected</span>
+                            <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={() => copyText(selectedFiles.map(pageLink).join('\n'), 'Download page links copied')} className="ms-btn ms-btn-ghost ms-btn-sm">
+                                    <IconLink size={14} /> Links
+                                </button>
+                                <button type="button" onClick={() => copyText(selectedFiles.map(embedLink).join('\n'), 'Embed links copied')} className="ms-btn ms-btn-ghost ms-btn-sm">
+                                    <IconCode size={14} /> Embeds
+                                </button>
+                                <button type="button" disabled={busy} onClick={() => repairFiles(selectedFiles)} className="ms-btn ms-btn-primary ms-btn-sm">
+                                    {busy ? <IconRefresh size={14} className="ms-spin" /> : <IconWrench size={14} />} {busy ? 'Repairing' : 'Repair'}
+                                </button>
+                                <button type="button" onClick={() => deleteFiles(selectedFiles.map((f) => f.id))} className="ms-btn ms-btn-danger ms-btn-sm">
+                                    <IconTrash size={14} /> Delete
+                                </button>
+                            </div>
                         </div>
                     )}
                 </main>

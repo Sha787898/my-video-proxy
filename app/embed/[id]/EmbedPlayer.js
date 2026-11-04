@@ -19,6 +19,10 @@ const makeCode = () => Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Mat
 const Ico = {
     crop: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14" /></svg>,
     lock: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></svg>,
+    back: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>,
+    next: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>,
+    rotl: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>,
+    rotr: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>,
     chevron: <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor"><path d="M5 7L1 3h8z" /></svg>,
     play: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><polygon points="6 4 20 12 6 20 6 4" /></svg>,
     link: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1" /><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1" /></svg>,
@@ -328,6 +332,28 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
         runCountdown();
     };
 
+    // keyboard: F fullscreen, S servers, L lock, Esc closes panels (ignored while typing)
+    const kb = useRef({});
+    kb.current = {
+        fullscreen: toggleFullscreen,
+        servers: () => togglePanel('servers'),
+        lock: () => { setLocked(true); setPanel(null); pokeLock(); },
+    };
+    useEffect(() => {
+        const h = (e) => {
+            const t = e.target;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            const k = String(e.key).toLowerCase();
+            if (k === 'f') kb.current.fullscreen();
+            else if (k === 's') kb.current.servers();
+            else if (k === 'l') kb.current.lock();
+            else if (e.key === 'Escape') setPanel(null);
+        };
+        window.addEventListener('keydown', h);
+        return () => window.removeEventListener('keydown', h);
+    }, []);
+
     // crop / zoom / rotate applied to the player frame
     const swap = view.rot % 180 !== 0;
     const iw = swap ? box.h : box.w;
@@ -372,7 +398,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     return (
         <div ref={rootRef} className="ep-root" onMouseMove={wake} onTouchStart={wake}>
             <style>{`
-                .ep-root { --ac: #d4444c; --ac-hi: #ff6b73; --acsoft: rgba(212,68,76,.09); --line: rgba(255,255,255,.07); position: fixed; inset: 0; z-index: 99990; background: #000; color: #e5e7eb; overflow: hidden; font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+                .ep-root { --ac: #3b7bf5; --ac-hi: #ff6b73; --acsoft: rgba(59,123,245,.09); --line: rgba(255,255,255,.07); position: fixed; inset: 0; z-index: 99990; background: #000; color: #e5e7eb; overflow: hidden; font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; }
                 .ep-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
                 .ep-hot { position: absolute; top: 0; left: 0; right: 0; height: 48px; z-index: 15; }
                 .ep-back { position: absolute; inset: 0; z-index: 18; }
@@ -382,15 +408,15 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-off { opacity: 0; transform: translateY(-6px); }
                 .ep-off > * { pointer-events: none !important; }
 
-                .ep-pill, .ep-ico { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 28px; border: 1px solid var(--line); background: rgba(9,9,12,.78); color: #eceef2; border-radius: 8px; cursor: pointer; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); font-family: inherit; overflow: hidden; transition: background .2s, border-color .2s, transform .2s; }
+                .ep-pill, .ep-ico { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 28px; border: 1px solid var(--line); background: rgba(8,12,20,.78); color: #eceef2; border-radius: 8px; cursor: pointer; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); font-family: inherit; overflow: hidden; transition: background .2s, border-color .2s, transform .2s; }
                 .ep-pill { padding: 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .02em; }
                 .ep-ico { width: 28px; }
                 .ep-pill::after, .ep-ico::after { content: ''; position: absolute; left: 10%; right: 10%; bottom: 0; height: 1.5px; background: linear-gradient(90deg, transparent, var(--ac-hi), transparent); transform: scaleX(0); transition: transform .3s ease; }
-                .ep-pill:hover, .ep-ico:hover { background: rgba(22,16,20,.94); border-color: rgba(212,68,76,.4); transform: translateY(-1px); }
+                .ep-pill:hover, .ep-ico:hover { background: rgba(16,24,38,.94); border-color: rgba(59,123,245,.4); transform: translateY(-1px); }
                 .ep-pill:hover::after, .ep-ico:hover::after { transform: scaleX(1); }
                 .ep-ico:active, .ep-pill:active { transform: scale(.95); }
-                .ep-ico.live { border-color: rgba(212,68,76,.6); color: #ff9aa0; }
-                .ep-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 6px rgba(212,68,76,.8); flex-shrink: 0; animation: ep-pulse 2s ease-in-out infinite; }
+                .ep-ico.live { border-color: rgba(59,123,245,.6); color: #9cc2ff; }
+                .ep-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 6px rgba(59,123,245,.8); flex-shrink: 0; animation: ep-pulse 2s ease-in-out infinite; }
                 @keyframes ep-pulse { 50% { opacity: .45; } }
                 .ep-chev { opacity: .6; display: flex; transition: transform .25s; }
                 .ep-pill:hover .ep-chev { transform: translateY(1px); }
@@ -398,30 +424,30 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-badge { position: absolute; top: -4px; right: -4px; min-width: 13px; height: 13px; padding: 0 3px; border-radius: 7px; background: var(--ac); color: #fff; font-size: 8.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
                 .ep-left { position: relative; }
 
-                .ep-panel { position: absolute; top: 34px; width: min(204px, calc(100vw - 16px)); background: linear-gradient(180deg, rgba(17,15,19,.97), rgba(8,8,11,.98)); border: 1px solid rgba(255,255,255,.09); border-top: 1px solid rgba(212,68,76,.45); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.75); overflow: hidden; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transform-origin: top left; animation: ep-pop .2s ease-out; }
+                .ep-panel { position: absolute; top: 34px; width: min(204px, calc(100vw - 16px)); background: linear-gradient(180deg, rgba(15,22,34,.97), rgba(7,11,18,.98)); border: 1px solid rgba(255,255,255,.09); border-top: 1px solid rgba(59,123,245,.45); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.75); overflow: hidden; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transform-origin: top left; animation: ep-pop .2s ease-out; }
                 @keyframes ep-pop { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
                 .ep-panel.left { left: 0; }
                 .ep-panel.right { right: 0; width: min(200px, calc(100vw - 16px)); transform-origin: top right; }
                 .ep-ph { display: flex; align-items: center; gap: 7px; padding: 7px 8px 7px 10px; border-bottom: 1px solid var(--line); }
-                .ep-ph .ic { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--acsoft); color: #ff9aa0; flex-shrink: 0; }
+                .ep-ph .ic { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--acsoft); color: #9cc2ff; flex-shrink: 0; }
                 .ep-ph .t { font-size: 11px; font-weight: 700; color: #fff; letter-spacing: .03em; }
-                .ep-ph .s { font-size: 9px; color: #8b8f9c; margin-top: 1px; max-width: 104px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-                .ep-ph .n { margin-left: auto; font-size: 9px; font-weight: 700; color: #cfd2da; background: rgba(255,255,255,.07); border-radius: 999px; padding: 1px 6px; }
-                .ep-ph .x, .ep-ph .g { width: 22px; height: 22px; border: 0; border-radius: 6px; background: transparent; color: #8b8f9c; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1; transition: .2s; flex-shrink: 0; }
+                .ep-ph .s { font-size: 9px; color: #8e9bb0; margin-top: 1px; max-width: 104px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .ep-ph .n { margin-left: auto; font-size: 9px; font-weight: 700; color: #cdd5e2; background: rgba(255,255,255,.07); border-radius: 999px; padding: 1px 6px; }
+                .ep-ph .x, .ep-ph .g { width: 22px; height: 22px; border: 0; border-radius: 6px; background: transparent; color: #8e9bb0; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1; transition: .2s; flex-shrink: 0; }
                 .ep-ph .x { margin-left: auto; }
                 .ep-ph .x:hover, .ep-ph .g:hover { background: rgba(255,255,255,.08); color: #fff; }
                 .ep-ph .g:hover svg { transform: rotate(60deg); }
                 .ep-ph .g svg { transition: transform .35s; }
 
-                .ep-list { max-height: min(42vh, 230px); overflow-y: auto; padding: 4px 6px 6px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: thin; scrollbar-color: rgba(212,68,76,.4) transparent; }
+                .ep-list { max-height: min(42vh, 230px); overflow-y: auto; padding: 4px 6px 6px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: thin; scrollbar-color: rgba(59,123,245,.4) transparent; }
                 .ep-list::-webkit-scrollbar { width: 3px; }
                 .ep-list::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
-                .ep-list::-webkit-scrollbar-thumb { background: rgba(212,68,76,.4); border-radius: 999px; }
+                .ep-list::-webkit-scrollbar-thumb { background: rgba(59,123,245,.4); border-radius: 999px; }
 
                 /* line-style server rows: thin accent line, slide + underline sweep on hover */
-                .ep-row { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px 0 10px; border: 0; background: transparent; color: #a3a8b6; border-radius: 6px; cursor: pointer; font-family: inherit; text-align: left; overflow: hidden; transition: background .2s, color .2s, padding .2s; }
-                .ep-row::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--ac); transform: scaleY(0); transition: transform .25s ease; box-shadow: 0 0 8px rgba(212,68,76,.7); }
-                .ep-row::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 1px; background: linear-gradient(90deg, rgba(212,68,76,.7), transparent); transform: scaleX(0); transform-origin: left; transition: transform .35s ease; }
+                .ep-row { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px 0 10px; border: 0; background: transparent; color: #a6b1c4; border-radius: 6px; cursor: pointer; font-family: inherit; text-align: left; overflow: hidden; transition: background .2s, color .2s, padding .2s; }
+                .ep-row::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--ac); transform: scaleY(0); transition: transform .25s ease; box-shadow: 0 0 8px rgba(59,123,245,.7); }
+                .ep-row::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 1px; background: linear-gradient(90deg, rgba(59,123,245,.7), transparent); transform: scaleX(0); transform-origin: left; transition: transform .35s ease; }
                 .ep-row:hover { background: rgba(255,255,255,.04); color: #fff; padding-left: 14px; }
                 .ep-row:hover::after { transform: scaleX(1); }
                 .ep-row:hover .ri { color: var(--ac-hi); transform: scale(1.15); }
@@ -438,51 +464,51 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-sw.on::after { left: 12px; }
 
                 .ep-dl { display: flex; align-items: center; gap: 7px; padding: 5px 8px; margin-bottom: 2px; border-radius: 8px; background: rgba(255,255,255,.03); border: 1px solid var(--line); transition: border-color .2s; }
-                .ep-dl:hover { border-color: rgba(212,68,76,.4); }
-                .ep-dl a { color: #ff9aa0; font-size: 11px; font-weight: 700; text-decoration: none; }
+                .ep-dl:hover { border-color: rgba(59,123,245,.4); }
+                .ep-dl a { color: #9cc2ff; font-size: 11px; font-weight: 700; text-decoration: none; }
                 .ep-dl a:hover { text-decoration: underline; }
                 .ep-dl small { display: block; font-size: 8.5px; color: #7b8090; margin-top: 1px; }
                 .ep-mini { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 3px 7px; border: 0; border-radius: 6px; background: rgba(255,255,255,.08); color: #e5e7eb; font-size: 9.5px; font-weight: 600; cursor: pointer; font-family: inherit; transition: .2s; }
-                .ep-mini:hover { background: rgba(212,68,76,.35); }
+                .ep-mini:hover { background: rgba(59,123,245,.35); }
 
                 .ep-set { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; background: transparent; color: #d1d5db; border-radius: 7px; cursor: pointer; font-family: inherit; text-align: left; transition: .2s; }
                 .ep-set:hover { background: rgba(255,255,255,.05); padding-left: 11px; }
                 .ep-set .l { flex: 1; min-width: 0; }
                 .ep-set .l b { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; }
-                .ep-set .l i { display: block; font-style: normal; font-size: 8.5px; color: #747988; margin-top: 1px; line-height: 1.3; }
-                .ep-tip { padding: 6px 10px 8px; font-size: 9px; line-height: 1.45; color: #747988; border-top: 1px solid var(--line); }
+                .ep-set .l i { display: block; font-style: normal; font-size: 8.5px; color: #6f7d93; margin-top: 1px; line-height: 1.3; }
+                .ep-tip { padding: 6px 10px 8px; font-size: 9px; line-height: 1.45; color: #6f7d93; border-top: 1px solid var(--line); }
 
                 .ep-pbody { padding: 9px; display: flex; flex-direction: column; gap: 7px; }
-                .ep-btn { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 6px; height: 28px; border: 1px solid rgba(212,68,76,.5); border-radius: 8px; background: rgba(212,68,76,.14); color: #ffd0d3; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; transition: .2s; }
-                .ep-btn:hover { background: rgba(212,68,76,.26); transform: translateY(-1px); }
-                .ep-btn.ghost { background: rgba(255,255,255,.05); border-color: var(--line); color: #cfd2da; }
+                .ep-btn { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 6px; height: 28px; border: 1px solid rgba(59,123,245,.5); border-radius: 8px; background: rgba(59,123,245,.14); color: #dbe8ff; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; transition: .2s; }
+                .ep-btn:hover { background: rgba(59,123,245,.26); transform: translateY(-1px); }
+                .ep-btn.ghost { background: rgba(255,255,255,.05); border-color: var(--line); color: #cdd5e2; }
                 .ep-join { display: flex; gap: 5px; }
                 .ep-join input { flex: 1; min-width: 0; height: 28px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: #fff; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-family: inherit; outline: none; transition: border-color .2s; }
-                .ep-join input:focus { border-color: rgba(212,68,76,.6); }
+                .ep-join input:focus { border-color: rgba(59,123,245,.6); }
                 .ep-join button { padding: 0 11px; height: 28px; border: 0; border-radius: 8px; background: var(--ac); color: #fff; font-weight: 700; font-size: 11px; cursor: pointer; font-family: inherit; transition: .2s; }
                 .ep-join button:hover { filter: brightness(1.15); }
                 .ep-code { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 9px; border-radius: 9px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
                 .ep-code b { font-size: 15px; letter-spacing: .2em; color: #fff; font-family: ui-monospace, monospace; }
-                .ep-live { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #ff9aa0; }
-                .ep-note { font-size: 9px; line-height: 1.45; color: #747988; }
+                .ep-live { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #9cc2ff; }
+                .ep-note { font-size: 9px; line-height: 1.45; color: #6f7d93; }
 
                 .ep-center { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; pointer-events: none; }
                 .ep-spinner { width: 38px; height: 38px; border-radius: 50%; border: 2px solid rgba(255,255,255,.07); border-top-color: var(--ac); animation: ep-spin .8s linear infinite; }
                 @keyframes ep-spin { to { transform: rotate(360deg); } }
-                .ep-slow { pointer-events: auto; text-align: center; background: rgba(10,10,13,.93); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 11px; color: #d1d5db; max-width: 86%; }
+                .ep-slow { pointer-events: auto; text-align: center; background: rgba(9,13,21,.93); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 11px; color: #d1d5db; max-width: 86%; }
                 .ep-slow .row { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 8px; }
 
                 /* "Now playing" overlay: never blocks clicks, fades out by itself */
                 .ep-now { position: absolute; left: 12px; bottom: 14px; z-index: 12; pointer-events: none; transition: opacity .6s ease, transform .6s ease; max-width: 70vw; }
                 .ep-now.hide { opacity: 0; transform: translateY(6px); }
-                .ep-now .b { display: inline-block; padding: 2px 8px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #ff9aa0; border-left: 2px solid var(--ac); background: rgba(8,8,11,.7); border-radius: 3px; }
+                .ep-now .b { display: inline-block; padding: 2px 8px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9cc2ff; border-left: 2px solid var(--ac); background: rgba(7,11,18,.7); border-radius: 3px; }
                 .ep-now .t { margin-top: 5px; font-size: 13px; font-weight: 700; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.9); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
                 .ep-cd { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: rgba(0,0,0,.6); backdrop-filter: blur(3px); pointer-events: none; animation: ep-fade .25s; }
-                .ep-cd .big { font-size: 76px; font-weight: 800; color: #fff; text-shadow: 0 0 36px rgba(212,68,76,.8); line-height: 1; }
+                .ep-cd .big { font-size: 76px; font-weight: 800; color: #fff; text-shadow: 0 0 36px rgba(59,123,245,.8); line-height: 1; }
                 .ep-cd .sm { font-size: 11px; color: #d1d5db; letter-spacing: .04em; }
                 @keyframes ep-fade { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
-                .ep-toast { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 6px 12px; border-radius: 999px; background: rgba(10,10,13,.95); border: 1px solid var(--line); color: #f3f4f6; font-size: 10.5px; font-weight: 600; pointer-events: none; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
+                .ep-toast { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 6px 12px; border-radius: 999px; background: rgba(9,13,21,.95); border: 1px solid var(--line); color: #f3f4f6; font-size: 10.5px; font-weight: 600; pointer-events: none; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
 
 
                 /* compact overrides */
@@ -496,16 +522,16 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-ph { padding: 6px 7px 6px 9px; }
                 .ep-ph .s { max-width: 88px; }
                 .ep-dl { height: 24px; padding: 0 4px 0 8px; margin-bottom: 3px; gap: 4px; }
-                .ep-dl a { flex: 1; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #ff9aa0; }
+                .ep-dl a { flex: 1; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #9cc2ff; }
                 .ep-dl a svg { width: 11px; height: 11px; }
                 .ep-mini { margin-left: 0; padding: 3px 6px; }
                 .ep-seg { display: flex; gap: 3px; }
                 .ep-seg button { flex: 1; height: 24px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,255,255,.04); color: #b6bac6; font-size: 10px; font-weight: 600; cursor: pointer; font-family: inherit; transition: .2s; }
                 .ep-seg button:hover { background: rgba(255,255,255,.09); color: #fff; transform: translateY(-1px); }
-                .ep-seg button.on { border-color: rgba(212,68,76,.6); background: var(--acsoft); color: #ffb3b8; }
-                .ep-rng { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: #a3a8b6; }
+                .ep-seg button.on { border-color: rgba(59,123,245,.6); background: var(--acsoft); color: #b9d3ff; }
+                .ep-rng { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: #a6b1c4; }
                 .ep-rng b { color: #fff; float: right; font-weight: 600; }
-                .ep-rng input { width: 100%; accent-color: #d4444c; }
+                .ep-rng input { width: 100%; accent-color: #3b7bf5; }
 
                 /* v4: roomier rows, responsive widths, no text selection, fresh top scrim */
                 .ep-root, .ep-root * { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -544,16 +570,16 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 /* v5: scrollable panels on small screens, green = live/on status, red = brand accent */
                 .ep-panel { display: flex; flex-direction: column; max-height: calc(100vh - 46px); max-height: calc(100dvh - 46px); }
                 .ep-panel > * { flex-shrink: 0; }
-                .ep-panel > .ep-list, .ep-panel > .ep-scroll, .ep-panel > .ep-pbody { flex-shrink: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(212,68,76,.4) transparent; }
+                .ep-panel > .ep-list, .ep-panel > .ep-scroll, .ep-panel > .ep-pbody { flex-shrink: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(59,123,245,.4) transparent; }
                 .ep-scroll::-webkit-scrollbar, .ep-pbody::-webkit-scrollbar { width: 3px; }
-                .ep-scroll::-webkit-scrollbar-thumb, .ep-pbody::-webkit-scrollbar-thumb { background: rgba(212,68,76,.4); border-radius: 999px; }
+                .ep-scroll::-webkit-scrollbar-thumb, .ep-pbody::-webkit-scrollbar-thumb { background: rgba(59,123,245,.4); border-radius: 999px; }
                 .ep-list { max-height: min(60vh, 320px); max-height: min(60dvh, 320px); }
                 .ep-ph { padding: 9px 14px 9px 12px; }
                 .ep-ph .n + .g { margin-left: 8px; margin-right: 2px; }
                 .ep-row { height: 34px; padding: 0 10px 0 13px; box-shadow: inset 0 -1px 0 rgba(255,255,255,.045); }
                 .ep-row:last-child { box-shadow: none; }
                 .ep-row .ri { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,.05); align-items: center; justify-content: center; }
-                .ep-row.on .ri { background: rgba(212,68,76,.2); }
+                .ep-row.on .ri { background: rgba(59,123,245,.2); }
                 .ep-row .cur { display: inline-flex; align-items: center; gap: 5px; color: #4ade80; font-weight: 700; letter-spacing: .12em; }
                 .ep-row .cur::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.9); animation: ep-pulse 2s ease-in-out infinite; }
                 .ep-dl { height: 32px; }
@@ -563,7 +589,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-badge { background: #16a34a; }
                 .ep-sw.on { background: #22c55e; }
                 .ep-lv { padding: 8px 8px 6px; margin-top: 4px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
-                .ep-lvl { font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #a3a8b6; }
+                .ep-lvl { font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #a6b1c4; }
                 @media (max-height: 380px) {
                     .ep-row { height: 28px; }
                     .ep-set { padding: 5px 8px; }
@@ -572,9 +598,9 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 }
 
                 /* v6: container-aware sizes, glass panels, darker muted red, rows that unfold one by one */
-                .ep-root { --ac: #a8323a; --ac-hi: #e0646b; --acsoft: rgba(168,50,58,.10); container-type: size; }
-                .ep-pill, .ep-ico { background: rgba(8,8,11,.5); }
-                .ep-panel { width: clamp(168px, 44cqw, 236px); max-width: calc(100cqw - 16px); max-height: calc(100cqh - 48px); background: linear-gradient(180deg, rgba(14,12,16,.6), rgba(6,6,9,.74)); border: 1px solid rgba(255,255,255,.08); border-top-color: rgba(168,50,58,.45); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2); box-shadow: 0 12px 34px rgba(0,0,0,.55); transform-origin: top center; animation: ep-unfold .32s cubic-bezier(.2,.8,.2,1) both; }
+                .ep-root { --ac: #3b7bf5; --ac-hi: #6ba6ff; --acsoft: rgba(59,123,245,.10); container-type: size; }
+                .ep-pill, .ep-ico { background: rgba(7,11,18,.5); }
+                .ep-panel { width: clamp(168px, 44cqw, 236px); max-width: calc(100cqw - 16px); max-height: calc(100cqh - 48px); background: linear-gradient(180deg, rgba(13,19,30,.6), rgba(7,10,17,.74)); border: 1px solid rgba(255,255,255,.08); border-top-color: rgba(59,123,245,.45); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2); box-shadow: 0 12px 34px rgba(0,0,0,.55); transform-origin: top center; animation: ep-unfold .32s cubic-bezier(.2,.8,.2,1) both; }
                 .ep-panel.right { width: clamp(176px, 46cqw, 244px); }
                 @keyframes ep-unfold { from { opacity: 0; transform: perspective(600px) rotateX(-18deg) scaleY(.6); } to { opacity: 1; transform: none; } }
                 .ep-list { --rh: 34px; perspective: 700px; max-height: min(calc(100cqh - 118px), 320px); }
@@ -615,16 +641,16 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-dl { animation-duration: .26s; animation-delay: 20ms; }
                 .ep-scroll .ep-set { animation-duration: .24s; animation-delay: calc(var(--i, 0) * 28ms + 20ms); }
                 .ep-lock { position: absolute; inset: 0; z-index: 14; background: transparent; touch-action: none; cursor: not-allowed; }
-                .ep-lockbtn { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(8,8,11,.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: #d7dae2; font-family: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; cursor: pointer; overflow: hidden; touch-action: none; }
-                .ep-lockbtn::before { content: ''; position: absolute; inset: 0; background: rgba(168,50,58,.55); transform: scaleX(0); transform-origin: left; }
+                .ep-lockbtn { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(7,11,18,.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: #d7dae2; font-family: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; cursor: pointer; overflow: hidden; touch-action: none; }
+                .ep-lockbtn::before { content: ''; position: absolute; inset: 0; background: rgba(59,123,245,.55); transform: scaleX(0); transform-origin: left; }
                 .ep-lockbtn.hold::before { transform: scaleX(1); transition: transform .7s linear; }
                 .ep-lockbtn > * { position: relative; display: flex; }
 
                 /* v8: lock button hides after 5s, any touch shows it again */
-                .ep-lockbtn { height: 38px; padding: 0 16px 0 6px; gap: 10px; border-radius: 999px; background: linear-gradient(180deg, rgba(24,19,26,.74), rgba(8,8,11,.82)); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 8px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: #e6e8ee; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .3s ease, transform .3s ease; }
+                .ep-lockbtn { height: 38px; padding: 0 16px 0 6px; gap: 10px; border-radius: 999px; background: linear-gradient(180deg, rgba(18,27,42,.74), rgba(7,11,18,.82)); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 8px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: #e6e8ee; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .3s ease, transform .3s ease; }
                 .ep-lockbtn.show { opacity: 1; pointer-events: auto; transform: none; }
-                .ep-lockbtn .lic { width: 26px; height: 26px; border-radius: 50%; background: rgba(168,50,58,.28); align-items: center; justify-content: center; color: #ffb3b8; transition: background .2s; }
-                .ep-lockbtn.hold .lic { background: rgba(168,50,58,.65); }
+                .ep-lockbtn .lic { width: 26px; height: 26px; border-radius: 50%; background: rgba(59,123,245,.28); align-items: center; justify-content: center; color: #b9d3ff; transition: background .2s; }
+                .ep-lockbtn.hold .lic { background: rgba(59,123,245,.65); }
 
                 /* v9: compact on small players (phones, small embedded boxes) */
                 @container (max-width: 520px) {
@@ -650,6 +676,12 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                     .ep-pill { height: 28px; font-size: 10.5px; padding: 0 9px; }
                     .ep-ico { width: 28px; height: 28px; }
                 }
+
+                /* v10: rows never get squashed (old phones), explicit edges for older browsers, icon alignment */
+                .ep-list > *, .ep-pbody > *, .ep-scroll > * { flex-shrink: 0; }
+                .ep-root, .ep-frame, .ep-back, .ep-center, .ep-lock, .ep-cd { top: 0; right: 0; bottom: 0; left: 0; }
+                .ep-now .b { display: inline-flex; align-items: center; gap: 6px; }
+                .ep-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
                 @media (max-width: 480px) {
                     .ep-now .t { font-size: 12px; }
                     .ep-cd .big { font-size: 60px; }
@@ -708,7 +740,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
             {/* "Now playing" badge + title (fades out automatically, never blocks the player controls) */}
             {prefs.title && (
                 <div className={`ep-now ${nowShow ? '' : 'hide'}`}>
-                    <span className="b">▶ Now playing on {current.name}</span>
+                    <span className="b">{Ico.play} Now playing on {current.name}</span>
                     {title && <div className="t">{title}</div>}
                 </div>
             )}
@@ -796,7 +828,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                     {panel === 'settings' && (
                         <div className="ep-panel left">
                             <div className="ep-ph">
-                                <button type="button" className="g" title="Back" onClick={() => setPanel('servers')}>‹</button>
+                                <button type="button" className="g" title="Back" onClick={() => setPanel('servers')}>{Ico.back}</button>
                                 <div className="t">Settings</div>
                                 <button type="button" className="x" onClick={() => setPanel(null)}>{Ico.x}</button>
                             </div>
@@ -846,11 +878,11 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                 </div>
                                 <button type="button" className="ep-set" onClick={() => setPanel('view')}>
                                     <span className="l"><b>Frame{transformed ? ' •' : ''}</b><i>Fit, zoom &amp; rotate</i></span>
-                                    <span style={{ opacity: 0.6, fontSize: 14 }}>›</span>
+                                    <span style={{ opacity: 0.6, display: 'flex' }}>{Ico.next}</span>
                                 </button>
                             </div>
                             <div className="ep-tip">
-                                Ads drawn inside the video itself need a browser ad blocker (uBlock Origin, Brave, AdGuard).
+                                Ads drawn inside the video itself need a browser ad blocker (uBlock Origin, Brave, AdGuard). Keys: F fullscreen, S servers, L lock.
                             </div>
                         </div>
                     )}
@@ -858,7 +890,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                     {panel === 'view' && (
                         <div className="ep-panel left">
                             <div className="ep-ph">
-                                <button type="button" className="g" title="Back" onClick={() => setPanel('settings')}>‹</button>
+                                <button type="button" className="g" title="Back" onClick={() => setPanel('settings')}>{Ico.back}</button>
                                 <div className="t">Frame</div>
                                 <button type="button" className="x" onClick={() => setPanel(null)}>{Ico.x}</button>
                             </div>
@@ -873,8 +905,8 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     <input type="range" min="1" max="2" step="0.05" value={view.zoom} onChange={(e) => setView((v) => ({ ...v, zoom: Number(e.target.value) }))} />
                                 </label>
                                 <div className="ep-seg">
-                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 270) % 360 }))}>⟲ 90°</button>
-                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 90) % 360 }))}>⟳ 90°</button>
+                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 270) % 360 }))}>{Ico.rotl} 90°</button>
+                                    <button type="button" onClick={() => setView((v) => ({ ...v, rot: (v.rot + 90) % 360 }))}>{Ico.rotr} 90°</button>
                                     <button type="button" onClick={() => setView({ fit: 'fit', zoom: 1, rot: 0 })}>Reset</button>
                                 </div>
                                 <div className="ep-note">Fill crops the black bars. Stretch pulls the picture to the screen. Rotate helps when auto-rotate is off. Player controls move with the frame.</div>
@@ -935,7 +967,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                             <button type="button" className="ep-mini" onClick={() => copy(roomLink(room), 'Room link copied')}>{Ico.copy} Link</button>
                                         </div>
                                         <div className="ep-live"><span className="ep-dot" /> {Math.max(peers, 1)} watching</div>
-                                        <button type="button" className="ep-btn" onClick={startTogether}>▶ Start together (3-2-1)</button>
+                                        <button type="button" className="ep-btn" onClick={startTogether}>{Ico.play} Start together (3-2-1)</button>
                                         <button type="button" className="ep-btn ghost" onClick={() => leaveRoom()}>Leave room</button>
                                         <div className="ep-note">Switching server changes it for everyone. Play / pause / seek are controlled by each host player, so press Play yourself after the countdown.</div>
                                     </>

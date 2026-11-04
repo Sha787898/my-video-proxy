@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
+import { IconCloud, IconUpload, IconCheckCircle, IconRefresh, IconKey } from '../components/Icons';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -35,8 +36,10 @@ export default function DriveUploadPage() {
 
     if (loadingAuth) {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-mono">
-                <p className="text-xs text-blue-400 animate-pulse">Checking authorization...</p>
+            <div className="ms-app flex items-center justify-center">
+                <div className="flex items-center gap-2 text-sm text-blue-400">
+                    <IconRefresh size={18} className="ms-spin" /> Checking authorization...
+                </div>
             </div>
         );
     }
@@ -76,7 +79,7 @@ export default function DriveUploadPage() {
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Failed to import Google Drive file');
 
-            setSuccessMsg(`File [ID: ${finalFileId.substring(0, 8)}...] successfully queued and synced! 🚀`);
+            setSuccessMsg(`File [ID: ${finalFileId.substring(0, 8)}...] successfully queued and synced.`);
             setDriveInput('');
             setCustomTitle('');
         } catch (err) {
@@ -87,85 +90,70 @@ export default function DriveUploadPage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex font-mono">
+        <div className="ms-app flex">
             <Sidebar />
 
             <div className="flex-1 flex flex-col min-w-0">
-                <header className="h-16 border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <span className="text-blue-500 text-lg">☁️</span>
-                        <h1 className="text-xs font-extrabold text-white uppercase tracking-wider">Google Drive Remote Import</h1>
+                <header className="ms-topbar">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0"><IconCloud size={18} /></span>
+                        <h1 className="ms-h1 truncate">Google Drive Remote Import</h1>
                     </div>
-                    <span className="text-xs text-slate-400 hidden sm:inline">{user?.email}</span>
+                    <span className="text-xs text-slate-400 hidden sm:inline truncate">{user?.email}</span>
                 </header>
 
-                <main className="flex-1 flex flex-col items-center justify-start p-6 lg:p-12">
-                    <div className="w-full max-w-3xl space-y-6">
+                <main className="ms-main w-full max-w-6xl mx-auto space-y-5">
+                    {successMsg && (
+                        <div className="ms-alert ms-alert-green ms-fade-up">
+                            <IconCheckCircle size={18} className="shrink-0" />
+                            <p className="min-w-0 break-words">{successMsg}</p>
+                        </div>
+                    )}
 
-                        {successMsg && (
-                            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-bold flex items-center gap-2 shadow-lg animate-fade-in">
-                                <span>✅</span> {successMsg}
-                            </div>
-                        )}
-
-                        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl relative overflow-hidden">
-                            <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
-
-                            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800/80">
-                                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                    <span>🆔</span> Remote Import via Google Drive File ID
-                                </h3>
-                                <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] font-bold text-blue-400 uppercase">High-Speed Mirror</span>
-                            </div>
-
-                            <form onSubmit={handleImport} className="space-y-5">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                                        Custom File Name (Optional)
-                                    </label>
-                                    <input 
-                                        type="text" 
-                                        value={customTitle}
-                                        onChange={(e) => setCustomTitle(e.target.value)}
-                                        placeholder="e.g. Naruto_Shippuden_Ep_01.mp4"
-                                        className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 text-slate-100 text-xs rounded-2xl px-4 py-3.5 focus:outline-none transition font-mono"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                                        Google Drive File ID or Shareable Link
-                                    </label>
-                                    <div className="relative">
-                                        <input 
-                                            type="text" 
-                                            required
-                                            value={driveInput}
-                                            onChange={(e) => setDriveInput(e.target.value)}
-                                            placeholder="e.g. 1B2M2Y8AsgTpgAmCvzvPyCn OR paste full link"
-                                            className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 text-slate-100 text-xs rounded-2xl pl-4 pr-24 py-3.5 focus:outline-none transition font-mono"
-                                        />
-                                        {driveInput && (
-                                            <span className="absolute right-3 top-2.5 px-2 py-1 rounded-md bg-slate-800 text-[9px] text-blue-400 font-bold">
-                                                ID Detected
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="text-[10px] text-slate-500 mt-2">
-                                        Google Drive file ID text paste করুন। Example: <span className="text-slate-400 font-mono">https://drive.google.com/file/d/FILE_ID/view</span>
-                                    </p>
-                                </div>
-
-                                <button 
-                                    type="submit"
-                                    disabled={isLoading}
-                                    className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-xs font-bold uppercase transition shadow-xl shadow-blue-600/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                                >
-                                    <span>⚡</span> {isLoading ? 'Extracting & Syncing...' : 'Import from Google Drive'}
-                                </button>
-                            </form>
+                    <div className="ms-card p-4 sm:p-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5 pb-4 border-b border-slate-800">
+                            <h2 className="ms-h2 flex items-center gap-2"><IconKey size={16} /> Import via Google Drive file ID</h2>
+                            <span className="ms-badge ms-badge-blue self-start sm:self-auto">High-speed mirror</span>
                         </div>
 
+                        <form onSubmit={handleImport} className="space-y-5">
+                            <div className="space-y-2">
+                                <label className="ms-label">Custom file name (optional)</label>
+                                <input
+                                    type="text"
+                                    value={customTitle}
+                                    onChange={(e) => setCustomTitle(e.target.value)}
+                                    placeholder="e.g. Naruto_Shippuden_Ep_01.mp4"
+                                    className="ms-input"
+                                />
+                                <p className="ms-muted text-xs">Leave empty to use the original file name.</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="ms-label">Google Drive file ID or shareable link</label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        required
+                                        value={driveInput}
+                                        onChange={(e) => setDriveInput(e.target.value)}
+                                        placeholder="e.g. 1B2M2Y8AsgTpgAmCvzvPyCn or paste the full link"
+                                        className="ms-input ms-code pr-28"
+                                    />
+                                    {driveInput && (
+                                        <span className="ms-badge ms-badge-blue absolute right-2 top-1/2 -translate-y-1/2">ID detected</span>
+                                    )}
+                                </div>
+                                <p className="ms-muted text-xs break-words">
+                                    Paste the Google Drive file ID or link. Example: <span className="ms-code text-slate-300 break-all">https://drive.google.com/file/d/FILE_ID/view</span>
+                                </p>
+                            </div>
+
+                            <button type="submit" disabled={isLoading} className="ms-btn ms-btn-primary ms-btn-block">
+                                {isLoading ? <IconRefresh size={16} className="ms-spin" /> : <IconUpload size={16} />}
+                                {isLoading ? 'Processing...' : 'Import from Google Drive'}
+                            </button>
+                        </form>
                     </div>
                 </main>
             </div>

@@ -4,11 +4,20 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
+import { IconLayers, IconRefresh, IconCheckCircle, IconInfo, IconFile } from '../components/Icons';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
+
+function statusBadge(status) {
+    const s = String(status || 'Processing').toLowerCase();
+    if (s.includes('fail') || s.includes('error')) return 'ms-badge-red';
+    if (s.includes('partial') || s.includes('pending')) return 'ms-badge-amber';
+    if (s.includes('complete')) return 'ms-badge-green';
+    return 'ms-badge-blue';
+}
 
 export default function ProcessingFilesPage() {
     const router = useRouter();
@@ -30,7 +39,7 @@ export default function ProcessingFilesPage() {
         checkAuthAndFetchQueue();
     }, [router]);
 
-    // ডাটাবেজ থেকে যে ফাইলগুলোর স্ট্যাটাস প্রসেসিং বা পেন্ডিং আছে সেগুলোর রিয়েল-টাইম কিউ ফেচ করা
+    // Fetch the live queue: files whose status is Processing or Pending
     const fetchQueue = async (userId) => {
         const { data, error } = await supabase
             .from('files')
@@ -43,75 +52,82 @@ export default function ProcessingFilesPage() {
         }
     };
 
-    // স্টাক বা ফেইল হওয়া ফাইল পুনরায় প্রসেস করার রিকোয়েস্ট পাঠানো
+    // Send a retry request for a stuck or failed file
     const handleRetryQueueItem = async (file) => {
         alert(`Retrying server upload request for: ${file.name}`);
-        // এখানে রি-আপলোড API কল ইন্টিগ্রেট করা যাবে
+        // The re-upload API call can be integrated here
     };
 
     if (loadingAuth) {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-mono">
-                <p className="text-xs text-blue-400 animate-pulse">Loading Processing Queue...</p>
+            <div className="ms-app flex items-center justify-center">
+                <div className="flex items-center gap-3 text-sm text-blue-400">
+                    <IconRefresh size={18} className="ms-spin" />
+                    <span>Loading processing queue…</span>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex font-mono">
+        <div className="ms-app flex">
             <Sidebar />
 
             <div className="flex-1 flex flex-col min-w-0">
-                <header className="h-16 border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <span className="text-amber-500 text-lg">⚙️</span>
-                        <h1 className="text-xs font-extrabold text-white uppercase tracking-wider">Live Processing Queue</h1>
+                <header className="ms-topbar">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                            <IconLayers size={18} />
+                        </span>
+                        <h1 className="ms-h1 truncate">Live Processing Queue</h1>
                     </div>
-                    <span className="text-xs text-slate-400 hidden sm:inline">{user?.email}</span>
+                    <span className="text-xs text-slate-400 hidden sm:inline truncate max-w-[220px]">{user?.email}</span>
                 </header>
 
-                <main className="flex-1 p-6 lg:p-10 space-y-6">
+                <main className="ms-main w-full max-w-6xl mx-auto space-y-5">
                     {/* Top Status Banner */}
-                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between shadow-lg">
-                        <div className="flex items-center gap-3">
-                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping"></span>
-                            <p>Active tasks currently mirroring or pushing to remote servers.</p>
+                    <div className="ms-alert ms-alert-blue flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <IconInfo size={18} className="shrink-0" />
+                            <p className="text-sm">Active tasks currently mirroring or pushing to remote servers.</p>
                         </div>
-                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 font-bold text-[10px]">
+                        <span className="ms-badge ms-badge-blue shrink-0">
                             {processingFiles.length} Tasks in Queue
                         </span>
                     </div>
 
                     {/* Queue List */}
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         {processingFiles.length === 0 ? (
-                            <div className="text-center py-20 bg-slate-900/40 border border-slate-800/80 rounded-3xl space-y-2">
-                                <span className="text-2xl">✨</span>
-                                <p className="text-xs text-slate-400 font-bold">Queue is completely empty!</p>
-                                <p className="text-[11px] text-slate-600">All uploaded or mirrored files have been successfully processed and moved to File Manager.</p>
+                            <div className="ms-card p-8 sm:p-12 text-center space-y-2">
+                                <span className="w-12 h-12 mx-auto rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                                    <IconCheckCircle size={22} />
+                                </span>
+                                <p className="text-sm font-semibold text-white">Queue is completely empty</p>
+                                <p className="ms-muted text-xs">All uploaded or mirrored files have been successfully processed and moved to File Manager.</p>
                             </div>
                         ) : (
                             processingFiles.map((file) => (
-                                <div key={file.id} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                    <div className="flex items-center gap-3.5">
-                                        <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-400 text-base animate-spin">
-                                            ⏳
-                                        </div>
-                                        <div>
-                                            <h4 className="text-xs font-bold text-white">{file.name}</h4>
-                                            <p className="text-[10px] text-slate-400 mt-0.5">Target: Multi-Server Mirror | Size: {file.size}</p>
+                                <div key={file.id} className="ms-card ms-fade-up p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3.5 min-w-0">
+                                        <span className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                                            <IconFile size={18} />
+                                        </span>
+                                        <div className="min-w-0">
+                                            <h4 className="text-sm font-semibold text-white break-words">{file.name}</h4>
+                                            <p className="ms-muted text-xs mt-0.5 break-words">Target: Multi-Server Mirror | Size: {file.size}</p>
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                                        <span className="px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20 uppercase">
+                                    <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                                        <span className={`ms-badge ${statusBadge(file.status)}`}>
                                             {file.status || 'Processing...'}
                                         </span>
-                                        <button 
+                                        <button
                                             onClick={() => handleRetryQueueItem(file)}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold rounded-xl transition cursor-pointer shadow-lg shadow-blue-600/20"
+                                            className="ms-btn ms-btn-primary ms-btn-sm"
                                         >
-                                            Force Sync
+                                            <IconRefresh size={14} /> Force Sync
                                         </button>
                                     </div>
                                 </div>

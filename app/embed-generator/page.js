@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
+import { IconCode, IconCopy, IconCheck, IconInfo, IconRefresh } from '../components/Icons';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -17,8 +18,9 @@ export default function EmbedGeneratorPage() {
 
     const [links, setLinks] = useState('');
     const [embeds, setEmbeds] = useState('');
+    const [copied, setCopied] = useState(false);
 
-    // ১. সিকিউরিটি গার্ড: লগইন করা আছে কিনা চেক করা
+    // Security guard: make sure the user is signed in
     useEffect(() => {
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
@@ -32,11 +34,14 @@ export default function EmbedGeneratorPage() {
         checkAuth();
     }, [router]);
 
-    // লোডিং অবস্থায় ব্লকিং স্ক্রিন
+    // Blocking screen while loading
     if (loadingAuth) {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-mono">
-                <p className="text-xs text-blue-400 animate-pulse">Checking authorization...</p>
+            <div className="ms-app flex items-center justify-center">
+                <div className="flex items-center gap-3 text-sm text-blue-400">
+                    <IconRefresh size={18} className="ms-spin" />
+                    <span>Checking authorization…</span>
+                </div>
             </div>
         );
     }
@@ -48,49 +53,78 @@ export default function EmbedGeneratorPage() {
             return `<iframe src="https://multishows.top/embed/${btoa(line.trim())}" width="100%" height="400px" frameborder="0" allowfullscreen></iframe>`;
         }).join('\n\n');
         setEmbeds(generated);
+        setCopied(false);
+    };
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(embeds);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            setCopied(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex font-mono">
+        <div className="ms-app flex">
             <Sidebar />
             <div className="flex-1 flex flex-col min-w-0">
-                <header className="h-16 border-b border-slate-900 bg-slate-900/50 backdrop-blur px-6 flex items-center justify-between">
-                    <h1 className="text-xs font-bold uppercase text-white tracking-wider">Embed Generator</h1>
-                    <span className="text-xs text-slate-400">{user?.email}</span>
+                <header className="ms-topbar">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                            <IconCode size={18} />
+                        </span>
+                        <h1 className="ms-h1 truncate">Embed Generator</h1>
+                    </div>
+                    <span className="text-xs text-slate-400 hidden sm:inline truncate max-w-[220px]">{user?.email}</span>
                 </header>
 
-                {/* Centered Main Content Container */}
-                <main className="flex-1 flex flex-col items-center justify-center p-6 lg:p-10">
-                    <div className="w-full max-w-3xl space-y-6">
-                        
-                        <form onSubmit={handleGenerate} className="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-4">
-                            <h2 className="text-xs font-bold text-white uppercase tracking-wider">Remote Link & Embed Parser</h2>
-                            <textarea 
+                <main className="ms-main w-full max-w-3xl mx-auto space-y-5">
+                    <form onSubmit={handleGenerate} className="ms-card ms-fade-up p-4 sm:p-6 space-y-4">
+                        <div>
+                            <h2 className="ms-h2">Remote Link &amp; Embed Parser</h2>
+                            <p className="ms-muted text-xs mt-1">Paste your links below and generate ready-to-use iframe embed codes.</p>
+                        </div>
+                        <div>
+                            <label className="ms-label" htmlFor="embed-links">Links</label>
+                            <textarea
+                                id="embed-links"
                                 rows="6"
                                 placeholder="Paste links (one per line, e.g. Title | https://...)"
                                 value={links}
                                 onChange={(e) => setLinks(e.target.value)}
                                 required
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-white focus:outline-none focus:border-blue-600 font-mono"
+                                className="ms-input ms-code"
                             />
-                            <button type="submit" className="w-full py-3.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-600/25">
-                                Generate MultiServer Embeds
-                            </button>
-                        </form>
+                        </div>
+                        <div className="ms-alert ms-alert-blue">
+                            <IconInfo size={16} className="shrink-0" />
+                            <p className="text-xs">One link per line. Each line produces its own embed code.</p>
+                        </div>
+                        <button type="submit" className="ms-btn ms-btn-primary ms-btn-block">
+                            <IconCode size={16} /> Generate MultiServer Embeds
+                        </button>
+                    </form>
 
-                        {embeds && (
-                            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-2">
-                                <label className="text-[10px] text-slate-400 uppercase">Generated Embed Codes</label>
-                                <textarea 
-                                    rows="6"
-                                    readOnly
-                                    value={embeds}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-emerald-400 font-mono"
-                                />
+                    {embeds && (
+                        <div className="ms-card ms-fade-up p-4 sm:p-6 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <label className="ms-h2" htmlFor="embed-output">Generated Embed Codes</label>
+                                <button type="button" onClick={handleCopy} className="ms-btn ms-btn-ghost ms-btn-sm" aria-label="Copy embed codes">
+                                    {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                                    <span>{copied ? 'Copied' : 'Copy'}</span>
+                                </button>
                             </div>
-                        )}
-
-                    </div>
+                            <textarea
+                                id="embed-output"
+                                rows="6"
+                                readOnly
+                                value={embeds}
+                                className="ms-input ms-code text-emerald-400"
+                            />
+                        </div>
+                    )}
                 </main>
             </div>
         </div>

@@ -1,26 +1,214 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   MultiServer design system
+   Palette: deep navy-black surfaces, white text, blue = primary, green = success/live,
+   red only for danger. Every page shares these tokens + the .ms-* classes below.
+   ========================================================================== */
+
+@theme {
+  /* every `font-mono` in the pages becomes a clean sans; use `font-code` for real code */
+  --font-mono: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-code: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* neutral scale (cool, slightly blue) */
+  --color-slate-50: #f4f6fa;
+  --color-slate-100: #e8ecf3;
+  --color-slate-200: #d3dae6;
+  --color-slate-300: #b4bfd0;
+  --color-slate-400: #8e9bb0;
+  --color-slate-500: #67748a;
+  --color-slate-600: #4a566b;
+  --color-slate-700: #333e52;
+  --color-slate-800: #212a3a;
+  --color-slate-900: #121a28;
+  --color-slate-950: #0a0f18;
+
+  /* primary blue */
+  --color-blue-50: #eef5ff;
+  --color-blue-100: #dbe9ff;
+  --color-blue-200: #bcd6ff;
+  --color-blue-300: #8fb9ff;
+  --color-blue-400: #6ba6ff;
+  --color-blue-500: #3b7bf5;
+  --color-blue-600: #2f6df0;
+  --color-blue-700: #2557cf;
+  --color-blue-800: #1e419c;
+  --color-blue-900: #1e3a7a;
+  --color-blue-950: #14234d;
+
+  /* indigo -> sky/cyan, so old blue-to-indigo gradients become blue-to-cyan */
+  --color-indigo-50: #ecfbff;
+  --color-indigo-100: #d0f4fe;
+  --color-indigo-200: #a5e8fc;
+  --color-indigo-300: #67d6f8;
+  --color-indigo-400: #31c0ee;
+  --color-indigo-500: #12a6d8;
+  --color-indigo-600: #0a89b8;
+  --color-indigo-700: #0c6e94;
+  --color-indigo-800: #105977;
+  --color-indigo-900: #124b63;
+  --color-indigo-950: #08303f;
+
+  /* purple -> teal (keeps the palette to blue + green) */
+  --color-purple-50: #effcf9;
+  --color-purple-100: #cbf7ef;
+  --color-purple-200: #99ede0;
+  --color-purple-300: #5fdcca;
+  --color-purple-400: #2dc6b3;
+  --color-purple-500: #14a998;
+  --color-purple-600: #0d8d7f;
+  --color-purple-700: #0f7168;
+  --color-purple-800: #115a54;
+  --color-purple-900: #114a46;
+  --color-purple-950: #052e2c;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #070b12;
+  --surface: #0d1420;
+  --surface-2: #121b2a;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text: #e8ecf3;
+  --muted: #8e9bb0;
+  --blue: #3b7bf5;
+  --blue-hi: #6ba6ff;
+  --cyan: #0ea5d9;
+  --green: #22c55e;
+  --green-hi: #4ade80;
+  --amber: #f59e0b;
+  --red: #ef4444;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+html { -webkit-text-size-adjust: 100%; color-scheme: dark; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+* { scrollbar-width: thin; scrollbar-color: rgba(120, 140, 170, 0.35) transparent; }
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb { background: rgba(120, 140, 170, 0.35); border-radius: 999px; }
+::selection { background: rgba(59, 123, 245, 0.45); color: #fff; }
+:focus-visible { outline: 2px solid rgba(107, 166, 255, 0.7); outline-offset: 2px; }
+
+/* the mobile top bar of the sidebar is fixed; pages get room for it */
+body.has-shell { padding-top: 56px; }
+@media (min-width: 1024px) { body.has-shell { padding-top: 0; } }
+
+/* component classes live in the components layer, so Tailwind utilities (px-8, pr-12, min-h-...) can override them */
+@layer components {
+/* ---------- surfaces ---------- */
+.ms-app {
+  min-height: 100dvh;
+  color: var(--text);
+  background:
+    radial-gradient(1100px 520px at 12% -8%, rgba(59, 123, 245, 0.14), transparent 60%),
+    radial-gradient(900px 480px at 100% 100%, rgba(34, 197, 94, 0.07), transparent 60%),
+    var(--bg);
+}
+.ms-card {
+  background: linear-gradient(180deg, rgba(20, 30, 46, 0.82), rgba(12, 18, 29, 0.92));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+.ms-card-hover { transition: border-color .2s, transform .2s, background .2s; }
+.ms-card-hover:hover { border-color: rgba(107, 166, 255, 0.35); transform: translateY(-1px); }
+.ms-topbar {
+  position: sticky; top: 56px; z-index: 20; min-height: 60px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px;
+  background: rgba(8, 12, 20, 0.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+@media (min-width: 640px) { .ms-topbar { padding: 8px 24px; } }
+@media (min-width: 1024px) { .ms-topbar { top: 0; min-height: 64px; padding: 8px 32px; } }
+.ms-main { padding: 16px; }
+@media (min-width: 640px) { .ms-main { padding: 24px; } }
+@media (min-width: 1024px) { .ms-main { padding: 32px 40px; } }
+
+/* ---------- text ---------- */
+.ms-h1 { font-size: clamp(17px, 2.6vw, 21px); font-weight: 700; letter-spacing: -0.01em; color: #fff; line-height: 1.25; }
+.ms-h2 { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.ms-muted { color: var(--muted); }
+.ms-label { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ms-grad-text { background: linear-gradient(135deg, #6ba6ff, #22d3ee 55%, #4ade80); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ---------- buttons ---------- */
+.ms-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 42px; padding: 0 16px; border-radius: 12px; border: 1px solid transparent;
+  font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; text-decoration: none;
+  cursor: pointer; transition: transform .15s, filter .2s, background .2s, border-color .2s, opacity .2s; -webkit-user-select: none; user-select: none;
+}
+.ms-btn:active { transform: scale(.98); }
+.ms-btn:disabled, .ms-btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.ms-btn-primary { color: #fff; background: linear-gradient(135deg, #3b7bf5, #0ea5d9); box-shadow: 0 8px 22px rgba(59, 123, 245, 0.28); }
+.ms-btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+.ms-btn-success { color: #fff; background: linear-gradient(135deg, #16a34a, #22c55e); box-shadow: 0 8px 22px rgba(34, 197, 94, 0.22); }
+.ms-btn-success:hover:not(:disabled) { filter: brightness(1.1); }
+.ms-btn-ghost { color: #d6dce8; background: rgba(255, 255, 255, 0.05); border-color: var(--line); }
+.ms-btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); border-color: var(--line-strong); }
+.ms-btn-danger { color: #fca5a5; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
+.ms-btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.2); }
+.ms-btn-sm { min-height: 34px; padding: 0 12px; font-size: 12px; border-radius: 10px; }
+.ms-btn-icon { width: 42px; padding: 0; }
+.ms-btn-icon.ms-btn-sm { width: 34px; }
+.ms-btn-block { width: 100%; }
+
+/* ---------- form controls ---------- */
+.ms-input {
+  width: 100%; min-height: 44px; padding: 0 14px; border-radius: 12px; font-family: inherit; font-size: 14px;
+  color: var(--text); background: rgba(5, 9, 16, 0.7); border: 1px solid var(--line); outline: none;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+}
+.ms-input::placeholder { color: #5b677b; }
+.ms-input:focus { border-color: rgba(107, 166, 255, 0.6); box-shadow: 0 0 0 3px rgba(59, 123, 245, 0.18); }
+@media (max-width: 640px) { .ms-input { font-size: 16px; } } /* stops iOS zoom-on-focus */
+textarea.ms-input { padding: 12px 14px; min-height: 120px; line-height: 1.55; resize: vertical; }
+select.ms-input {
+  appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238e9bb0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+select.ms-input option { background: #0d1420; color: var(--text); }
+.ms-check { width: 18px; height: 18px; accent-color: #3b7bf5; cursor: pointer; flex-shrink: 0; }
+
+/* ---------- badges ---------- */
+.ms-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: #c4ccda; white-space: nowrap; }
+.ms-badge-blue { color: #8fb9ff; background: rgba(59, 123, 245, 0.12); border-color: rgba(59, 123, 245, 0.3); }
+.ms-badge-green { color: #4ade80; background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.3); }
+.ms-badge-amber { color: #fbbf24; background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); }
+.ms-badge-red { color: #fca5a5; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
+
+/* ---------- alerts ---------- */
+.ms-alert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); }
+.ms-alert-blue { color: #b9d3ff; background: rgba(59, 123, 245, 0.1); border-color: rgba(59, 123, 245, 0.28); }
+.ms-alert-green { color: #a7f3c4; background: rgba(34, 197, 94, 0.09); border-color: rgba(34, 197, 94, 0.28); }
+.ms-alert-amber { color: #fde68a; background: rgba(245, 158, 11, 0.09); border-color: rgba(245, 158, 11, 0.28); }
+.ms-alert-red { color: #fecaca; background: rgba(239, 68, 68, 0.09); border-color: rgba(239, 68, 68, 0.28); }
+
+/* ---------- misc ---------- */
+.ms-code { font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.ms-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ms-skeleton { border-radius: 8px; background: linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.1), rgba(255,255,255,.04)); background-size: 200% 100%; animation: ms-shimmer 1.2s linear infinite; }
+@keyframes ms-shimmer { to { background-position: -200% 0; } }
+.ms-fade-up { animation: ms-fade-up .4s ease both; }
+@keyframes ms-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.ms-spin { animation: ms-spin .8s linear infinite; }
+@keyframes ms-spin { to { transform: rotate(360deg); } }
+.ms-pulse-dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.ms-pulse-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--green); animation: ms-ping 1.8s ease-out infinite; }
+@keyframes ms-ping { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(2.6); opacity: 0; } }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
