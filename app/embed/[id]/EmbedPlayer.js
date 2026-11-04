@@ -12,7 +12,51 @@ const sb = createClient(
 
 const LS_SERVER = 'ms_player_server';
 const LS_PREFS = 'ms_player_prefs_v3'; // v3: new defaults (Watch Party off, Vidara protection off); older saved settings are ignored once
-const DEFAULT_PREFS = { download: true, fullscreen: true, lock: true, party: false, title: true, block: true, guard: false, view: true, sb: {} };
+const DEFAULT_PREFS = { download: true, fullscreen: true, lock: true, party: false, title: true, block: true, guard: false, view: true, sb: {},
+    theme: 'red', customColor: '#e5383b', look: 'dark', loader: 'ring', anim: true, autoSwitch: false, autoSec: 15 };
+const THEMES = [
+    { id: 'red', name: 'Crimson', ac: '#e5383b', hi: '#ff6b73', rgb: '229,56,59', tint: '#ffc2c4' },
+    { id: 'blue', name: 'Ocean', ac: '#3b7bf5', hi: '#6ba6ff', rgb: '59,123,245', tint: '#b9d3ff' },
+    { id: 'green', name: 'Emerald', ac: '#10b981', hi: '#34d399', rgb: '16,185,129', tint: '#a7f3d0' },
+    { id: 'violet', name: 'Violet', ac: '#8b5cf6', hi: '#a78bfa', rgb: '139,92,246', tint: '#ddd6fe' },
+    { id: 'amber', name: 'Amber', ac: '#f59e0b', hi: '#fbbf24', rgb: '245,158,11', tint: '#fde68a' },
+    { id: 'pink', name: 'Rose', ac: '#ec4899', hi: '#f472b6', rgb: '236,72,153', tint: '#fbcfe8' },
+    { id: 'cyan', name: 'Cyan', ac: '#06b6d4', hi: '#22d3ee', rgb: '6,182,212', tint: '#a5f3fc' },
+];
+const LOADERS = [['ring', 'Ring'], ['dots', 'Dots'], ['bars', 'Bars'], ['pulse', 'Pulse'], ['orbit', 'Orbit']];
+const LOOKS = [['dark', 'Dark'], ['glass', 'Glass'], ['black', 'Black']];
+const WAITS = [[10, '10s'], [15, '15s'], [25, '25s'], [40, '40s']];
+
+const mixHex = (hex, toward, amt) => {
+    const n = parseInt(hex.slice(1), 16);
+    const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v + (toward - v) * amt));
+    return ch;
+};
+const themeVars = (prefs) => {
+    const t = THEMES.find((x) => x.id === prefs.theme);
+    if (t) return { '--ac': t.ac, '--ac-hi': t.hi, '--ac-rgb': t.rgb, '--ac-tint': t.tint, '--acsoft': `rgba(${t.rgb},.10)` };
+    if (prefs.theme === 'custom' && /^#[0-9a-f]{6}$/i.test(prefs.customColor || '')) {
+        const c = prefs.customColor;
+        const rgb = mixHex(c, 0, 0).join(',');
+        return {
+            '--ac': c,
+            '--ac-hi': `rgb(${mixHex(c, 255, 0.3).join(',')})`,
+            '--ac-rgb': rgb,
+            '--ac-tint': `rgb(${mixHex(c, 255, 0.7).join(',')})`,
+            '--acsoft': `rgba(${rgb},.10)`,
+        };
+    }
+    return undefined; // default: the stylesheet's red
+};
+
+function Loader({ kind }) {
+    if (kind === 'dots') return <div className="ep-ld ep-ld-dots"><span /><span /><span /></div>;
+    if (kind === 'bars') return <div className="ep-ld ep-ld-bars"><span /><span /><span /><span /><span /></div>;
+    if (kind === 'pulse') return <div className="ep-ld ep-ld-pulse"><i /></div>;
+    if (kind === 'orbit') return <div className="ep-ld ep-ld-orbit"><i /><i /></div>;
+    return <div className="ep-spinner" />;
+}
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
@@ -71,6 +115,9 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     const clientId = useRef(Math.random().toString(36).slice(2));
 
     serversRef.current = servers;
+    const activeRef = useRef(0);
+    activeRef.current = active;
+    const tried = useRef(new Set());
     const current = servers[active] || servers[0];
     // protection level per server: strict (no pop-ups, no redirects) | relaxed (pop-ups allowed, page redirects still blocked) | off
     const level = prefs.block ? ((prefs.sb || {})[current.key] || (current.key === 'vidara' ? 'off' : 'strict')) : 'off';
@@ -83,6 +130,23 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
         clearTimeout(toastTimer.current);
         toastTimer.current = setTimeout(() => setToast(''), 2600);
     }, []);
+
+    // ---------- auto-switch: moves to the next server when the current one clearly is not working ----------
+    const autoAdvance = useCallback((why) => {
+        const list = serversRef.current;
+        const cur = list[activeRef.current];
+        if (!cur) return;
+        tried.current.add(cur.key);
+        const next = list.findIndex((s) => !tried.current.has(s.key));
+        if (next < 0) {
+            tried.current = new Set([cur.key]);
+            say('Auto-switch: no other server answered. Use Retry or pick one yourself');
+            return;
+        }
+        setActive(next);
+        setPanel(null);
+        say(`${cur.name} ${why}. Switched to ${list[next].name}`);
+    }, [say]);
 
     // ---------- saved preferences + auto-join from ?room=CODE ----------
     useEffect(() => {
@@ -176,6 +240,26 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
         return () => clearTimeout(t);
     }, [active, reloadKey, sandboxOn]);
 
+    // auto-switch 1: the server page did not finish loading in time
+    useEffect(() => {
+        if (loaded) { tried.current = new Set(); return undefined; }
+        if (!prefs.autoSwitch) return undefined;
+        const t = setTimeout(() => autoAdvance('did not respond'), (Number(prefs.autoSec) || 15) * 1000);
+        return () => clearTimeout(t);
+    }, [active, reloadKey, loaded, prefs.autoSwitch, prefs.autoSec, autoAdvance]);
+
+    // auto-switch 2: the host itself says the video is gone / the host is down
+    useEffect(() => {
+        if (!prefs.autoSwitch) return undefined;
+        let dead = false;
+        fetch('/api/embed-check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: fileId, key: current.key }) })
+            .then((r) => r.json())
+            .then((d) => { if (!dead && d && d.ok === false) autoAdvance(d.reason || 'looks unavailable'); })
+            .catch(() => { /* ignore: no answer means no switch */ });
+        return () => { dead = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [active, reloadKey, prefs.autoSwitch]);
+
     // ---------- "Now playing" badge: shows on load / server change / reload, then fades out ----------
     useEffect(() => {
         setNowShow(true);
@@ -266,6 +350,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
 
     // ---------- actions ----------
     const choose = (i) => {
+        tried.current = new Set();
         setActive(i);
         setPanel(null);
         try { localStorage.setItem(LS_SERVER, servers[i].key); } catch (e) { /* ignore */ }
@@ -396,9 +481,16 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     const togglePanel = (name) => setPanel((p) => (p === name ? null : name));
 
     return (
-        <div ref={rootRef} className="ep-root" onMouseMove={wake} onTouchStart={wake}>
+        <div
+            ref={rootRef}
+            className={`ep-root ${prefs.anim === false ? 'ep-noanim' : ''}`}
+            data-look={prefs.look || 'dark'}
+            style={themeVars(prefs)}
+            onMouseMove={wake}
+            onTouchStart={wake}
+        >
             <style>{`
-                .ep-root { --ac: #3b7bf5; --ac-hi: #ff6b73; --acsoft: rgba(59,123,245,.09); --line: rgba(255,255,255,.07); position: fixed; inset: 0; z-index: 99990; background: #000; color: #e5e7eb; overflow: hidden; font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+                .ep-root { --ac: #e5383b; --ac-hi: #ff6b73; --ac-rgb: 229,56,59; --ac-tint: #ffc2c4; --acsoft: rgba(229,56,59,.10); --line: rgba(255,255,255,.07); position: fixed; inset: 0; z-index: 99990; background: #000; color: #e5e7eb; overflow: hidden; font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; }
                 .ep-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
                 .ep-hot { position: absolute; top: 0; left: 0; right: 0; height: 48px; z-index: 15; }
                 .ep-back { position: absolute; inset: 0; z-index: 18; }
@@ -412,11 +504,11 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-pill { padding: 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .02em; }
                 .ep-ico { width: 28px; }
                 .ep-pill::after, .ep-ico::after { content: ''; position: absolute; left: 10%; right: 10%; bottom: 0; height: 1.5px; background: linear-gradient(90deg, transparent, var(--ac-hi), transparent); transform: scaleX(0); transition: transform .3s ease; }
-                .ep-pill:hover, .ep-ico:hover { background: rgba(16,24,38,.94); border-color: rgba(59,123,245,.4); transform: translateY(-1px); }
+                .ep-pill:hover, .ep-ico:hover { background: rgba(16,24,38,.94); border-color: rgba(var(--ac-rgb),.4); transform: translateY(-1px); }
                 .ep-pill:hover::after, .ep-ico:hover::after { transform: scaleX(1); }
                 .ep-ico:active, .ep-pill:active { transform: scale(.95); }
-                .ep-ico.live { border-color: rgba(59,123,245,.6); color: #9cc2ff; }
-                .ep-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 6px rgba(59,123,245,.8); flex-shrink: 0; animation: ep-pulse 2s ease-in-out infinite; }
+                .ep-ico.live { border-color: rgba(var(--ac-rgb),.6); color: var(--ac-tint); }
+                .ep-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 6px rgba(var(--ac-rgb),.8); flex-shrink: 0; animation: ep-pulse 2s ease-in-out infinite; }
                 @keyframes ep-pulse { 50% { opacity: .45; } }
                 .ep-chev { opacity: .6; display: flex; transition: transform .25s; }
                 .ep-pill:hover .ep-chev { transform: translateY(1px); }
@@ -424,12 +516,12 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-badge { position: absolute; top: -4px; right: -4px; min-width: 13px; height: 13px; padding: 0 3px; border-radius: 7px; background: var(--ac); color: #fff; font-size: 8.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
                 .ep-left { position: relative; }
 
-                .ep-panel { position: absolute; top: 34px; width: min(204px, calc(100vw - 16px)); background: linear-gradient(180deg, rgba(15,22,34,.97), rgba(7,11,18,.98)); border: 1px solid rgba(255,255,255,.09); border-top: 1px solid rgba(59,123,245,.45); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.75); overflow: hidden; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transform-origin: top left; animation: ep-pop .2s ease-out; }
+                .ep-panel { position: absolute; top: 34px; width: min(204px, calc(100vw - 16px)); background: linear-gradient(180deg, rgba(15,22,34,.97), rgba(7,11,18,.98)); border: 1px solid rgba(255,255,255,.09); border-top: 1px solid rgba(var(--ac-rgb),.45); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.75); overflow: hidden; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transform-origin: top left; animation: ep-pop .2s ease-out; }
                 @keyframes ep-pop { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
                 .ep-panel.left { left: 0; }
                 .ep-panel.right { right: 0; width: min(200px, calc(100vw - 16px)); transform-origin: top right; }
                 .ep-ph { display: flex; align-items: center; gap: 7px; padding: 7px 8px 7px 10px; border-bottom: 1px solid var(--line); }
-                .ep-ph .ic { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--acsoft); color: #9cc2ff; flex-shrink: 0; }
+                .ep-ph .ic { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--acsoft); color: var(--ac-tint); flex-shrink: 0; }
                 .ep-ph .t { font-size: 11px; font-weight: 700; color: #fff; letter-spacing: .03em; }
                 .ep-ph .s { font-size: 9px; color: #8e9bb0; margin-top: 1px; max-width: 104px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
                 .ep-ph .n { margin-left: auto; font-size: 9px; font-weight: 700; color: #cdd5e2; background: rgba(255,255,255,.07); border-radius: 999px; padding: 1px 6px; }
@@ -439,15 +531,15 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-ph .g:hover svg { transform: rotate(60deg); }
                 .ep-ph .g svg { transition: transform .35s; }
 
-                .ep-list { max-height: min(42vh, 230px); overflow-y: auto; padding: 4px 6px 6px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: thin; scrollbar-color: rgba(59,123,245,.4) transparent; }
+                .ep-list { max-height: min(42vh, 230px); overflow-y: auto; padding: 4px 6px 6px; display: flex; flex-direction: column; gap: 2px; scrollbar-width: thin; scrollbar-color: rgba(var(--ac-rgb),.4) transparent; }
                 .ep-list::-webkit-scrollbar { width: 3px; }
                 .ep-list::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
-                .ep-list::-webkit-scrollbar-thumb { background: rgba(59,123,245,.4); border-radius: 999px; }
+                .ep-list::-webkit-scrollbar-thumb { background: rgba(var(--ac-rgb),.4); border-radius: 999px; }
 
                 /* line-style server rows: thin accent line, slide + underline sweep on hover */
                 .ep-row { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px 0 10px; border: 0; background: transparent; color: #a6b1c4; border-radius: 6px; cursor: pointer; font-family: inherit; text-align: left; overflow: hidden; transition: background .2s, color .2s, padding .2s; }
-                .ep-row::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--ac); transform: scaleY(0); transition: transform .25s ease; box-shadow: 0 0 8px rgba(59,123,245,.7); }
-                .ep-row::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 1px; background: linear-gradient(90deg, rgba(59,123,245,.7), transparent); transform: scaleX(0); transform-origin: left; transition: transform .35s ease; }
+                .ep-row::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--ac); transform: scaleY(0); transition: transform .25s ease; box-shadow: 0 0 8px rgba(var(--ac-rgb),.7); }
+                .ep-row::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 1px; background: linear-gradient(90deg, rgba(var(--ac-rgb),.7), transparent); transform: scaleX(0); transform-origin: left; transition: transform .35s ease; }
                 .ep-row:hover { background: rgba(255,255,255,.04); color: #fff; padding-left: 14px; }
                 .ep-row:hover::after { transform: scaleX(1); }
                 .ep-row:hover .ri { color: var(--ac-hi); transform: scale(1.15); }
@@ -464,12 +556,12 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-sw.on::after { left: 12px; }
 
                 .ep-dl { display: flex; align-items: center; gap: 7px; padding: 5px 8px; margin-bottom: 2px; border-radius: 8px; background: rgba(255,255,255,.03); border: 1px solid var(--line); transition: border-color .2s; }
-                .ep-dl:hover { border-color: rgba(59,123,245,.4); }
-                .ep-dl a { color: #9cc2ff; font-size: 11px; font-weight: 700; text-decoration: none; }
+                .ep-dl:hover { border-color: rgba(var(--ac-rgb),.4); }
+                .ep-dl a { color: var(--ac-tint); font-size: 11px; font-weight: 700; text-decoration: none; }
                 .ep-dl a:hover { text-decoration: underline; }
                 .ep-dl small { display: block; font-size: 8.5px; color: #7b8090; margin-top: 1px; }
                 .ep-mini { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 3px 7px; border: 0; border-radius: 6px; background: rgba(255,255,255,.08); color: #e5e7eb; font-size: 9.5px; font-weight: 600; cursor: pointer; font-family: inherit; transition: .2s; }
-                .ep-mini:hover { background: rgba(59,123,245,.35); }
+                .ep-mini:hover { background: rgba(var(--ac-rgb),.35); }
 
                 .ep-set { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; background: transparent; color: #d1d5db; border-radius: 7px; cursor: pointer; font-family: inherit; text-align: left; transition: .2s; }
                 .ep-set:hover { background: rgba(255,255,255,.05); padding-left: 11px; }
@@ -479,17 +571,17 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-tip { padding: 6px 10px 8px; font-size: 9px; line-height: 1.45; color: #6f7d93; border-top: 1px solid var(--line); }
 
                 .ep-pbody { padding: 9px; display: flex; flex-direction: column; gap: 7px; }
-                .ep-btn { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 6px; height: 28px; border: 1px solid rgba(59,123,245,.5); border-radius: 8px; background: rgba(59,123,245,.14); color: #dbe8ff; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; transition: .2s; }
-                .ep-btn:hover { background: rgba(59,123,245,.26); transform: translateY(-1px); }
+                .ep-btn { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 6px; height: 28px; border: 1px solid rgba(var(--ac-rgb),.5); border-radius: 8px; background: rgba(var(--ac-rgb),.14); color: var(--ac-tint); font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; transition: .2s; }
+                .ep-btn:hover { background: rgba(var(--ac-rgb),.26); transform: translateY(-1px); }
                 .ep-btn.ghost { background: rgba(255,255,255,.05); border-color: var(--line); color: #cdd5e2; }
                 .ep-join { display: flex; gap: 5px; }
                 .ep-join input { flex: 1; min-width: 0; height: 28px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: #fff; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-family: inherit; outline: none; transition: border-color .2s; }
-                .ep-join input:focus { border-color: rgba(59,123,245,.6); }
+                .ep-join input:focus { border-color: rgba(var(--ac-rgb),.6); }
                 .ep-join button { padding: 0 11px; height: 28px; border: 0; border-radius: 8px; background: var(--ac); color: #fff; font-weight: 700; font-size: 11px; cursor: pointer; font-family: inherit; transition: .2s; }
                 .ep-join button:hover { filter: brightness(1.15); }
                 .ep-code { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 9px; border-radius: 9px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
                 .ep-code b { font-size: 15px; letter-spacing: .2em; color: #fff; font-family: ui-monospace, monospace; }
-                .ep-live { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #9cc2ff; }
+                .ep-live { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--ac-tint); }
                 .ep-note { font-size: 9px; line-height: 1.45; color: #6f7d93; }
 
                 .ep-center { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; pointer-events: none; }
@@ -501,11 +593,11 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 /* "Now playing" overlay: never blocks clicks, fades out by itself */
                 .ep-now { position: absolute; left: 12px; bottom: 14px; z-index: 12; pointer-events: none; transition: opacity .6s ease, transform .6s ease; max-width: 70vw; }
                 .ep-now.hide { opacity: 0; transform: translateY(6px); }
-                .ep-now .b { display: inline-block; padding: 2px 8px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9cc2ff; border-left: 2px solid var(--ac); background: rgba(7,11,18,.7); border-radius: 3px; }
+                .ep-now .b { display: inline-block; padding: 2px 8px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ac-tint); border-left: 2px solid var(--ac); background: rgba(7,11,18,.7); border-radius: 3px; }
                 .ep-now .t { margin-top: 5px; font-size: 13px; font-weight: 700; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.9); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
                 .ep-cd { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: rgba(0,0,0,.6); backdrop-filter: blur(3px); pointer-events: none; animation: ep-fade .25s; }
-                .ep-cd .big { font-size: 76px; font-weight: 800; color: #fff; text-shadow: 0 0 36px rgba(59,123,245,.8); line-height: 1; }
+                .ep-cd .big { font-size: 76px; font-weight: 800; color: #fff; text-shadow: 0 0 36px rgba(var(--ac-rgb),.8); line-height: 1; }
                 .ep-cd .sm { font-size: 11px; color: #d1d5db; letter-spacing: .04em; }
                 @keyframes ep-fade { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
                 .ep-toast { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 6px 12px; border-radius: 999px; background: rgba(9,13,21,.95); border: 1px solid var(--line); color: #f3f4f6; font-size: 10.5px; font-weight: 600; pointer-events: none; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
@@ -522,16 +614,16 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-ph { padding: 6px 7px 6px 9px; }
                 .ep-ph .s { max-width: 88px; }
                 .ep-dl { height: 24px; padding: 0 4px 0 8px; margin-bottom: 3px; gap: 4px; }
-                .ep-dl a { flex: 1; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #9cc2ff; }
+                .ep-dl a { flex: 1; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ac-tint); }
                 .ep-dl a svg { width: 11px; height: 11px; }
                 .ep-mini { margin-left: 0; padding: 3px 6px; }
                 .ep-seg { display: flex; gap: 3px; }
                 .ep-seg button { flex: 1; height: 24px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,255,255,.04); color: #b6bac6; font-size: 10px; font-weight: 600; cursor: pointer; font-family: inherit; transition: .2s; }
                 .ep-seg button:hover { background: rgba(255,255,255,.09); color: #fff; transform: translateY(-1px); }
-                .ep-seg button.on { border-color: rgba(59,123,245,.6); background: var(--acsoft); color: #b9d3ff; }
+                .ep-seg button.on { border-color: rgba(var(--ac-rgb),.6); background: var(--acsoft); color: var(--ac-tint); }
                 .ep-rng { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: #a6b1c4; }
                 .ep-rng b { color: #fff; float: right; font-weight: 600; }
-                .ep-rng input { width: 100%; accent-color: #3b7bf5; }
+                .ep-rng input { width: 100%; accent-color: var(--ac); }
 
                 /* v4: roomier rows, responsive widths, no text selection, fresh top scrim */
                 .ep-root, .ep-root * { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -570,16 +662,16 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 /* v5: scrollable panels on small screens, green = live/on status, red = brand accent */
                 .ep-panel { display: flex; flex-direction: column; max-height: calc(100vh - 46px); max-height: calc(100dvh - 46px); }
                 .ep-panel > * { flex-shrink: 0; }
-                .ep-panel > .ep-list, .ep-panel > .ep-scroll, .ep-panel > .ep-pbody { flex-shrink: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(59,123,245,.4) transparent; }
+                .ep-panel > .ep-list, .ep-panel > .ep-scroll, .ep-panel > .ep-pbody { flex-shrink: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(var(--ac-rgb),.4) transparent; }
                 .ep-scroll::-webkit-scrollbar, .ep-pbody::-webkit-scrollbar { width: 3px; }
-                .ep-scroll::-webkit-scrollbar-thumb, .ep-pbody::-webkit-scrollbar-thumb { background: rgba(59,123,245,.4); border-radius: 999px; }
+                .ep-scroll::-webkit-scrollbar-thumb, .ep-pbody::-webkit-scrollbar-thumb { background: rgba(var(--ac-rgb),.4); border-radius: 999px; }
                 .ep-list { max-height: min(60vh, 320px); max-height: min(60dvh, 320px); }
                 .ep-ph { padding: 9px 14px 9px 12px; }
                 .ep-ph .n + .g { margin-left: 8px; margin-right: 2px; }
                 .ep-row { height: 34px; padding: 0 10px 0 13px; box-shadow: inset 0 -1px 0 rgba(255,255,255,.045); }
                 .ep-row:last-child { box-shadow: none; }
                 .ep-row .ri { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,.05); align-items: center; justify-content: center; }
-                .ep-row.on .ri { background: rgba(59,123,245,.2); }
+                .ep-row.on .ri { background: rgba(var(--ac-rgb),.2); }
                 .ep-row .cur { display: inline-flex; align-items: center; gap: 5px; color: #4ade80; font-weight: 700; letter-spacing: .12em; }
                 .ep-row .cur::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.9); animation: ep-pulse 2s ease-in-out infinite; }
                 .ep-dl { height: 32px; }
@@ -598,9 +690,9 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 }
 
                 /* v6: container-aware sizes, glass panels, darker muted red, rows that unfold one by one */
-                .ep-root { --ac: #3b7bf5; --ac-hi: #6ba6ff; --acsoft: rgba(59,123,245,.10); container-type: size; }
+                .ep-root { --ac: #e5383b; --ac-hi: #ff6b73; --ac-rgb: 229,56,59; --ac-tint: #ffc2c4; --acsoft: rgba(229,56,59,.10); container-type: size; }
                 .ep-pill, .ep-ico { background: rgba(7,11,18,.5); }
-                .ep-panel { width: clamp(168px, 44cqw, 236px); max-width: calc(100cqw - 16px); max-height: calc(100cqh - 48px); background: linear-gradient(180deg, rgba(13,19,30,.6), rgba(7,10,17,.74)); border: 1px solid rgba(255,255,255,.08); border-top-color: rgba(59,123,245,.45); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2); box-shadow: 0 12px 34px rgba(0,0,0,.55); transform-origin: top center; animation: ep-unfold .32s cubic-bezier(.2,.8,.2,1) both; }
+                .ep-panel { width: clamp(168px, 44cqw, 236px); max-width: calc(100cqw - 16px); max-height: calc(100cqh - 48px); background: linear-gradient(180deg, rgba(13,19,30,.6), rgba(7,10,17,.74)); border: 1px solid rgba(255,255,255,.08); border-top-color: rgba(var(--ac-rgb),.45); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2); box-shadow: 0 12px 34px rgba(0,0,0,.55); transform-origin: top center; animation: ep-unfold .32s cubic-bezier(.2,.8,.2,1) both; }
                 .ep-panel.right { width: clamp(176px, 46cqw, 244px); }
                 @keyframes ep-unfold { from { opacity: 0; transform: perspective(600px) rotateX(-18deg) scaleY(.6); } to { opacity: 1; transform: none; } }
                 .ep-list { --rh: 34px; perspective: 700px; max-height: min(calc(100cqh - 118px), 320px); }
@@ -642,15 +734,15 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                 .ep-scroll .ep-set { animation-duration: .24s; animation-delay: calc(var(--i, 0) * 28ms + 20ms); }
                 .ep-lock { position: absolute; inset: 0; z-index: 14; background: transparent; touch-action: none; cursor: not-allowed; }
                 .ep-lockbtn { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(7,11,18,.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: #d7dae2; font-family: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; cursor: pointer; overflow: hidden; touch-action: none; }
-                .ep-lockbtn::before { content: ''; position: absolute; inset: 0; background: rgba(59,123,245,.55); transform: scaleX(0); transform-origin: left; }
+                .ep-lockbtn::before { content: ''; position: absolute; inset: 0; background: rgba(var(--ac-rgb),.55); transform: scaleX(0); transform-origin: left; }
                 .ep-lockbtn.hold::before { transform: scaleX(1); transition: transform .7s linear; }
                 .ep-lockbtn > * { position: relative; display: flex; }
 
                 /* v8: lock button hides after 5s, any touch shows it again */
                 .ep-lockbtn { height: 38px; padding: 0 16px 0 6px; gap: 10px; border-radius: 999px; background: linear-gradient(180deg, rgba(18,27,42,.74), rgba(7,11,18,.82)); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 8px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: #e6e8ee; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .3s ease, transform .3s ease; }
                 .ep-lockbtn.show { opacity: 1; pointer-events: auto; transform: none; }
-                .ep-lockbtn .lic { width: 26px; height: 26px; border-radius: 50%; background: rgba(59,123,245,.28); align-items: center; justify-content: center; color: #b9d3ff; transition: background .2s; }
-                .ep-lockbtn.hold .lic { background: rgba(59,123,245,.65); }
+                .ep-lockbtn .lic { width: 26px; height: 26px; border-radius: 50%; background: rgba(var(--ac-rgb),.28); align-items: center; justify-content: center; color: var(--ac-tint); transition: background .2s; }
+                .ep-lockbtn.hold .lic { background: rgba(var(--ac-rgb),.65); }
 
                 /* v9: compact on small players (phones, small embedded boxes) */
                 @container (max-width: 520px) {
@@ -686,6 +778,41 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                     .ep-now .t { font-size: 12px; }
                     .ep-cd .big { font-size: 60px; }
                 }
+
+                /* v11: themes, panel looks, loaders, reduced motion */
+                .ep-root[data-look="glass"] .ep-panel { background: rgba(18,22,30,.52) !important; -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3); }
+                .ep-root[data-look="glass"] .ep-pill, .ep-root[data-look="glass"] .ep-ico { background: rgba(255,255,255,.09) !important; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+                .ep-root[data-look="black"] .ep-panel { background: #000 !important; border-color: rgba(255,255,255,.16); }
+                .ep-root[data-look="black"] .ep-pill, .ep-root[data-look="black"] .ep-ico { background: #000 !important; }
+
+                .ep-noanim .ep-panel, .ep-noanim .ep-row, .ep-noanim .ep-set, .ep-noanim .ep-pill, .ep-noanim .ep-ico, .ep-noanim .ep-top,
+                .ep-noanim .ep-now, .ep-noanim .ep-toast, .ep-noanim .ep-seg button, .ep-noanim .ep-sw, .ep-noanim .ep-sw::after, .ep-noanim .ep-slow { animation: none !important; transition: none !important; }
+
+                .ep-ld { display: flex; align-items: center; justify-content: center; min-height: 40px; }
+                .ep-ld-dots span { width: 9px; height: 9px; margin: 0 3px; border-radius: 50%; background: var(--ac); animation: ep-bounce 1s infinite ease-in-out; }
+                .ep-ld-dots span:nth-child(2) { animation-delay: .15s; }
+                .ep-ld-dots span:nth-child(3) { animation-delay: .3s; }
+                @keyframes ep-bounce { 0%, 80%, 100% { transform: scale(.4); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
+                .ep-ld-bars span { width: 4px; height: 26px; margin: 0 2px; border-radius: 2px; background: var(--ac); animation: ep-bar 1s infinite ease-in-out; }
+                .ep-ld-bars span:nth-child(2) { animation-delay: .1s; }
+                .ep-ld-bars span:nth-child(3) { animation-delay: .2s; }
+                .ep-ld-bars span:nth-child(4) { animation-delay: .3s; }
+                .ep-ld-bars span:nth-child(5) { animation-delay: .4s; }
+                @keyframes ep-bar { 0%, 40%, 100% { transform: scaleY(.35); } 20% { transform: scaleY(1); } }
+                .ep-ld-pulse i { width: 38px; height: 38px; border-radius: 50%; background: var(--ac); animation: ep-pulse2 1.3s infinite ease-out; }
+                @keyframes ep-pulse2 { 0% { transform: scale(.3); opacity: .9; } 100% { transform: scale(1.3); opacity: 0; } }
+                .ep-ld-orbit { position: relative; width: 44px; height: 44px; }
+                .ep-ld-orbit i { position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--ac); animation: ep-spin 1s linear infinite; }
+                .ep-ld-orbit i + i { top: 8px; right: 8px; bottom: 8px; left: 8px; border-top-color: var(--ac-hi); animation-duration: 1.5s; animation-direction: reverse; }
+
+                .ep-sws { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 4px; }
+                .ep-sw2 { position: relative; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.14); cursor: pointer; padding: 0; overflow: hidden; }
+                .ep-sw2.on { border-color: #fff; box-shadow: 0 0 0 2px rgba(var(--ac-rgb), .55); }
+                .ep-sw2.custom { background: conic-gradient(#e5383b, #f59e0b, #10b981, #06b6d4, #8b5cf6, #ec4899, #e5383b); }
+                .ep-sw2 input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+                .ep-seg.wrap { flex-wrap: wrap; }
+                .ep-seg.wrap button { flex: 1 1 28%; }
+                .ep-lvl.sp { margin-top: 8px; }
             `}</style>
 
             <iframe
@@ -712,7 +839,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
 
             {!loaded && (
                 <div className="ep-center">
-                    <div className="ep-spinner" />
+                    <Loader kind={prefs.loader} />
                     {slow && (
                         <div className="ep-slow">
                             {current.name} is taking a while to load.
@@ -841,6 +968,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     ['lock', 'Lock button', 'Show on top bar'],
                                     ['party', 'Watch Party', 'Show on top bar'],
                                     ['title', 'Title overlay', 'Now playing badge'],
+                                    ['autoSwitch', 'Auto-switch server', 'Moves on if a server does not work'],
                                 ].map(([key, label, desc], idx) => (
                                     <button
                                         key={key}
@@ -851,6 +979,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                             const nextVal = !prefs[key];
                                             setPref(key, nextVal);
                                             if (key === 'party' && !nextVal) leaveRoom(true);
+                                            if (key === 'autoSwitch') tried.current = new Set();
                                             if (key === 'block' && nextVal) setPref('sb', {});
                                         }}
                                     >
@@ -876,6 +1005,21 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     </div>
                                     <div className="ep-note">Strict blocks pop-ups and redirects. Relaxed allows pop-ups but still blocks page redirects. Off: only the redirect guard helps. Saved per server. Vidara starts Off.</div>
                                 </div>
+                                {prefs.autoSwitch && (
+                                    <div className="ep-lv">
+                                        <div className="ep-lvl">Wait before switching</div>
+                                        <div className="ep-seg">
+                                            {WAITS.map(([k, l]) => (
+                                                <button key={k} type="button" className={Number(prefs.autoSec) === k ? 'on' : ''} onClick={() => setPref('autoSec', k)}>{l}</button>
+                                            ))}
+                                        </div>
+                                        <div className="ep-note">If a server has not loaded after this time, or its host says the video is removed, the next server opens by itself. It cannot see inside the video, so a video that loads but will not play is not detected.</div>
+                                    </div>
+                                )}
+                                <button type="button" className="ep-set" onClick={() => setPanel('look')}>
+                                    <span className="l"><b>Appearance</b><i>Theme, style, loader, motion</i></span>
+                                    <span className="ep-sw2 on" style={{ width: 14, height: 14, background: 'var(--ac)', borderWidth: 1 }} />
+                                </button>
                                 <button type="button" className="ep-set" onClick={() => setPanel('view')}>
                                     <span className="l"><b>Frame{transformed ? ' •' : ''}</b><i>Fit, zoom &amp; rotate</i></span>
                                     <span style={{ opacity: 0.6, display: 'flex' }}>{Ico.next}</span>
@@ -883,6 +1027,63 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                             </div>
                             <div className="ep-tip">
                                 Ads drawn inside the video itself need a browser ad blocker (uBlock Origin, Brave, AdGuard). Keys: F fullscreen, S servers, L lock.
+                            </div>
+                        </div>
+                    )}
+
+                    {panel === 'look' && (
+                        <div className="ep-panel left">
+                            <div className="ep-ph">
+                                <button type="button" className="g" title="Back" onClick={() => setPanel('settings')}>{Ico.back}</button>
+                                <div className="t">Appearance</div>
+                                <button type="button" className="x" onClick={() => setPanel(null)}>{Ico.x}</button>
+                            </div>
+                            <div className="ep-pbody">
+                                <div className="ep-lvl">Theme colour</div>
+                                <div className="ep-sws">
+                                    {THEMES.map((t) => (
+                                        <button key={t.id} type="button" title={t.name} aria-label={t.name} className={`ep-sw2 ${prefs.theme === t.id ? 'on' : ''}`} style={{ background: t.ac }} onClick={() => setPref('theme', t.id)} />
+                                    ))}
+                                    <label className={`ep-sw2 custom ${prefs.theme === 'custom' ? 'on' : ''}`} title="Custom colour">
+                                        <input
+                                            type="color"
+                                            value={/^#[0-9a-f]{6}$/i.test(prefs.customColor || '') ? prefs.customColor : '#e5383b'}
+                                            onChange={(e) => setPrefs((p) => {
+                                                const next = { ...p, theme: 'custom', customColor: e.target.value };
+                                                try { localStorage.setItem(LS_PREFS, JSON.stringify(next)); } catch (err) { /* ignore */ }
+                                                return next;
+                                            })}
+                                        />
+                                    </label>
+                                </div>
+                                <div className="ep-lvl sp">Panel style</div>
+                                <div className="ep-seg">
+                                    {LOOKS.map(([k, l]) => (
+                                        <button key={k} type="button" className={(prefs.look || 'dark') === k ? 'on' : ''} onClick={() => setPref('look', k)}>{l}</button>
+                                    ))}
+                                </div>
+                                <div className="ep-lvl sp">Loading animation</div>
+                                <div className="ep-seg wrap">
+                                    {LOADERS.map(([k, l]) => (
+                                        <button key={k} type="button" className={(prefs.loader || 'ring') === k ? 'on' : ''} onClick={() => setPref('loader', k)}>{l}</button>
+                                    ))}
+                                </div>
+                                <div className="ep-ld" style={{ minHeight: 52 }}><Loader kind={prefs.loader} /></div>
+                                <button type="button" className="ep-set" onClick={() => setPref('anim', prefs.anim === false)}>
+                                    <span className="l"><b>Animations</b><i>Panel and button motion</i></span>
+                                    <span className={`ep-sw ${prefs.anim !== false ? 'on' : ''}`} />
+                                </button>
+                                <button
+                                    type="button"
+                                    className="ep-btn ghost"
+                                    onClick={() => setPrefs((p) => {
+                                        const next = { ...p, theme: 'red', customColor: '#e5383b', look: 'dark', loader: 'ring', anim: true };
+                                        try { localStorage.setItem(LS_PREFS, JSON.stringify(next)); } catch (err) { /* ignore */ }
+                                        return next;
+                                    })}
+                                >
+                                    Reset to default
+                                </button>
                             </div>
                         </div>
                     )}

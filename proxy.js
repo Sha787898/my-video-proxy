@@ -18,7 +18,7 @@ export function proxy(request) {
     const host = (request.headers.get('host') || '').toLowerCase();
     const { pathname, search } = request.nextUrl;
     const isEmbedPath = pathname === '/embed' || pathname.startsWith('/embed/');
-    const isApiPath = pathname === '/api/embed-src'; // the player asks this for the real server URL
+    const isApiPath = pathname === '/api/embed-src' || pathname === '/api/embed-check'; // the player asks these for the real server URL and for the auto-switch check
     const isFilePath = pathname.startsWith('/file/'); // public download page, safe to show on the player host too
 
     if (host === embedHost) {
