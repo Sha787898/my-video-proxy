@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { resolveMirrors } from '../../utils/mirrors';
+import { parseConfig } from '../../utils/playerConfig';
 import EmbedPlayer from './EmbedPlayer';
 
 const supabase = createClient(
@@ -41,7 +42,7 @@ async function EmbedContent({ params }) {
         return <Message title="No player server" lines={[`File: ${file.name}`, 'This file has no streaming-server links (mirrors are empty or download-only).']} />;
     }
 
-    return <EmbedPlayer servers={servers} title={file.name} downloadHref={`/file/${file.id}`} fileId={file.id} />;
+    return <EmbedPlayer servers={servers} title={file.name} downloadHref={`/file/${file.id}`} fileId={file.id} config={parseConfig(file.config)} />;
 }
 
 export default function EmbedPage({ params }) {

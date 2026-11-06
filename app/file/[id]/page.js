@@ -4,6 +4,7 @@ import { use, Suspense, useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { resolveMirrors } from '../../utils/mirrors';
 import { embedBase } from '../../utils/embedOrigin';
+import { parseConfig, resolvePrefs, readOverrides, themeVars } from '../../utils/playerConfig';
 
 // This page only reads public data: no login session is stored or used.
 const supabase = createClient(
@@ -156,23 +157,23 @@ function SecureModal({ mirror, onClose }) {
 }
 
 const CSS = `
-.dl-root { --ac: #3b7bf5; --ac-hi: #6ba6ff; --ok: #22c55e; --line: rgba(255,255,255,.08); position: relative; min-height: 100vh; display: flex; justify-content: center; padding: 22px 14px 44px; background: #0a0f18; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; overflow-x: hidden; }
-.dl-root::before { content: ''; position: fixed; top: -170px; left: 50%; width: 620px; height: 380px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(59,123,245,.26), transparent); pointer-events: none; }
+.dl-root { --ac: #e5383b; --ac-hi: #ff6b73; --ac-rgb: 229,56,59; --ac-tint: #ffc2c4; --ok: #22c55e; --line: rgba(255,255,255,.08); position: relative; min-height: 100vh; display: flex; justify-content: center; padding: 22px 14px 44px; background: #0a0f18; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; overflow-x: hidden; }
+.dl-root::before { content: ''; position: fixed; top: -170px; left: 50%; width: 620px; height: 380px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(var(--ac-rgb),.26), transparent); pointer-events: none; }
 .dl-root * { box-sizing: border-box; }
-.dl-card { position: relative; width: 100%; max-width: 560px; align-self: flex-start; padding: 18px; border-radius: 18px; background: linear-gradient(180deg, rgba(18,26,40,.88), rgba(9,13,21,.92)); border: 1px solid var(--line); border-top-color: rgba(59,123,245,.45); box-shadow: 0 24px 60px rgba(0,0,0,.6); animation: dl-in .4s ease both; }
+.dl-card { position: relative; width: 100%; max-width: 560px; align-self: flex-start; padding: 18px; border-radius: 18px; background: linear-gradient(180deg, rgba(18,26,40,.88), rgba(9,13,21,.92)); border: 1px solid var(--line); border-top-color: rgba(var(--ac-rgb),.45); box-shadow: 0 24px 60px rgba(0,0,0,.6); animation: dl-in .4s ease both; }
 @keyframes dl-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .dl-head { display: flex; gap: 12px; align-items: flex-start; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
-.dl-ic { width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #9cc2ff; background: rgba(59,123,245,.14); border: 1px solid rgba(59,123,245,.35); }
+.dl-ic { width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--ac-tint); background: rgba(var(--ac-rgb),.14); border: 1px solid rgba(var(--ac-rgb),.35); }
 .dl-name { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 700; color: #fff; overflow-wrap: anywhere; }
 .dl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .dl-chip { font-size: 10px; font-weight: 600; letter-spacing: .04em; padding: 3px 8px; border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid var(--line); color: #c4ccda; }
 .dl-chip.g { color: #86efac; border-color: rgba(34,197,94,.3); background: rgba(34,197,94,.08); }
-.dl-watch { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; aspect-ratio: 16 / 9; margin-top: 14px; border-radius: 14px; border: 1px solid var(--line); background: radial-gradient(circle at 50% 40%, rgba(59,123,245,.22), rgba(7,11,18,.9) 70%); color: #fff; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: border-color .2s, transform .2s; }
-.dl-watch:hover { border-color: rgba(59,123,245,.6); transform: translateY(-1px); }
-.dl-watch .pl { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(59,123,245,.4); border: 1px solid rgba(107,166,255,.5); }
+.dl-watch { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; aspect-ratio: 16 / 9; margin-top: 14px; border-radius: 14px; border: 1px solid var(--line); background: radial-gradient(circle at 50% 40%, rgba(var(--ac-rgb),.22), rgba(7,11,18,.9) 70%); color: #fff; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: border-color .2s, transform .2s; }
+.dl-watch:hover { border-color: rgba(var(--ac-rgb),.6); transform: translateY(-1px); }
+.dl-watch .pl { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(var(--ac-rgb),.4); border: 1px solid rgba(var(--ac-rgb),.5); }
 .dl-frame { width: 100%; aspect-ratio: 16 / 9; margin-top: 14px; border: 1px solid var(--line); border-radius: 14px; background: #000; overflow: hidden; }
 .dl-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
-.dl-main { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 48px; margin-top: 14px; padding: 0 16px; border: 1px solid rgba(107,166,255,.5); border-radius: 13px; background: linear-gradient(180deg, rgba(59,123,245,.55), rgba(14,165,217,.5)); color: #fff; font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: .02em; cursor: pointer; box-shadow: 0 10px 28px rgba(59,123,245,.25); transition: transform .2s, filter .2s; }
+.dl-main { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 48px; margin-top: 14px; padding: 0 16px; border: 1px solid rgba(var(--ac-rgb),.5); border-radius: 13px; background: linear-gradient(180deg, rgba(var(--ac-rgb),.55), rgba(var(--ac-rgb),.32)); color: #fff; font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: .02em; cursor: pointer; box-shadow: 0 10px 28px rgba(var(--ac-rgb),.25); transition: transform .2s, filter .2s; }
 .dl-main:hover { transform: translateY(-1px); filter: brightness(1.12); }
 .dl-main small { font-size: 10.5px; font-weight: 500; opacity: .75; }
 .dl-h2 { margin: 20px 2px 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8e9bb0; }
@@ -180,13 +181,13 @@ const CSS = `
 .dl-row { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 10px 0 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.03); color: #e5e7eb; font-family: inherit; text-align: left; cursor: pointer; overflow: hidden; transition: background .2s, border-color .2s, transform .2s; animation: dl-row .35s cubic-bezier(.22,.9,.28,1) backwards; animation-delay: calc(var(--i, 0) * 45ms + 80ms); }
 @keyframes dl-row { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .dl-row::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px; border-radius: 2px; background: var(--ac); transform: scaleY(0); transition: transform .25s; }
-.dl-row:hover { background: rgba(255,255,255,.06); border-color: rgba(59,123,245,.45); transform: translateX(2px); }
+.dl-row:hover { background: rgba(255,255,255,.06); border-color: rgba(var(--ac-rgb),.45); transform: translateX(2px); }
 .dl-row:hover::before { transform: scaleY(1); }
 .dl-row .n { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dl-row .t { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 3px 7px; border-radius: 6px; background: rgba(255,255,255,.07); color: #aab5c7; }
-.dl-row .t.s { color: #9cc2ff; background: rgba(59,123,245,.16); }
-.dl-row .go { width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: rgba(59,123,245,.2); color: #9cc2ff; transition: background .2s; }
-.dl-row:hover .go { background: rgba(59,123,245,.5); color: #fff; }
+.dl-row .t.s { color: var(--ac-tint); background: rgba(var(--ac-rgb),.16); }
+.dl-row .go { width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: rgba(var(--ac-rgb),.2); color: var(--ac-tint); transition: background .2s; }
+.dl-row:hover .go { background: rgba(var(--ac-rgb),.5); color: #fff; }
 .dl-foot { margin: 16px 2px 0; font-size: 10.5px; line-height: 1.55; color: #67748a; }
 .dl-empty { text-align: center; padding: 36px 8px; color: #a6b1c4; font-size: 13px; }
 .dl-empty b { display: block; color: #fff; font-size: 16px; margin-bottom: 6px; }
@@ -195,16 +196,16 @@ const CSS = `
 
 .dl-back { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.68); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: dl-fade .2s ease both; }
 @keyframes dl-fade { from { opacity: 0; } to { opacity: 1; } }
-.dl-modal { width: min(420px, 100%); max-height: 100%; overflow-y: auto; padding: 22px 20px 18px; text-align: center; border-radius: 20px; background: linear-gradient(180deg, rgba(18,26,40,.97), rgba(9,13,21,.98)); border: 1px solid var(--line); border-top-color: rgba(59,123,245,.55); box-shadow: 0 30px 80px rgba(0,0,0,.7); animation: dl-pop .28s cubic-bezier(.2,.9,.3,1) both; }
+.dl-modal { width: min(420px, 100%); max-height: 100%; overflow-y: auto; padding: 22px 20px 18px; text-align: center; border-radius: 20px; background: linear-gradient(180deg, rgba(18,26,40,.97), rgba(9,13,21,.98)); border: 1px solid var(--line); border-top-color: rgba(var(--ac-rgb),.55); box-shadow: 0 30px 80px rgba(0,0,0,.7); animation: dl-pop .28s cubic-bezier(.2,.9,.3,1) both; }
 @keyframes dl-pop { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
-.dl-shield { width: 56px; height: 56px; margin: 0 auto 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #9cc2ff; background: rgba(59,123,245,.16); border: 1px solid rgba(59,123,245,.4); animation: dl-pulse 1.8s ease-in-out infinite; }
+.dl-shield { width: 56px; height: 56px; margin: 0 auto 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--ac-tint); background: rgba(var(--ac-rgb),.16); border: 1px solid rgba(var(--ac-rgb),.4); animation: dl-pulse 1.8s ease-in-out infinite; }
 .dl-shield.ok { color: #4ade80; background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.4); animation: none; }
 .dl-shield.bad { color: #fca5a5; animation: none; }
-@keyframes dl-pulse { 50% { box-shadow: 0 0 0 9px rgba(59,123,245,.0), 0 0 0 0 rgba(59,123,245,.4); transform: scale(1.04); } }
+@keyframes dl-pulse { 50% { box-shadow: 0 0 0 9px rgba(var(--ac-rgb),.0), 0 0 0 0 rgba(var(--ac-rgb),.4); transform: scale(1.04); } }
 .dl-modal h3 { margin: 0; font-size: 17px; font-weight: 700; color: #fff; }
 .dl-sub { margin: 4px 0 14px; font-size: 12px; color: #8e9bb0; overflow-wrap: anywhere; }
 .dl-bar { height: 4px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
-.dl-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #3b7bf5, #6ba6ff); transition: width .6s ease; }
+.dl-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--ac), var(--ac-hi)); transition: width .6s ease; }
 .dl-bar i.ok { background: linear-gradient(90deg, #16a34a, #4ade80); }
 .dl-bar i.bad { background: #ef4444; }
 .dl-steps { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; text-align: left; }
@@ -214,7 +215,7 @@ const CSS = `
 .st-ok .dot { background: #16a34a; border-color: #16a34a; }
 .st-warn .dot { background: #d97706; border-color: #d97706; }
 .st-bad .dot { background: #dc2626; border-color: #dc2626; }
-.dl-steps .spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); border-top-color: #6ba6ff; animation: dl-spin .7s linear infinite; }
+.dl-steps .spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); border-top-color: var(--ac-hi); animation: dl-spin .7s linear infinite; }
 @keyframes dl-spin { to { transform: rotate(360deg); } }
 .dl-steps .tx b { display: block; font-size: 12.5px; font-weight: 600; color: #f3f4f6; }
 .dl-steps .tx small { display: block; margin-top: 1px; font-size: 10.5px; color: #8e9bb0; }
@@ -226,6 +227,7 @@ const CSS = `
 .dl-note { margin: 14px 0 0; font-size: 10px; line-height: 1.55; color: #67748a; }
 .dl-note b { color: #97a3b8; font-weight: 600; }
 @media (max-width: 420px) { .dl-card { padding: 14px; border-radius: 16px; } .dl-name { font-size: 14px; } }
+.dl-noanim .dl-card, .dl-noanim .dl-row, .dl-noanim .dl-modal, .dl-noanim .dl-back, .dl-noanim .dl-shield, .dl-noanim .dl-go, .dl-noanim .dl-watch, .dl-noanim .dl-main, .dl-noanim .dl-ic { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) { .dl-card, .dl-row, .dl-modal, .dl-back, .dl-shield, .dl-go { animation: none; } }
 `;
 
@@ -237,6 +239,9 @@ function FileDownloadContent({ params }) {
     const [loading, setLoading] = useState(true);
     const [watch, setWatch] = useState(false);
     const [sel, setSel] = useState(null);
+    const [ov, setOv] = useState({});
+    useEffect(() => { setOv(readOverrides()); }, []);
+    const prefs = resolvePrefs(parseConfig(file && file.config), ov);
 
     useEffect(() => {
         let dead = false;
@@ -255,7 +260,7 @@ function FileDownloadContent({ params }) {
     const hasPlayer = mirrors.some((m) => m.embed);
 
     return (
-        <div className="dl-root">
+        <div className={`dl-root ${prefs.anim === false ? 'dl-noanim' : ''}`} style={file ? themeVars(prefs) : undefined}>
             <style>{CSS}</style>
             <meta name="referrer" content="no-referrer" />
             <meta name="robots" content="noindex, nofollow" />

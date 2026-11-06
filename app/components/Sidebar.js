@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import {
     IconDashboard, IconFolder, IconUpload, IconGlobe, IconCloud, IconIdCard, IconLaptop,
-    IconLayers, IconCode, IconChart, IconSliders, IconKey, IconChevronDown, IconMenu, IconX, IconSearch, IconChevronRight,
+    IconLayers, IconCode, IconChart, IconSliders, IconKey, IconPlay, IconChevronDown, IconMenu, IconX, IconSearch, IconChevronRight,
 } from './Icons';
 
 const NAV = [
@@ -25,7 +25,10 @@ const NAV = [
     { href: '/analytics', label: 'Analytics', Icon: IconChart },
     {
         id: 'settings', label: 'Settings', Icon: IconSliders,
-        items: [{ href: '/manage-sites', label: 'Manage Sites & Keys', Icon: IconKey }],
+        items: [
+            { href: '/manage-sites', label: 'Manage Sites & Keys', Icon: IconKey },
+            { href: '/player-settings', label: 'Player & Download Theme', Icon: IconPlay },
+        ],
     },
 ];
 

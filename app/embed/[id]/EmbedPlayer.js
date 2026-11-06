@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { THEMES, LOADERS, LOOKS, WAITS, parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked, themeVars } from '../../utils/playerConfig';
 
 // Watch Party uses Supabase Realtime "broadcast" only (no database table needed)
 const sb = createClient(
@@ -11,44 +12,6 @@ const sb = createClient(
 );
 
 const LS_SERVER = 'ms_player_server';
-const LS_PREFS = 'ms_player_prefs_v3'; // v3: new defaults (Watch Party off, Vidara protection off); older saved settings are ignored once
-const DEFAULT_PREFS = { download: true, fullscreen: true, lock: true, party: false, title: true, block: true, guard: false, view: true, sb: {},
-    theme: 'red', customColor: '#e5383b', look: 'dark', loader: 'ring', anim: true, autoSwitch: false, autoSec: 15 };
-const THEMES = [
-    { id: 'red', name: 'Crimson', ac: '#e5383b', hi: '#ff6b73', rgb: '229,56,59', tint: '#ffc2c4' },
-    { id: 'blue', name: 'Ocean', ac: '#3b7bf5', hi: '#6ba6ff', rgb: '59,123,245', tint: '#b9d3ff' },
-    { id: 'green', name: 'Emerald', ac: '#10b981', hi: '#34d399', rgb: '16,185,129', tint: '#a7f3d0' },
-    { id: 'violet', name: 'Violet', ac: '#8b5cf6', hi: '#a78bfa', rgb: '139,92,246', tint: '#ddd6fe' },
-    { id: 'amber', name: 'Amber', ac: '#f59e0b', hi: '#fbbf24', rgb: '245,158,11', tint: '#fde68a' },
-    { id: 'pink', name: 'Rose', ac: '#ec4899', hi: '#f472b6', rgb: '236,72,153', tint: '#fbcfe8' },
-    { id: 'cyan', name: 'Cyan', ac: '#06b6d4', hi: '#22d3ee', rgb: '6,182,212', tint: '#a5f3fc' },
-];
-const LOADERS = [['ring', 'Ring'], ['dots', 'Dots'], ['bars', 'Bars'], ['pulse', 'Pulse'], ['orbit', 'Orbit']];
-const LOOKS = [['dark', 'Dark'], ['glass', 'Glass'], ['black', 'Black']];
-const WAITS = [[10, '10s'], [15, '15s'], [25, '25s'], [40, '40s']];
-
-const mixHex = (hex, toward, amt) => {
-    const n = parseInt(hex.slice(1), 16);
-    const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v + (toward - v) * amt));
-    return ch;
-};
-const themeVars = (prefs) => {
-    const t = THEMES.find((x) => x.id === prefs.theme);
-    if (t) return { '--ac': t.ac, '--ac-hi': t.hi, '--ac-rgb': t.rgb, '--ac-tint': t.tint, '--acsoft': `rgba(${t.rgb},.10)` };
-    if (prefs.theme === 'custom' && /^#[0-9a-f]{6}$/i.test(prefs.customColor || '')) {
-        const c = prefs.customColor;
-        const rgb = mixHex(c, 0, 0).join(',');
-        return {
-            '--ac': c,
-            '--ac-hi': `rgb(${mixHex(c, 255, 0.3).join(',')})`,
-            '--ac-rgb': rgb,
-            '--ac-tint': `rgb(${mixHex(c, 255, 0.7).join(',')})`,
-            '--acsoft': `rgba(${rgb},.10)`,
-        };
-    }
-    return undefined; // default: the stylesheet's red
-};
-
 function Loader({ kind }) {
     if (kind === 'dots') return <div className="ep-ld ep-ld-dots"><span /><span /><span /></div>;
     if (kind === 'bars') return <div className="ep-ld ep-ld-bars"><span /><span /><span /><span /><span /></div>;
@@ -79,7 +42,7 @@ const Ico = {
 };
 
 // servers: [{ key, name, url }]
-export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
+export default function EmbedPlayer({ servers, title, downloadHref, fileId, config }) {
     const [active, setActive] = useState(0);
     const [panel, setPanel] = useState(null); // null | 'servers' | 'party' | 'settings'
     const [loaded, setLoaded] = useState(false);
@@ -87,7 +50,15 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
     const [uiVisible, setUiVisible] = useState(true);
     const [nowShow, setNowShow] = useState(true);
     const [reloadKey, setReloadKey] = useState(0);
-    const [prefs, setPrefs] = useState(DEFAULT_PREFS);
+    const [ov, setOv] = useState({}); // only what THIS visitor changed
+    const [partyForce, setPartyForce] = useState(false);
+    const cfg = useMemo(() => parseConfig(config), [config]);
+    const can = (k) => !isLocked(cfg.locked, k);
+    const prefs = useMemo(() => {
+        const p = resolvePrefs(cfg, ov);
+        if (partyForce && !isLocked(cfg.locked, 'party')) p.party = true;
+        return p;
+    }, [cfg, ov, partyForce]);
     const [view, setView] = useState({ fit: 'fit', zoom: 1, rot: 0 });
     const [urls, setUrls] = useState({});
     const [locked, setLocked] = useState(false);
@@ -154,28 +125,38 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
             const saved = localStorage.getItem(LS_SERVER);
             const idx = servers.findIndex((s) => s.key === saved);
             if (idx > 0) setActive(idx);
-            const p = JSON.parse(localStorage.getItem(LS_PREFS) || 'null');
-            if (p && typeof p === 'object') setPrefs({ ...DEFAULT_PREFS, ...p });
+            setOv(readOverrides());
         } catch (e) { /* ignore */ }
 
         try {
             const r = new URLSearchParams(window.location.search).get('room');
             if (r && /^[A-Za-z0-9]{4,10}$/.test(r)) {
                 setRoom(r.toUpperCase());
-                setPrefs((p) => ({ ...p, party: true })); // a room link always shows the Watch Party button
+                setPartyForce(true); // a room link always shows the Watch Party button
                 setPanel('party');
             }
         } catch (e) { /* ignore */ }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const setPref = (key, value) => {
-        setPrefs((prev) => {
-            const next = { ...prev, [key]: value };
-            try { localStorage.setItem(LS_PREFS, JSON.stringify(next)); } catch (e) { /* ignore */ }
+    // a visitor's choice is stored as an override; a setting the admin locked can not be changed
+    const patchPrefs = (patch) => {
+        const allowed = {};
+        Object.keys(patch).forEach((k) => { if (!isLocked(cfg.locked, k)) allowed[k] = patch[k]; });
+        if (Object.keys(allowed).length === 0) return;
+        setOv((prev) => {
+            const next = { ...prev, ...allowed };
+            saveOverrides(next);
             return next;
         });
     };
+    const setPref = (key, value) => patchPrefs({ [key]: value });
+    const resetLook = () => setOv((prev) => {
+        const next = { ...prev };
+        ['theme', 'customColor', 'look', 'loader', 'anim'].forEach((k) => { delete next[k]; });
+        saveOverrides(next);
+        return next;
+    });
 
     // ---------- redirect guard: asks before the page is navigated away (e.g. by an ad script) ----------
     useEffect(() => {
@@ -848,7 +829,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     <button type="button" className="ep-pill" onClick={() => choose((active + 1) % servers.length)}>Next server</button>
                                 )}
                                 <button type="button" className="ep-pill" onClick={() => setReloadKey((k) => k + 1)}>Retry</button>
-                                {sandboxOn && (
+                                {sandboxOn && can('block') && (
                                     <button
                                         type="button"
                                         className="ep-pill"
@@ -969,7 +950,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     ['party', 'Watch Party', 'Show on top bar'],
                                     ['title', 'Title overlay', 'Now playing badge'],
                                     ['autoSwitch', 'Auto-switch server', 'Moves on if a server does not work'],
-                                ].map(([key, label, desc], idx) => (
+                                ].filter(([key]) => can(key)).map(([key, label, desc], idx) => (
                                     <button
                                         key={key}
                                         type="button"
@@ -996,6 +977,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     <span className="l"><b>Lock screen</b><i>Touches can't reach the player</i></span>
                                     <span style={{ opacity: 0.7, display: 'flex' }}>{Ico.lock}</span>
                                 </button>
+                                {can('block') && (
                                 <div className="ep-lv">
                                     <div className="ep-lvl">Protection · {current.name}</div>
                                     <div className="ep-seg">
@@ -1005,7 +987,8 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     </div>
                                     <div className="ep-note">Strict blocks pop-ups and redirects. Relaxed allows pop-ups but still blocks page redirects. Off: only the redirect guard helps. Saved per server. Vidara starts Off.</div>
                                 </div>
-                                {prefs.autoSwitch && (
+                                )}
+                                {prefs.autoSwitch && can('autoSwitch') && (
                                     <div className="ep-lv">
                                         <div className="ep-lvl">Wait before switching</div>
                                         <div className="ep-seg">
@@ -1016,10 +999,12 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                         <div className="ep-note">If a server has not loaded after this time, or its host says the video is removed, the next server opens by itself. It cannot see inside the video, so a video that loads but will not play is not detected.</div>
                                     </div>
                                 )}
+                                {(can('theme') || can('look') || can('loader') || can('anim')) && (
                                 <button type="button" className="ep-set" onClick={() => setPanel('look')}>
                                     <span className="l"><b>Appearance</b><i>Theme, style, loader, motion</i></span>
                                     <span className="ep-sw2 on" style={{ width: 14, height: 14, background: 'var(--ac)', borderWidth: 1 }} />
                                 </button>
+                                )}
                                 <button type="button" className="ep-set" onClick={() => setPanel('view')}>
                                     <span className="l"><b>Frame{transformed ? ' •' : ''}</b><i>Fit, zoom &amp; rotate</i></span>
                                     <span style={{ opacity: 0.6, display: 'flex' }}>{Ico.next}</span>
@@ -1039,6 +1024,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                 <button type="button" className="x" onClick={() => setPanel(null)}>{Ico.x}</button>
                             </div>
                             <div className="ep-pbody">
+                                {can('theme') && (<>
                                 <div className="ep-lvl">Theme colour</div>
                                 <div className="ep-sws">
                                     {THEMES.map((t) => (
@@ -1048,20 +1034,20 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                         <input
                                             type="color"
                                             value={/^#[0-9a-f]{6}$/i.test(prefs.customColor || '') ? prefs.customColor : '#e5383b'}
-                                            onChange={(e) => setPrefs((p) => {
-                                                const next = { ...p, theme: 'custom', customColor: e.target.value };
-                                                try { localStorage.setItem(LS_PREFS, JSON.stringify(next)); } catch (err) { /* ignore */ }
-                                                return next;
-                                            })}
+                                            onChange={(e) => patchPrefs({ theme: 'custom', customColor: e.target.value })}
                                         />
                                     </label>
                                 </div>
+                                </>)}
+                                {can('look') && (<>
                                 <div className="ep-lvl sp">Panel style</div>
                                 <div className="ep-seg">
                                     {LOOKS.map(([k, l]) => (
                                         <button key={k} type="button" className={(prefs.look || 'dark') === k ? 'on' : ''} onClick={() => setPref('look', k)}>{l}</button>
                                     ))}
                                 </div>
+                                </>)}
+                                {can('loader') && (<>
                                 <div className="ep-lvl sp">Loading animation</div>
                                 <div className="ep-seg wrap">
                                     {LOADERS.map(([k, l]) => (
@@ -1069,18 +1055,17 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId }) {
                                     ))}
                                 </div>
                                 <div className="ep-ld" style={{ minHeight: 52 }}><Loader kind={prefs.loader} /></div>
+                                </>)}
+                                {can('anim') && (
                                 <button type="button" className="ep-set" onClick={() => setPref('anim', prefs.anim === false)}>
                                     <span className="l"><b>Animations</b><i>Panel and button motion</i></span>
                                     <span className={`ep-sw ${prefs.anim !== false ? 'on' : ''}`} />
                                 </button>
+                                )}
                                 <button
                                     type="button"
                                     className="ep-btn ghost"
-                                    onClick={() => setPrefs((p) => {
-                                        const next = { ...p, theme: 'red', customColor: '#e5383b', look: 'dark', loader: 'ring', anim: true };
-                                        try { localStorage.setItem(LS_PREFS, JSON.stringify(next)); } catch (err) { /* ignore */ }
-                                        return next;
-                                    })}
+                                    onClick={resetLook}
                                 >
                                     Reset to default
                                 </button>
