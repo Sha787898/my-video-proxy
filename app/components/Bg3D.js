@@ -215,6 +215,148 @@ function makeScene(kind, ctx, W, H, col) {
         };
     }
 
+    // ---------- terrain: rolling wireframe mountains (hidden-line ridges) ----------
+    if (kind === 'terrain') {
+        const NX = small ? 26 : 40, NZ = small ? 16 : 24;
+        const zn = 0.35, zf = 4.4, dz = (zf - zn) / NZ;
+        const hgt = (x, z) => 0.3 * Math.sin(x * 1.2 + z * 0.9) + 0.17 * Math.sin(x * 2.6 - z * 1.6 + 1.3) + 0.1 * Math.sin(z * 3.1 + x * 0.7);
+        return (t, m) => {
+            const hz = H * 0.36 + m.y * 10;
+            const f = H * 0.78;
+            const cam = t * 0.5;
+            const g = ctx.createRadialGradient(W / 2, hz, 0, W / 2, hz, Math.max(W, H) * 0.65);
+            g.addColorStop(0, rgba(0.3));
+            g.addColorStop(1, rgba(0));
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, W, H);
+            const n0 = Math.ceil((cam + zn) / dz);
+            ctx.lineJoin = 'round';
+            for (let k = NZ; k >= 0; k--) {
+                const n = n0 + k;
+                const z = n * dz - cam;
+                if (z < zn * 0.6) continue;
+                const pts = [];
+                for (let i = 0; i <= NX; i++) {
+                    const x = (i / NX - 0.5) * 7;
+                    const y = hgt(x, n * dz) * (0.55 + 0.45 * Math.min(1, Math.abs(x) / 1.4)); // calmer valley in the middle
+                    pts.push([W / 2 + (x - m.x * 0.5) * f / z, hz + (0.62 - y) * f / z]);
+                }
+                ctx.beginPath();
+                ctx.moveTo(pts[0][0], pts[0][1]);
+                for (let i = 1; i <= NX; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+                ctx.lineTo(W + 20, H + 20);
+                ctx.lineTo(-20, H + 20);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(8,12,20,0.96)';
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(pts[0][0], pts[0][1]);
+                for (let i = 1; i <= NX; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+                ctx.strokeStyle = rgba(clamp(1.05 - z / zf, 0.08, 1) * 0.85);
+                ctx.lineWidth = clamp(1.8 / z, 0.6, 2);
+                ctx.stroke();
+            }
+        };
+    }
+
+    // ---------- helix: double helix with rungs ----------
+    if (kind === 'helix') {
+        const N = small ? 46 : 74;
+        const D = Math.max(W, H) * 1.2;
+        const drawHelix = (cx, cy, R, len, t, lean, phase, m) => {
+            const cl = Math.cos(lean), sl = Math.sin(lean);
+            const tilt = 0.5 + m.y * 0.3, ct = Math.cos(tilt), st = Math.sin(tilt);
+            const strands = [[], []];
+            for (let i = 0; i < N; i++) {
+                const u = i / (N - 1);
+                const y0 = (u - 0.5) * len;
+                const ang = u * 11 + t * 0.9 + phase;
+                for (let s2 = 0; s2 < 2; s2++) {
+                    const a = ang + s2 * Math.PI;
+                    let x = Math.cos(a) * R, y = y0, z = Math.sin(a) * R;
+                    const xr = x * cl - y * sl; const yr = x * sl + y * cl; x = xr; y = yr;
+                    const yt = y * ct - z * st; z = y * st + z * ct; y = yt;
+                    const k = D / (D - z);
+                    strands[s2].push([cx + x * k, cy + y * k, z / R, k]);
+                }
+            }
+            for (let i = 0; i < N; i += 3) {
+                const a = strands[0][i], b = strands[1][i];
+                ctx.strokeStyle = rgba(0.18 + 0.2 * clamp((a[2] + b[2]) / 2 + 0.5, 0, 1));
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(a[0], a[1]);
+                ctx.lineTo(b[0], b[1]);
+                ctx.stroke();
+            }
+            strands.forEach((st2, si) => {
+                ctx.strokeStyle = rgba(si ? 0.5 : 0.75);
+                ctx.lineWidth = 1.4;
+                ctx.beginPath();
+                st2.forEach((p, i) => { if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+                ctx.stroke();
+                st2.forEach((p, i) => {
+                    if (i % 2) return;
+                    const a = clamp(0.45 + p[2] * 0.5, 0.15, 1);
+                    ctx.fillStyle = si ? rgba(a) : `rgba(255,255,255,${a * 0.9})`;
+                    ctx.beginPath();
+                    ctx.arc(p[0], p[1], 2.2 * p[3], 0, 6.2832);
+                    ctx.fill();
+                });
+            });
+        };
+        return (t, m) => {
+            const R = Math.min(W, H) * 0.13;
+            const len = H * 1.15;
+            if (small) drawHelix(W / 2, H / 2, R, len, t, 0.45 + m.x * 0.15, 0, m);
+            else {
+                drawHelix(W * 0.22, H / 2, R, len, t, 0.4 + m.x * 0.12, 0, m);
+                drawHelix(W * 0.78, H / 2, R, len, t, -0.4 + m.x * 0.12, 2, m);
+            }
+        };
+    }
+
+    // ---------- tunnel: twisting square tunnel you fly through ----------
+    if (kind === 'tunnel') {
+        const NF = small ? 14 : 22;
+        const zmin = 0.25, zmax = 5;
+        const f = Math.min(W, H) * 0.55;
+        const C = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+        return (t, m) => {
+            const frames = [];
+            for (let k = 0; k < NF; k++) {
+                const u = (((k / NF) - t * 0.09) % 1 + 1) % 1;
+                const z = zmin + u * u * (zmax - zmin);
+                const ang = z * 0.5 + t * 0.22 + m.x * 0.35;
+                const ca = Math.cos(ang), sa = Math.sin(ang);
+                const cx = W / 2 + (m.x * 60) / (z + 0.5), cy = H / 2 + (m.y * 40) / (z + 0.5);
+                frames.push({
+                    z, pts: C.map(([x, y]) => [cx + (x * ca - y * sa) * f / z, cy + (x * sa + y * ca) * f / z]),
+                });
+            }
+            frames.sort((a, b) => b.z - a.z);
+            ctx.lineJoin = 'round';
+            for (let i = 0; i < frames.length; i++) {
+                const fr = frames[i];
+                const a = clamp(1 - fr.z / zmax, 0, 1);
+                if (i > 0) {
+                    const pv = frames[i - 1];
+                    ctx.strokeStyle = rgba(0.06 + a * 0.2);
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    for (let c = 0; c < 4; c++) { ctx.moveTo(pv.pts[c][0], pv.pts[c][1]); ctx.lineTo(fr.pts[c][0], fr.pts[c][1]); }
+                    ctx.stroke();
+                }
+                ctx.strokeStyle = rgba(0.12 + a * 0.75);
+                ctx.lineWidth = clamp(2.4 / fr.z, 0.6, 3.2);
+                ctx.beginPath();
+                fr.pts.forEach((p, c) => { if (c) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+                ctx.closePath();
+                ctx.stroke();
+            }
+        };
+    }
+
     // ---------- aurora: soft moving light blobs ----------
     const blobs = [
         { sx: 0.13, sy: 0.17, ox: 0.3, oy: 0.35, r: 0.5, a: 0.3, c: [R, G, B] },
@@ -238,7 +380,7 @@ function makeScene(kind, ctx, W, H, col) {
     };
 }
 
-export const BG_KINDS = ['grid', 'cubes', 'warp', 'globe', 'aurora'];
+export const BG_KINDS = ['grid', 'cubes', 'warp', 'globe', 'aurora', 'terrain', 'helix', 'tunnel'];
 
 export function Bg3D({ kind = 'grid', rgb = '229,56,59', animate = true, contained = false }) {
     const ref = useRef(null);
@@ -322,9 +464,9 @@ export function Bg3D({ kind = 'grid', rgb = '229,56,59', animate = true, contain
 export const BRAND_ANIMS = ['shine', 'flip', 'tilt', 'glow', 'glitch'];
 
 const BRAND_CSS = `
-.b3 { display: inline-flex; align-items: center; gap: 12px; max-width: 100%; }
-.b3-stage { perspective: 360px; flex-shrink: 0; }
-.b3-cube { --s: 30px; position: relative; width: var(--s); height: var(--s); transform-style: preserve-3d; animation: b3-spin 10s linear infinite; }
+.b3 { display: inline-flex; align-items: center; gap: 12px; max-width: 100%; padding: 3px 0; }
+.b3-stage { display: block; perspective: 360px; flex-shrink: 0; }
+.b3-cube { --s: 30px; display: block; position: relative; width: var(--s); height: var(--s); transform-style: preserve-3d; animation: b3-spin 10s linear infinite; }
 .b3-cube i { position: absolute; top: 0; left: 0; width: var(--s); height: var(--s); display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 11px; font-weight: 900; color: #fff; letter-spacing: .02em; border: 1.5px solid rgba(var(--ac-rgb, 229,56,59), .95); background: rgba(var(--ac-rgb, 229,56,59), .18); box-shadow: inset 0 0 12px rgba(var(--ac-rgb, 229,56,59), .45); }
 .b3-cube i:nth-child(1) { transform: translateZ(calc(var(--s) / 2)); }
 .b3-cube i:nth-child(2) { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
@@ -359,7 +501,7 @@ export function BrandMark({ name = 'MultiServer', anim = 'shine', animate = true
     return (
         <span className={`b3 ${animate ? '' : 'b3-still'}`}>
             <style>{BRAND_CSS}</style>
-            <span className="b3-stage" aria-hidden="true">
+            <span className="b3-stage" aria-hidden="true" style={{ width: size, height: size }}>
                 <span className="b3-cube" style={{ '--s': `${size}px` }}>
                     <i>{mark}</i><i>{mark}</i><i /><i /><i /><i />
                 </span>

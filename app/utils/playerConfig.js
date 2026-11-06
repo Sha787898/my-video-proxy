@@ -22,7 +22,7 @@ export const LOOKS = [['dark', 'Dark'], ['glass', 'Glass'], ['black', 'Black']];
 export const WAITS = [[10, '10s'], [15, '15s'], [25, '25s'], [40, '40s']];
 export const LEVELS = ['strict', 'relaxed', 'off'];
 // download page / landing page: 3D background scene and the animated name
-export const BGS = [['grid', 'Grid'], ['cubes', 'Cubes'], ['warp', 'Warp'], ['globe', 'Globe'], ['aurora', 'Aurora'], ['none', 'Off']];
+export const BGS = [['grid', 'Grid'], ['cubes', 'Cubes'], ['warp', 'Warp'], ['globe', 'Globe'], ['aurora', 'Aurora'], ['terrain', 'Terrain'], ['helix', 'Helix'], ['tunnel', 'Tunnel'], ['none', 'Off']];
 export const BRANDS = [['shine', 'Shine'], ['flip', 'Flip'], ['tilt', 'Tilt 3D'], ['glow', 'Glow'], ['glitch', 'Glitch'], ['none', 'Still']];
 
 // the values everybody gets when the admin has not set anything (the original red look)

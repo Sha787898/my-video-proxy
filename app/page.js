@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
 import { SERVERS } from './utils/mirrors';
 import { Bg3D, BrandMark } from './components/Bg3D';
+import { BGS } from './utils/playerConfig';
 import { IconLayers, IconZap, IconDownload, IconCloud, IconLink, IconUsers, IconDashboard, IconCheck, IconShieldCheck, IconServer, IconLock, IconChevronRight, IconPlay } from './components/Icons';
 
 const supabase = createClient(
@@ -37,7 +38,7 @@ const SERVER_NAMES = Object.keys(SERVERS).map((k) => SERVERS[k].name);
 const SERVER_COUNT = SERVER_NAMES.length;
 
 const CSS = `
-.lp { --ac: #3b7bf5; --ac-hi: #6ba6ff; --ac-rgb: 59,123,245; --ac-tint: #b9d3ff; }
+.lp { --ac: #e5383b; --ac-hi: #ff6b73; --ac-rgb: 229,56,59; --ac-tint: #ffc2c4; }
 .lp-layer { position: relative; z-index: 1; }
 
 /* scroll reveal */
@@ -94,13 +95,41 @@ const CSS = `
 .lp-glow { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .25s; background: radial-gradient(260px circle at var(--gx, 50%) var(--gy, 50%), rgba(var(--ac-rgb), .18), transparent 70%); }
 .lp-tilt:hover .lp-glow { opacity: 1; }
 
+/* rotating feature cube */
+.lp-cube-wrap { --cs: min(250px, 66vw); width: var(--cs); height: var(--cs); margin: 0 auto; perspective: 1100px; }
+.lp-cube { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; animation: lp-cube 20s linear infinite; }
+.lp-cube-wrap:hover .lp-cube { animation-play-state: paused; }
+@keyframes lp-cube { from { transform: rotateX(-12deg) rotateY(0deg); } to { transform: rotateX(-12deg) rotateY(360deg); } }
+.lp-face { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 18px; text-align: center; border-radius: 18px; border: 1px solid rgba(var(--ac-rgb), .5); background: linear-gradient(160deg, rgba(var(--ac-rgb), .2), rgba(10,15,24,.88)); box-shadow: inset 0 0 44px rgba(var(--ac-rgb), .14); -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+.lp-face b { font-size: 15px; color: #fff; }
+.lp-face span.t { font-size: 12px; line-height: 1.45; color: #aab5c7; }
+.lp-face .ic { width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: var(--ac-tint); background: rgba(var(--ac-rgb), .18); border: 1px solid rgba(var(--ac-rgb), .45); }
+.lp-face:nth-child(1) { transform: translateZ(calc(var(--cs) / 2)); }
+.lp-face:nth-child(2) { transform: rotateY(90deg) translateZ(calc(var(--cs) / 2)); }
+.lp-face:nth-child(3) { transform: rotateY(180deg) translateZ(calc(var(--cs) / 2)); }
+.lp-face:nth-child(4) { transform: rotateY(-90deg) translateZ(calc(var(--cs) / 2)); }
+.lp-face:nth-child(5) { transform: rotateX(90deg) translateZ(calc(var(--cs) / 2)); }
+.lp-face:nth-child(6) { transform: rotateX(-90deg) translateZ(calc(var(--cs) / 2)); }
+.lp-cube-shadow { width: 60%; height: 14px; margin: 34px auto 0; border-radius: 50%; background: radial-gradient(closest-side, rgba(var(--ac-rgb), .4), transparent); filter: blur(4px); animation: lp-shadow 20s linear infinite; }
+@keyframes lp-shadow { 50% { transform: scaleX(.85); opacity: .7; } }
+
+/* background picker */
+.lp-cfg { position: fixed; right: 14px; bottom: 14px; z-index: 55; }
+.lp-cfg > button { width: 42px; height: 42px; border-radius: 50%; border: 1px solid rgba(255,255,255,.12); background: rgba(14,20,30,.88); color: #cdd5e2; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); transition: border-color .2s; }
+.lp-cfg > button:hover { border-color: rgba(var(--ac-rgb), .6); }
+.lp-cfg-panel { position: absolute; right: 0; bottom: 52px; width: min(280px, calc(100vw - 28px)); padding: 14px; border-radius: 16px; background: rgba(10,15,24,.97); border: 1px solid rgba(255,255,255,.1); box-shadow: 0 20px 50px rgba(0,0,0,.6); }
+.lp-cfg-panel h4 { margin: 0 0 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8e9bb0; }
+.lp-cfg-panel div { display: flex; flex-wrap: wrap; gap: 6px; }
+.lp-cfg-panel button { flex: 1 1 28%; min-height: 36px; border-radius: 9px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: #cdd5e2; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.lp-cfg-panel button.on { border-color: rgba(var(--ac-rgb), .65); background: rgba(var(--ac-rgb), .16); color: var(--ac-tint); }
+
 @media (max-width: 640px) {
   .lp-scene { transform: rotateX(6deg) rotateY(-6deg); }
   .lp-chip3d { font-size: 10px; padding: 7px 10px; }
   .lp-chip3d.a { left: -2%; } .lp-chip3d.b { right: -2%; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lp-float, .lp-screen::after, .lp-play::before, .lp-play::after, .lp-prog i, .lp-chip3d, .lp-mq-track { animation: none !important; }
+  .lp-cube, .lp-cube-shadow, .lp-float, .lp-screen::after, .lp-play::before, .lp-play::after, .lp-prog i, .lp-chip3d, .lp-mq-track { animation: none !important; }
   .lp-prog i { width: 60%; }
   .lp-rv { opacity: 1; transform: none; transition: none; }
 }
@@ -173,6 +202,30 @@ function CountUp({ to, suffix = '' }) {
     return <b ref={ref}>{n}{suffix}</b>;
 }
 
+const CUBE_FACES = [
+    { Icon: IconLayers, t: 'Mirror', d: 'One upload, 24+ servers' },
+    { Icon: IconZap, t: 'Embed', d: 'Fast player with iframe code' },
+    { Icon: IconDownload, t: 'Download', d: 'Checked links, no file exposure' },
+    { Icon: IconUsers, t: 'Watch party', d: 'Sync with friends in a room' },
+];
+
+function FeatureCube() {
+    return (
+        <div aria-hidden="true">
+            <div className="lp-cube-wrap">
+                <div className="lp-cube">
+                    {CUBE_FACES.map(({ Icon, t, d }) => (
+                        <div key={t} className="lp-face"><span className="ic"><Icon size={22} /></span><b>{t}</b><span className="t">{d}</span></div>
+                    ))}
+                    <div className="lp-face"><span className="ic"><IconServer size={22} /></span><b>MultiServer</b></div>
+                    <div className="lp-face"><span className="ic"><IconShieldCheck size={22} /></span><b>Private</b></div>
+                </div>
+            </div>
+            <div className="lp-cube-shadow" />
+        </div>
+    );
+}
+
 function Hero3D() {
     const ref = useRef(null);
     const move = (e) => {
@@ -215,6 +268,19 @@ function Hero3D() {
 export default function LandingPage() {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [bg, setBg] = useState('globe');
+    const [pick, setPick] = useState(false);
+
+    useEffect(() => {
+        try {
+            const v = localStorage.getItem('ms_home_bg');
+            if (v && BGS.some(([k]) => k === v)) setBg(v);
+        } catch (e) { /* ignore */ }
+    }, []);
+    const chooseBg = (k) => {
+        setBg(k);
+        try { localStorage.setItem('ms_home_bg', k); } catch (e) { /* ignore */ }
+    };
 
     useEffect(() => {
         async function checkUser() {
@@ -230,13 +296,13 @@ export default function LandingPage() {
     return (
         <div className="ms-app lp flex flex-col">
             <style>{CSS}</style>
-            <Bg3D kind="globe" rgb="59,123,245" animate />
+            <Bg3D kind={bg} rgb="229,56,59" animate />
 
             {/* Sticky glass header */}
             <header className="sticky top-0 z-50 border-b border-slate-800/70 bg-slate-950/70 backdrop-blur-xl">
                 <div className="max-w-6xl mx-auto h-16 px-4 sm:px-6 flex items-center justify-between gap-2">
                     <Link href="/" className="min-w-0" aria-label="MultiServer home">
-                        <BrandMark name="MultiServer" anim="shine" size={26} fontSize={13} />
+                        <BrandMark name="MultiServer" anim="shine" size={26} fontSize={14} />
                     </Link>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -307,6 +373,22 @@ export default function LandingPage() {
                     </div>
                 </section>
 
+                {/* 3D showcase */}
+                <section className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-14 items-center">
+                        <Reveal>
+                            <h2 className="ms-h2">Built for speed</h2>
+                            <p className="mt-2 text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">One upload. <span className="ms-grad-text">Every server.</span></p>
+                            <ul className="mt-5 space-y-3 text-sm text-slate-300">
+                                {['Mirror to many hosts in the background', 'Player, embed code and download page in one click', 'Links survive a domain change'].map((t) => (
+                                    <li key={t} className="flex items-start gap-3"><span className="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-red-500/15 border border-red-500/40 text-red-300 flex items-center justify-center"><IconCheck size={12} /></span><span>{t}</span></li>
+                                ))}
+                            </ul>
+                        </Reveal>
+                        <Reveal delay={120}><FeatureCube /></Reveal>
+                    </div>
+                </section>
+
                 {/* Features */}
                 <section id="features" className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14 scroll-mt-20">
                     <Reveal>
@@ -368,6 +450,18 @@ export default function LandingPage() {
                     </Reveal>
                 </section>
             </main>
+
+            <div className="lp-cfg">
+                {pick && (
+                    <div className="lp-cfg-panel" role="dialog" aria-label="Background">
+                        <h4>3D background</h4>
+                        <div>
+                            {BGS.map(([k, l]) => <button key={k} type="button" className={bg === k ? 'on' : ''} onClick={() => chooseBg(k)}>{l}</button>)}
+                        </div>
+                    </div>
+                )}
+                <button type="button" aria-label="Change background" aria-expanded={pick} onClick={() => setPick((p) => !p)}><IconLayers size={18} /></button>
+            </div>
 
             {/* Footer */}
             <footer className="border-t border-slate-800/70 lp-layer">
