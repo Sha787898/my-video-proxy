@@ -4,7 +4,8 @@ import { use, Suspense, useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { resolveMirrors } from '../../utils/mirrors';
 import { embedBase } from '../../utils/embedOrigin';
-import { parseConfig, resolvePrefs, readOverrides, themeVars } from '../../utils/playerConfig';
+import { parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked, themeVars, THEMES, BGS, BRANDS } from '../../utils/playerConfig';
+import { Bg3D, BrandMark } from '../../components/Bg3D';
 
 // This page only reads public data: no login session is stored or used.
 const supabase = createClient(
@@ -51,6 +52,7 @@ const Svg = {
     down: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></svg>,
     check: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>,
     cross: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>,
+    gear: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" /></svg>,
     warn: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 6v8M12 18h.01" /></svg>,
 };
 
@@ -157,10 +159,23 @@ function SecureModal({ mirror, onClose }) {
 }
 
 const CSS = `
-.dl-root { --ac: #e5383b; --ac-hi: #ff6b73; --ac-rgb: 229,56,59; --ac-tint: #ffc2c4; --ok: #22c55e; --line: rgba(255,255,255,.08); position: relative; min-height: 100vh; display: flex; justify-content: center; padding: 22px 14px 44px; background: #0a0f18; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; overflow-x: hidden; }
+.dl-root { --ac: #e5383b; --ac-hi: #ff6b73; --ac-rgb: 229,56,59; --ac-tint: #ffc2c4; --ok: #22c55e; --line: rgba(255,255,255,.08); position: relative; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 22px 14px 44px; background: #0a0f18; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif; overflow-x: hidden; }
 .dl-root::before { content: ''; position: fixed; top: -170px; left: 50%; width: 620px; height: 380px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(var(--ac-rgb),.26), transparent); pointer-events: none; }
 .dl-root * { box-sizing: border-box; }
-.dl-card { position: relative; width: 100%; max-width: 560px; align-self: flex-start; padding: 18px; border-radius: 18px; background: linear-gradient(180deg, rgba(18,26,40,.88), rgba(9,13,21,.92)); border: 1px solid var(--line); border-top-color: rgba(var(--ac-rgb),.45); box-shadow: 0 24px 60px rgba(0,0,0,.6); animation: dl-in .4s ease both; }
+.dl-brand { position: relative; z-index: 1; display: flex; justify-content: center; width: 100%; max-width: 560px; margin: 4px 0 18px; }
+.dl-cfg { position: fixed; right: 14px; bottom: 14px; z-index: 50; }
+.dl-cfg > button { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: rgba(14,20,30,.85); color: #cdd5e2; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); transition: border-color .2s, transform .3s; }
+.dl-cfg > button:hover { border-color: rgba(var(--ac-rgb), .6); transform: rotate(40deg); }
+.dl-cfg-panel { position: absolute; right: 0; bottom: 52px; width: min(300px, calc(100vw - 28px)); max-height: 70vh; overflow-y: auto; padding: 14px; border-radius: 16px; background: rgba(10,15,24,.97); border: 1px solid var(--line); box-shadow: 0 20px 50px rgba(0,0,0,.6); animation: dl-fade .18s ease both; }
+.dl-cfg-panel h4 { margin: 0 0 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8e9bb0; }
+.dl-seg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.dl-seg button { flex: 1 1 28%; min-height: 36px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: #cdd5e2; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.dl-seg button.on { border-color: rgba(var(--ac-rgb), .65); background: rgba(var(--ac-rgb), .16); color: var(--ac-tint); }
+.dl-sws { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.dl-sw { position: relative; width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.14); cursor: pointer; padding: 0; overflow: hidden; }
+.dl-sw.on { border-color: #fff; box-shadow: 0 0 0 2px rgba(var(--ac-rgb), .55); }
+.dl-sw input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.dl-card { position: relative; width: 100%; max-width: 560px; align-self: center; z-index: 1; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .18s ease-out; padding: 18px; border-radius: 18px; background: linear-gradient(180deg, rgba(18,26,40,.88), rgba(9,13,21,.92)); border: 1px solid var(--line); border-top-color: rgba(var(--ac-rgb),.45); box-shadow: 0 24px 60px rgba(0,0,0,.6); animation: dl-in .4s ease backwards; }
 @keyframes dl-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .dl-head { display: flex; gap: 12px; align-items: flex-start; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .dl-ic { width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--ac-tint); background: rgba(var(--ac-rgb),.14); border: 1px solid rgba(var(--ac-rgb),.35); }
@@ -240,8 +255,27 @@ function FileDownloadContent({ params }) {
     const [watch, setWatch] = useState(false);
     const [sel, setSel] = useState(null);
     const [ov, setOv] = useState({});
+    const [cfgOpen, setCfgOpen] = useState(false);
+    const cardRef = useRef(null);
     useEffect(() => { setOv(readOverrides()); }, []);
-    const prefs = resolvePrefs(parseConfig(file && file.config), ov);
+    const cfgObj = parseConfig(file && file.config);
+    const prefs = resolvePrefs(cfgObj, ov);
+    const vars = themeVars(prefs);
+    const can = (k) => !isLocked(cfgObj.locked, k);
+    const patch = (p) => {
+        const ok = {};
+        Object.keys(p).forEach((k) => { if (can(k)) ok[k] = p[k]; });
+        if (!Object.keys(ok).length) return;
+        setOv((prev) => { const next = { ...prev, ...ok }; saveOverrides(next); return next; });
+    };
+    const anyOpen = can('theme') || can('bg') || can('brand') || can('anim');
+    const onTilt = (e) => {
+        const el = cardRef.current;
+        if (!el || e.pointerType !== 'mouse' || prefs.anim === false || sel) return;
+        el.style.setProperty('--ry', `${((e.clientX / window.innerWidth) - 0.5) * 7}deg`);
+        el.style.setProperty('--rx', `${((e.clientY / window.innerHeight) - 0.5) * -5}deg`);
+    };
+    const resetTilt = () => { const el = cardRef.current; if (el) { el.style.setProperty('--ry', '0deg'); el.style.setProperty('--rx', '0deg'); } };
 
     useEffect(() => {
         let dead = false;
@@ -260,12 +294,19 @@ function FileDownloadContent({ params }) {
     const hasPlayer = mirrors.some((m) => m.embed);
 
     return (
-        <div className={`dl-root ${prefs.anim === false ? 'dl-noanim' : ''}`} style={file ? themeVars(prefs) : undefined}>
+        <div className={`dl-root ${prefs.anim === false ? 'dl-noanim' : ''}`} style={file ? vars : undefined} onPointerMove={onTilt} onPointerLeave={resetTilt}>
             <style>{CSS}</style>
+            {!loading && <Bg3D kind={prefs.bg} rgb={vars['--ac-rgb']} animate={prefs.anim !== false} />}
             <meta name="referrer" content="no-referrer" />
             <meta name="robots" content="noindex, nofollow" />
 
-            <main className="dl-card">
+            {!loading && (
+                <div className="dl-brand">
+                    <BrandMark name={prefs.brandName} anim={prefs.brand} animate={prefs.anim !== false} />
+                </div>
+            )}
+
+            <main className="dl-card" ref={cardRef}>
                 {loading ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '6px 0' }}>
                         <div className="dl-skel" style={{ width: '70%', height: 18 }} />
@@ -334,6 +375,42 @@ function FileDownloadContent({ params }) {
                     </>
                 )}
             </main>
+
+            {!loading && file && anyOpen && (
+                <div className="dl-cfg">
+                    {cfgOpen && (
+                        <div className="dl-cfg-panel" role="dialog" aria-label="Page style">
+                            {can('theme') && (<>
+                                <h4>Colour</h4>
+                                <div className="dl-sws">
+                                    {THEMES.map((t) => (
+                                        <button key={t.id} type="button" title={t.name} aria-label={t.name} className={`dl-sw ${prefs.theme === t.id ? 'on' : ''}`} style={{ background: t.ac }} onClick={() => patch({ theme: t.id })} />
+                                    ))}
+                                    <label className={`dl-sw ${prefs.theme === 'custom' ? 'on' : ''}`} title="Custom colour" style={{ background: 'conic-gradient(#e5383b,#f59e0b,#10b981,#06b6d4,#8b5cf6,#ec4899,#e5383b)' }}>
+                                        <input type="color" value={prefs.customColor} onChange={(e) => patch({ theme: 'custom', customColor: e.target.value })} aria-label="Custom colour" />
+                                    </label>
+                                </div>
+                            </>)}
+                            {can('bg') && (<>
+                                <h4>3D background</h4>
+                                <div className="dl-seg">{BGS.map(([k, l]) => <button key={k} type="button" className={prefs.bg === k ? 'on' : ''} onClick={() => patch({ bg: k })}>{l}</button>)}</div>
+                            </>)}
+                            {can('brand') && (<>
+                                <h4>Name animation</h4>
+                                <div className="dl-seg">{BRANDS.map(([k, l]) => <button key={k} type="button" className={prefs.brand === k ? 'on' : ''} onClick={() => patch({ brand: k })}>{l}</button>)}</div>
+                            </>)}
+                            {can('anim') && (<>
+                                <h4>Motion</h4>
+                                <div className="dl-seg">
+                                    <button type="button" className={prefs.anim !== false ? 'on' : ''} onClick={() => patch({ anim: true })}>On</button>
+                                    <button type="button" className={prefs.anim === false ? 'on' : ''} onClick={() => patch({ anim: false })}>Off</button>
+                                </div>
+                            </>)}
+                        </div>
+                    )}
+                    <button type="button" aria-label="Page style" aria-expanded={cfgOpen} onClick={() => setCfgOpen((o) => !o)}>{Svg.gear}</button>
+                </div>
+            )}
 
             {sel && <SecureModal mirror={sel} onClose={() => setSel(null)} />}
         </div>

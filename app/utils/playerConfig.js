@@ -21,10 +21,14 @@ export const LOADERS = [['ring', 'Ring'], ['dots', 'Dots'], ['bars', 'Bars'], ['
 export const LOOKS = [['dark', 'Dark'], ['glass', 'Glass'], ['black', 'Black']];
 export const WAITS = [[10, '10s'], [15, '15s'], [25, '25s'], [40, '40s']];
 export const LEVELS = ['strict', 'relaxed', 'off'];
+// download page / landing page: 3D background scene and the animated name
+export const BGS = [['grid', 'Grid'], ['cubes', 'Cubes'], ['warp', 'Warp'], ['globe', 'Globe'], ['aurora', 'Aurora'], ['none', 'Off']];
+export const BRANDS = [['shine', 'Shine'], ['flip', 'Flip'], ['tilt', 'Tilt 3D'], ['glow', 'Glow'], ['glitch', 'Glitch'], ['none', 'Still']];
 
 // the values everybody gets when the admin has not set anything (the original red look)
 export const FACTORY = {
     theme: 'red', customColor: '#e5383b', look: 'dark', loader: 'ring', anim: true,
+    bg: 'grid', brand: 'shine', brandName: 'MultiServer',
     autoSwitch: false, autoSec: 15,
     block: true, guard: false, download: true, fullscreen: true, lock: true, party: false, title: true,
     sb: {},
@@ -36,7 +40,9 @@ export const SETTING_ROWS = {
         { key: 'theme', label: 'Theme colour', desc: 'Colour of the player and the download page' },
         { key: 'look', label: 'Panel style', desc: 'How the menus and buttons are drawn' },
         { key: 'loader', label: 'Loading animation', desc: 'Shown while a server loads' },
-        { key: 'anim', label: 'Animations', desc: 'Panel and button motion' },
+        { key: 'anim', label: 'Animations', desc: 'Panel, button and background motion' },
+        { key: 'bg', label: '3D background', desc: 'Moving background of the download page' },
+        { key: 'brand', label: 'Name animation', desc: 'Animated logo and name on the download page' },
     ],
     behave: [
         { key: 'block', label: 'Pop-up blocker', desc: 'Sandbox that blocks new tabs and redirects' },
@@ -66,6 +72,12 @@ export function sanitize(obj) {
     if (typeof obj.customColor === 'string' && HEX.test(obj.customColor)) out.customColor = obj.customColor;
     if (LOOKS.some(([k]) => k === obj.look)) out.look = obj.look;
     if (LOADERS.some(([k]) => k === obj.loader)) out.loader = obj.loader;
+    if (BGS.some(([k]) => k === obj.bg)) out.bg = obj.bg;
+    if (BRANDS.some(([k]) => k === obj.brand)) out.brand = obj.brand;
+    if (typeof obj.brandName === 'string') {
+        const n = obj.brandName.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 24);
+        if (n) out.brandName = n;
+    }
     if (WAITS.some(([k]) => k === Number(obj.autoSec))) out.autoSec = Number(obj.autoSec);
     if (obj.sb && typeof obj.sb === 'object' && !Array.isArray(obj.sb)) {
         const sb = {};
@@ -94,7 +106,7 @@ export function resolvePrefs(config, overrides) {
     const cfg = config && config.defaults ? config : parseConfig(config);
     const out = { ...FACTORY, ...cfg.defaults };
     const ov = sanitize(overrides);
-    Object.keys(ov).forEach((k) => { if (!isLocked(cfg.locked, k)) out[k] = ov[k]; });
+    Object.keys(ov).forEach((k) => { if (k !== 'brandName' && !isLocked(cfg.locked, k)) out[k] = ov[k]; }); // the name is the admin's alone
     return out;
 }
 

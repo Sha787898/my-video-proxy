@@ -6,8 +6,9 @@ import { createClient } from '@supabase/supabase-js';
 import Sidebar from '../components/Sidebar';
 import { IconPlay, IconActivity, IconCheck, IconLock, IconRefresh, IconInfo, IconAlert } from '../components/Icons';
 import {
-    THEMES, LOADERS, LOOKS, WAITS, FACTORY, SETTING_ROWS, parseConfig, resolvePrefs, themeVars,
+    THEMES, LOADERS, LOOKS, WAITS, BGS, BRANDS, FACTORY, SETTING_ROWS, parseConfig, resolvePrefs, themeVars,
 } from '../utils/playerConfig';
+import { Bg3D, BrandMark } from '../components/Bg3D';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 const CONFIG_KEY = 'player_config';
@@ -117,6 +118,19 @@ function Preview({ prefs }) {
 }
 
 // one setting: label + control on the left, "visitors can change" switch on the right
+function PagePreview({ prefs }) {
+    const vars = themeVars(prefs);
+    return (
+        <div style={vars} className="relative h-44 rounded-2xl border border-white/10 overflow-hidden bg-[#0a0f18]">
+            <Bg3D contained kind={prefs.bg} rgb={vars['--ac-rgb']} animate={prefs.anim !== false} />
+            <div className="relative z-10 h-full flex flex-col items-center justify-center gap-3 px-3">
+                <BrandMark name={prefs.brandName} anim={prefs.brand} animate={prefs.anim !== false} size={24} fontSize={13} />
+                <span className="px-5 h-9 rounded-lg flex items-center text-[12px] font-bold text-white" style={{ background: 'linear-gradient(180deg, rgba(var(--ac-rgb),.6), rgba(var(--ac-rgb),.35))', border: '1px solid rgba(var(--ac-rgb),.6)' }}>Download</span>
+            </div>
+        </div>
+    );
+}
+
 function Row({ title, desc, locked, onLock, children = null }) {
     return (
         <div className="py-4 border-b border-white/[0.06] last:border-b-0 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
@@ -248,8 +262,22 @@ export default function PlayerSettingsPage() {
                                         {r.key === 'look' && <Seg value={defaults.look} options={LOOKS} onChange={(v) => setDef({ look: v })} />}
                                         {r.key === 'loader' && <Seg value={defaults.loader} options={LOADERS} onChange={(v) => setDef({ loader: v })} />}
                                         {r.key === 'anim' && behaveToggle(r)}
+                                        {r.key === 'bg' && <Seg value={defaults.bg} options={BGS} onChange={(v) => setDef({ bg: v })} />}
+                                        {r.key === 'brand' && <Seg value={defaults.brand} options={BRANDS} onChange={(v) => setDef({ brand: v })} />}
                                     </Row>
                                 ))}
+                                <div className="py-4 space-y-2">
+                                    <label htmlFor="brandName" className="text-sm font-semibold text-white block">Name on the download page</label>
+                                    <p className="ms-muted text-xs">Shown next to the animated 3D logo. Only you can change it.</p>
+                                    <input
+                                        id="brandName"
+                                        className="ms-input max-w-xs"
+                                        value={defaults.brandName}
+                                        maxLength={24}
+                                        onChange={(e) => setDef({ brandName: e.target.value })}
+                                        placeholder="MultiServer"
+                                    />
+                                </div>
                             </section>
 
                             <section className="ms-card p-4 sm:p-5">
@@ -270,6 +298,9 @@ export default function PlayerSettingsPage() {
 
                         <aside className="space-y-3 lg:sticky lg:top-20">
                             <h2 className="ms-h2">Preview</h2>
+                            <p className="ms-muted text-xs">Download page</p>
+                            <PagePreview prefs={preview} />
+                            <p className="ms-muted text-xs">Player</p>
                             <Preview prefs={preview} />
                             <p className="ms-muted text-xs">The download page uses the same theme colour. Needs the SQL file <code className="ms-code">sql/4-player-config.sql</code> to be run once in Supabase.</p>
                         </aside>
