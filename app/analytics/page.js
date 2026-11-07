@@ -145,7 +145,7 @@ function Bar({ pct }) {
     return <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-300" style={{ width: `${Math.max(2, pct)}%` }} /></div>;
 }
 
-export default function AnalyticsPage() {
+function AnalyticsInner() {
     const router = useRouter();
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -458,4 +458,18 @@ export default function AnalyticsPage() {
             </div>
         </div>
     );
+}
+
+// the page reads the current time, so it is only drawn in the browser (never during the build's prerender)
+export default function AnalyticsPage() {
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
+    if (!mounted) {
+        return (
+            <div className="ms-app flex items-center justify-center">
+                <div className="flex items-center gap-3 text-sm text-blue-400"><IconRefresh size={18} className="ms-spin" /><span>Loading analytics…</span></div>
+            </div>
+        );
+    }
+    return <AnalyticsInner />;
 }
