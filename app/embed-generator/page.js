@@ -1,70 +1,94 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
-import { IconCode, IconCopy, IconCheck, IconInfo, IconRefresh } from '../components/Icons';
+import { embedBase } from '../utils/embedOrigin';
+import { buildCopy, copyToClipboard, COPY_KINDS } from '../utils/copyFormat';
+import { IconCode, IconCopy, IconCheck, IconSearch, IconRefresh } from '../components/Icons';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-export default function EmbedGeneratorPage() {
+const FORMATS = [
+    ['embed', 'Embed links'],
+    ['page', 'Download links'],
+    ['iframe', 'Iframe codes'],
+    ['all', 'Title + size + links'],
+];
+
+export default function LinkGeneratorPage() {
     const router = useRouter();
     const [user, setUser] = useState(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
+    const [files, setFiles] = useState([]);
+    const [query, setQuery] = useState('');
+    const [picked, setPicked] = useState(new Set());
+    const [pasted, setPasted] = useState('');
+    const [format, setFormat] = useState('embed');
+    const [toast, setToast] = useState('');
 
-    const [links, setLinks] = useState('');
-    const [embeds, setEmbeds] = useState('');
-    const [copied, setCopied] = useState(false);
-
-    // Security guard: make sure the user is signed in
     useEffect(() => {
-        async function checkAuth() {
+        (async () => {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                router.push('/login');
-            } else {
-                setUser(session.user);
-                setLoadingAuth(false);
-            }
-        }
-        checkAuth();
+            if (!session) { router.push('/login'); return; }
+            setUser(session.user);
+            const { data } = await supabase.from('files').select('id, name, size').eq('user_id', session.user.id).order('date', { ascending: false }).limit(2000);
+            setFiles(data || []);
+            setLoadingAuth(false);
+        })();
     }, [router]);
 
-    // Blocking screen while loading
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const links = (f) => ({ page: `${origin}/file/${f.id}`, embed: `${embedBase(origin)}/embed/${f.id}` });
+
+    const shown = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return q ? files.filter((f) => (f.name || '').toLowerCase().includes(q)) : files;
+    }, [files, query]);
+
+    // ids typed or pasted: full /file/<id> or /embed/<id> links, or bare ids, one per line / separated by spaces or commas
+    const pastedFiles = useMemo(() => {
+        const out = [];
+        pasted.split(/[\s,]+/).filter(Boolean).forEach((t) => {
+            const m = t.match(/\/(?:file|embed)\/([^/?#]+)/);
+            const id = m ? m[1] : t;
+            if (/^[\w-]{6,}$/.test(id) && !out.some((o) => o.id === id)) out.push({ id, name: files.find((f) => f.id === id)?.name || id, size: files.find((f) => f.id === id)?.size });
+        });
+        return out;
+    }, [pasted, files]);
+
+    const chosen = useMemo(() => {
+        const list = files.filter((f) => picked.has(f.id));
+        pastedFiles.forEach((p) => { if (!list.some((f) => f.id === p.id)) list.push(p); });
+        return list;
+    }, [files, picked, pastedFiles]);
+
+    const output = useMemo(() => {
+        if (!chosen.length) return '';
+        if (format === 'iframe') {
+            return chosen.map((f) => `<iframe src="${links(f).embed}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>`).join('\n');
+        }
+        return buildCopy(format, chosen, links);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chosen, format, origin]);
+
     if (loadingAuth) {
         return (
             <div className="ms-app flex items-center justify-center">
-                <div className="flex items-center gap-3 text-sm text-blue-400">
-                    <IconRefresh size={18} className="ms-spin" />
-                    <span>Checking authorization…</span>
-                </div>
+                <div className="flex items-center gap-3 text-sm text-blue-400"><IconRefresh size={18} className="ms-spin" /><span>Checking authorization…</span></div>
             </div>
         );
     }
 
-    const handleGenerate = (e) => {
-        e.preventDefault();
-        const lines = links.split('\n').filter(l => l.trim());
-        let generated = lines.map(line => {
-            return `<iframe src="https://multishows.top/embed/${btoa(line.trim())}" width="100%" height="400px" frameborder="0" allowfullscreen></iframe>`;
-        }).join('\n\n');
-        setEmbeds(generated);
-        setCopied(false);
-    };
-
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(embeds);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            setCopied(false);
-        }
-    };
+    const say = (m) => { setToast(m); setTimeout(() => setToast(''), 2000); };
+    const copy = async (text, label) => say((await copyToClipboard(text)) ? `${label} copied` : 'Copy failed');
+    const toggle = (id) => setPicked((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    const allShownPicked = shown.length > 0 && shown.every((f) => picked.has(f.id));
+    const toggleAll = () => setPicked((p) => { const n = new Set(p); shown.forEach((f) => (allShownPicked ? n.delete(f.id) : n.add(f.id))); return n; });
 
     return (
         <div className="ms-app flex">
@@ -72,61 +96,61 @@ export default function EmbedGeneratorPage() {
             <div className="flex-1 flex flex-col min-w-0">
                 <header className="ms-topbar">
                     <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-                            <IconCode size={18} />
-                        </span>
-                        <h1 className="ms-h1 truncate">Embed Generator</h1>
+                        <span className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0"><IconCode size={18} /></span>
+                        <h1 className="ms-h1 truncate">Link Generator</h1>
                     </div>
                     <span className="text-xs text-slate-400 hidden sm:inline truncate max-w-[220px]">{user?.email}</span>
                 </header>
 
-                <main className="ms-main w-full max-w-3xl mx-auto space-y-5">
-                    <form onSubmit={handleGenerate} className="ms-card ms-fade-up p-4 sm:p-6 space-y-4">
-                        <div>
-                            <h2 className="ms-h2">Remote Link &amp; Embed Parser</h2>
-                            <p className="ms-muted text-xs mt-1">Paste your links below and generate ready-to-use iframe embed codes.</p>
+                <main className="ms-main w-full max-w-6xl mx-auto grid gap-5 lg:grid-cols-2">
+                    <section className="ms-card p-4 sm:p-5 space-y-3 min-w-0">
+                        <h2 className="ms-h2">1. Pick files ({picked.size} selected)</h2>
+                        <div className="relative">
+                            <IconSearch size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your files…" className="ms-input !pl-10" />
+                        </div>
+                        <button type="button" onClick={toggleAll} className="ms-btn ms-btn-ghost ms-btn-sm">{allShownPicked ? 'Unselect' : 'Select'} all {shown.length} shown</button>
+                        <div className="max-h-[360px] overflow-y-auto rounded-xl border border-white/10 divide-y divide-white/5">
+                            {shown.length === 0 && <p className="p-4 text-sm ms-muted">No files.</p>}
+                            {shown.map((f) => (
+                                <label key={f.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/[0.04] min-w-0">
+                                    <input type="checkbox" checked={picked.has(f.id)} onChange={() => toggle(f.id)} className="accent-red-500 w-4 h-4 shrink-0" />
+                                    <span className="text-sm text-slate-200 truncate flex-1">{f.name || f.id}</span>
+                                    {f.size && <span className="ms-badge shrink-0">{f.size}</span>}
+                                </label>
+                            ))}
                         </div>
                         <div>
-                            <label className="ms-label" htmlFor="embed-links">Links</label>
-                            <textarea
-                                id="embed-links"
-                                rows="6"
-                                placeholder="Paste links (one per line, e.g. Title | https://...)"
-                                value={links}
-                                onChange={(e) => setLinks(e.target.value)}
-                                required
-                                className="ms-input ms-code"
-                            />
+                            <label className="ms-label" htmlFor="lg-paste">Or paste file IDs / links (many at once)</label>
+                            <textarea id="lg-paste" rows={4} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="One per line: a file ID, a /file/… link or an /embed/… link" className="ms-input ms-code" />
+                            <p className="ms-muted text-xs mt-1">{pastedFiles.length} ID(s) found.</p>
                         </div>
-                        <div className="ms-alert ms-alert-blue">
-                            <IconInfo size={16} className="shrink-0" />
-                            <p className="text-xs">One link per line. Each line produces its own embed code.</p>
-                        </div>
-                        <button type="submit" className="ms-btn ms-btn-primary ms-btn-block">
-                            <IconCode size={16} /> Generate MultiServer Embeds
-                        </button>
-                    </form>
+                    </section>
 
-                    {embeds && (
-                        <div className="ms-card ms-fade-up p-4 sm:p-6 space-y-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <label className="ms-h2" htmlFor="embed-output">Generated Embed Codes</label>
-                                <button type="button" onClick={handleCopy} className="ms-btn ms-btn-ghost ms-btn-sm" aria-label="Copy embed codes">
-                                    {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-                                    <span>{copied ? 'Copied' : 'Copy'}</span>
-                                </button>
-                            </div>
-                            <textarea
-                                id="embed-output"
-                                rows="6"
-                                readOnly
-                                value={embeds}
-                                className="ms-input ms-code text-emerald-400"
-                            />
+                    <section className="ms-card p-4 sm:p-5 space-y-3 min-w-0">
+                        <h2 className="ms-h2">2. Result ({chosen.length} file{chosen.length === 1 ? '' : 's'})</h2>
+                        <div className="flex flex-wrap gap-2" role="radiogroup">
+                            {FORMATS.map(([k, label]) => (
+                                <button key={k} type="button" role="radio" aria-checked={format === k} onClick={() => setFormat(k)} className={`ms-btn ms-btn-sm ${format === k ? 'ms-btn-primary' : 'ms-btn-ghost'}`}>{label}</button>
+                            ))}
                         </div>
-                    )}
+                        <textarea readOnly rows={14} value={output} placeholder="Select files to see the links here" className="ms-input ms-code text-emerald-400" onFocus={(e) => e.target.select()} />
+                        <div className="flex flex-wrap gap-2">
+                            <button type="button" disabled={!output} onClick={() => copy(output, 'Result')} className="ms-btn ms-btn-primary ms-btn-sm"><IconCopy size={14} /> Copy result</button>
+                            {COPY_KINDS.map(([k, label]) => (
+                                <button key={k} type="button" disabled={!chosen.length} onClick={async () => say((await copyToClipboard(buildCopy(k, chosen, links))) ? `All ${label.toLowerCase()} copied` : 'Copy failed')} className="ms-btn ms-btn-ghost ms-btn-sm">
+                                    <IconCopy size={14} /> {label}
+                                </button>
+                            ))}
+                        </div>
+                    </section>
                 </main>
             </div>
+            {toast && (
+                <div role="status" className="fixed left-1/2 -translate-x-1/2 bottom-5 z-[80] flex items-center gap-2 px-4 h-10 rounded-xl bg-slate-900 border border-white/15 text-sm text-white shadow-xl">
+                    <IconCheck size={14} className="text-emerald-400" /> {toast}
+                </div>
+            )}
         </div>
     );
 }

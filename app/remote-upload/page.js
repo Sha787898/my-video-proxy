@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
+import { embedBase } from '../utils/embedOrigin';
 import { IconLink, IconInfo, IconCopy, IconRefresh, IconCode, IconTrash, IconInbox, IconBolt } from '../components/Icons';
 import { createClient } from '@supabase/supabase-js';
 
@@ -67,8 +68,8 @@ export default function RemoteUploadPage() {
                 const matchId = cleanLink.match(/\/([a-zA-Z0-9-_]{8,})\/?$/);
                 const fileId = matchId ? matchId[1] : 'ms_' + Math.random().toString(36).substring(2, 10);
 
-                const embedUrl = `https://multishows.top/embed/${fileId}`;
-                const watchUrl = `https://multishows.top/file/${fileId}`;
+                const embedUrl = `${embedBase(window.location.origin)}/embed/${fileId}`;
+                const watchUrl = `${window.location.origin}/file/${fileId}`;
 
                 return {
                     id: fileId,

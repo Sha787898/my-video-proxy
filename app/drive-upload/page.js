@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
+import ProfilePicker from '../components/ProfilePicker';
 import { IconCloud, IconUpload, IconCheckCircle, IconRefresh, IconKey } from '../components/Icons';
 import { createClient } from '@supabase/supabase-js';
 
@@ -20,6 +21,7 @@ export default function DriveUploadPage() {
     const [customTitle, setCustomTitle] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
+    const [profile, setProfile] = useState('default');
 
     useEffect(() => {
         async function checkAuth() {
@@ -72,6 +74,7 @@ export default function DriveUploadPage() {
                     links: fullDriveUrl,
                     fileName: customTitle,
                     uploadType: 'gdrive',
+                    profile,
                     userId: user?.id
                 })
             });
@@ -103,6 +106,8 @@ export default function DriveUploadPage() {
                 </header>
 
                 <main className="ms-main w-full max-w-6xl mx-auto space-y-5">
+                    <ProfilePicker supabase={supabase} userId={user?.id} onChange={setProfile} />
+
                     {successMsg && (
                         <div className="ms-alert ms-alert-green ms-fade-up">
                             <IconCheckCircle size={18} className="shrink-0" />

@@ -10,6 +10,8 @@ import {
 } from '../components/Icons';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
+import { parseProfiles, PROFILES_KEY } from '../utils/profiles';
+import { buildCopy, copyToClipboard, COPY_KINDS } from '../utils/copyFormat';
 import { resolveMirrors, domainsFromSettings, PDLINK_SERVERS, DEFAULT_ACTIVE } from '../utils/mirrors';
 
 const supabase = createClient(
@@ -36,6 +38,8 @@ export default function FileManagerPage() {
     const [files, setFiles] = useState([]);
     const [domains, setDomains] = useState({});
     const [activeIds, setActiveIds] = useState([]);
+    const [profiles, setProfiles] = useState([]);
+    const [repairAsk, setRepairAsk] = useState(null); // { list, profile }
 
     const [searchInput, setSearchInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +82,7 @@ export default function FileManagerPage() {
 
         const rows = settingsRes.data || [];
         setDomains(domainsFromSettings(rows));
+        setProfiles(parseProfiles(rows.find((r) => r.key === PROFILES_KEY)?.value));
         const get = (k) => rows.find((r) => r.key === k)?.value || '';
         setActiveIds(
             Object.keys(DEFAULT_ACTIVE).filter((id) => {
@@ -100,7 +105,9 @@ export default function FileManagerPage() {
         const ms = Array.isArray(f.mirrors) ? f.mirrors : [];
         const present = new Set(ms.map((m) => m.id));
         const hasPd = present.has('pdlink');
-        return activeIds.filter((id) => (PDLINK_SERVERS.includes(id) ? !hasPd : !present.has(id)));
+        const prof = profiles.find((p) => p.id === f.profile);
+        const expected = prof ? prof.servers : activeIds;
+        return expected.filter((id) => (PDLINK_SERVERS.includes(id) ? !hasPd : !present.has(id)));
     };
 
     const statusOf = (f) => {
@@ -120,7 +127,7 @@ export default function FileManagerPage() {
         if (sortBy === 'name') return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
         return list;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [files, searchQuery, statusFilter, activeIds, sortBy]);
+    }, [files, searchQuery, statusFilter, activeIds, profiles, sortBy]);
 
     // "/" jumps to the search box
     useEffect(() => {
@@ -209,7 +216,17 @@ export default function FileManagerPage() {
     };
 
     // Repair: একই Drive লিংক আবার পাঠাই; Worker শুধু ব্যর্থ/ফাঁকা সার্ভারগুলো নতুন করে চেষ্টা করে
-    const repairFiles = async (list) => {
+    const profileName = (id) => (id === 'default' || !id ? 'Default' : (profiles.find((p) => p.id === id)?.name || 'Default'));
+    const askRepair = (list) => {
+        const first = list[0] && list[0].profile;
+        setRepairAsk({ list, profile: profiles.some((p) => p.id === first) ? first : 'default' });
+    };
+    const copyKind = async (kind, list, label) => {
+        if (!list.length) return;
+        const ok = await copyToClipboard(buildCopy(kind, list, (f) => ({ page: pageLink(f), embed: embedLink(f) })));
+        flash(ok ? `${label} copied` : 'Copy failed: the browser blocked the clipboard');
+    };
+    const repairFiles = async (list, profile = 'default') => {
         const withLink = list.filter((f) => f.original_url);
         if (withLink.length === 0) {
             flash('These files have no saved original Drive link, so they cannot be repaired.');
@@ -224,7 +241,7 @@ export default function FileManagerPage() {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${session?.access_token}`,
                 },
-                body: JSON.stringify({ links: withLink.map((f) => f.original_url).join('\n') }),
+                body: JSON.stringify({ links: withLink.map((f) => f.original_url).join('\n'), profile }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Repair failed');
@@ -441,7 +458,7 @@ export default function FileManagerPage() {
                                             <button
                                                 type="button"
                                                 disabled={busy}
-                                                onClick={() => repairFiles([file])}
+                                                onClick={() => askRepair([file])}
                                                 title={missing.length ? `Repair: ${missing.join(', ')}` : 'Re-check servers'}
                                                 className={`ms-btn ms-btn-icon ${missing.length ? 'ms-btn-primary' : 'ms-btn-ghost'}`}
                                             >
@@ -454,6 +471,15 @@ export default function FileManagerPage() {
 
                                         {isOpen && (
                                             <div className="mt-4 pt-4 border-t border-white/10 space-y-3 ms-fade-up">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="ms-label !mb-0">Copy</span>
+                                                    {COPY_KINDS.map(([k, label]) => (
+                                                        <button key={k} type="button" onClick={() => copyKind(k, [file], label)} className={`ms-btn ms-btn-sm ${k === 'all' ? 'ms-btn-primary' : 'ms-btn-ghost'}`}>
+                                                            <IconCopy size={13} /> {label}
+                                                        </button>
+                                                    ))}
+                                                    <span className="ms-badge ml-auto">Profile: {profileName(file.profile)}</span>
+                                                </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                     <div>
                                                         <span className="ms-label">Download page</span>
@@ -537,13 +563,12 @@ export default function FileManagerPage() {
                         <div className="sticky bottom-3 z-20 ms-card p-3 flex flex-wrap items-center justify-between gap-2 !border-blue-400/40 shadow-2xl shadow-black/50 backdrop-blur-xl">
                             <span className="text-xs font-semibold text-white px-1">{selected.size} selected</span>
                             <div className="flex flex-wrap gap-2">
-                                <button type="button" onClick={() => copyText(selectedFiles.map(pageLink).join('\n'), 'Download page links copied')} className="ms-btn ms-btn-ghost ms-btn-sm">
-                                    <IconLink size={14} /> Links
-                                </button>
-                                <button type="button" onClick={() => copyText(selectedFiles.map(embedLink).join('\n'), 'Embed links copied')} className="ms-btn ms-btn-ghost ms-btn-sm">
-                                    <IconCode size={14} /> Embeds
-                                </button>
-                                <button type="button" disabled={busy} onClick={() => repairFiles(selectedFiles)} className="ms-btn ms-btn-primary ms-btn-sm">
+                                {COPY_KINDS.map(([k, label]) => (
+                                    <button key={k} type="button" onClick={() => copyKind(k, selectedFiles, label)} className="ms-btn ms-btn-ghost ms-btn-sm">
+                                        <IconCopy size={14} /> {label}
+                                    </button>
+                                ))}
+                                <button type="button" disabled={busy} onClick={() => askRepair(selectedFiles)} className="ms-btn ms-btn-primary ms-btn-sm">
                                     {busy ? <IconRefresh size={14} className="ms-spin" /> : <IconWrench size={14} />} {busy ? 'Repairing' : 'Repair'}
                                 </button>
                                 <button type="button" onClick={() => deleteFiles(selectedFiles.map((f) => f.id))} className="ms-btn ms-btn-danger ms-btn-sm">
@@ -554,6 +579,36 @@ export default function FileManagerPage() {
                     )}
                 </main>
             </div>
+
+            {repairAsk && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-3" role="dialog" aria-modal="true">
+                    <div className="ms-card w-full max-w-md p-5 space-y-4 ms-fade-up">
+                        <div>
+                            <h3 className="text-sm font-bold text-white">Repair with which profile?</h3>
+                            <p className="text-xs ms-muted mt-1">{repairAsk.list.length} file(s). Only the servers of the chosen profile are retried.</p>
+                        </div>
+                        <div className="space-y-2" role="radiogroup">
+                            {[{ id: 'default', name: 'Default', servers: activeIds }, ...profiles].map((p) => (
+                                <button
+                                    key={p.id}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={repairAsk.profile === p.id}
+                                    onClick={() => setRepairAsk({ ...repairAsk, profile: p.id })}
+                                    className={`w-full text-left rounded-xl border px-3 py-2.5 transition ${repairAsk.profile === p.id ? 'border-blue-400/70 bg-blue-500/15' : 'border-white/10 bg-black/30 hover:bg-white/[0.05]'}`}
+                                >
+                                    <span className="block text-sm font-bold text-white">{p.name} <span className="font-normal ms-muted">· {p.servers.length} server(s)</span></span>
+                                    <span className="block text-[11px] ms-muted truncate">{p.servers.join(', ') || 'none'}</span>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex gap-3">
+                            <button type="button" onClick={() => setRepairAsk(null)} className="ms-btn ms-btn-ghost flex-1">Cancel</button>
+                            <button type="button" onClick={() => { const a = repairAsk; setRepairAsk(null); repairFiles(a.list, a.profile); }} className="ms-btn ms-btn-primary flex-1"><IconWrench size={15} /> Repair</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

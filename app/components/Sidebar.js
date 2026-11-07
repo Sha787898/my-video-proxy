@@ -18,10 +18,9 @@ const NAV = [
             { href: '/gdrive-upload', label: 'GDrive Mirror', Icon: IconCloud },
             { href: '/drive-upload', label: 'GDrive File ID', Icon: IconIdCard },
             { href: '/web-upload', label: 'Direct Web Upload', Icon: IconLaptop },
-            { href: '/processing-files', label: 'Processing Queue', Icon: IconLayers },
         ],
     },
-    { href: '/embed-generator', label: 'Embed Generator', Icon: IconCode },
+    { href: '/embed-generator', label: 'Link Generator', Icon: IconCode },
     { href: '/analytics', label: 'Analytics', Icon: IconChart },
     {
         id: 'settings', label: 'Settings', Icon: IconSliders,

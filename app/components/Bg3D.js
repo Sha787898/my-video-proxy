@@ -382,7 +382,7 @@ function makeScene(kind, ctx, W, H, col) {
 
 export const BG_KINDS = ['grid', 'cubes', 'warp', 'globe', 'aurora', 'terrain', 'helix', 'tunnel'];
 
-export function Bg3D({ kind = 'grid', rgb = '229,56,59', animate = true, contained = false }) {
+export function Bg3D({ kind = 'grid', rgb = '229,56,59', animate = true, contained = false, opacity = 1 }) {
     const ref = useRef(null);
 
     useEffect(() => {
@@ -456,7 +456,7 @@ export function Bg3D({ kind = 'grid', rgb = '229,56,59', animate = true, contain
         <canvas
             ref={ref}
             aria-hidden="true"
-            style={{ position: contained ? 'absolute' : 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none', display: 'block' }}
+            style={{ position: contained ? 'absolute' : 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none', display: 'block', opacity }}
         />
     );
 }

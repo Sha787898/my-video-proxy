@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { embedBase } from '../../utils/embedOrigin';
 import { createClient } from '@supabase/supabase-js';
 import { SERVERS, PDLINK_SERVERS, buildMirror, resolveMirrors, domainsFromSettings } from '../../utils/mirrors';
+import { parseProfiles, PROFILES_KEY } from '../../utils/profiles';
 
 // Vercel-এ অনেক লিংক একসাথে দিলে timeout এড়াতে (বিল্ড এরর দিলে এই লাইনটা মুছে দিন)
 export const maxDuration = 60;
@@ -119,10 +120,26 @@ export async function POST(request) {
         }
         const get = (k) => rows?.find((r) => r.key === k)?.value || '';
 
-        const activeServers = Object.keys(DEFAULT_ACTIVE).filter((id) => {
+        let activeServers = Object.keys(DEFAULT_ACTIVE).filter((id) => {
             const saved = get(`${id}_active`);
             return saved === '' ? DEFAULT_ACTIVE[id] : saved === 'true';
         });
+
+        // an upload profile (Manage Sites) overrides the ON/OFF switches: only its own servers receive the upload
+        let profileUsed = null;
+        const profileId = typeof body.profile === 'string' ? body.profile.slice(0, 12) : '';
+        if (profileId && profileId !== 'default') {
+            const prof = parseProfiles(get(PROFILES_KEY)).find((p) => p.id === profileId);
+            if (!prof) {
+                return NextResponse.json({ error: 'Upload profile not found. Open Manage Sites and check your profiles.' }, { status: 400 });
+            }
+            const ids = prof.servers.filter((id) => id in DEFAULT_ACTIVE);
+            if (ids.length === 0) {
+                return NextResponse.json({ error: `Profile "${prof.name}" has no servers. Pick servers for it in Manage Sites.` }, { status: 400 });
+            }
+            activeServers = ids;
+            profileUsed = prof;
+        }
 
         const keys = {};
         for (const [id, workerKey] of Object.entries(KEY_MAP)) {
@@ -257,6 +274,8 @@ export async function POST(request) {
                 url: best || 'Processing Mirror Links...',
                 original_url: link,
                 already_exists: !!resData.exists,
+                profile: profileUsed ? profileUsed.id : 'default',
+                profile_name: profileUsed ? profileUsed.name : 'Default',
                 mirrors: resolved,
                 failed,
                 results,
@@ -277,6 +296,7 @@ export async function POST(request) {
                 embed_url: `${embedBase(siteOrigin)}/embed/${fileResult.id}`,
                 original_url: link,
                 user_id: userId,
+                profile: profileUsed ? profileUsed.id : 'default', // optional column (sql/5-profiles.sql); dropped automatically when the column does not exist
                 mirrors, // শুধু {id,name,type,code}
             };
             // কোনো কলাম টেবিলে না থাকলে সেটা বাদ দিয়ে আবার চেষ্টা (বাকি তথ্য অন্তত সেভ হোক)
@@ -294,8 +314,9 @@ export async function POST(request) {
                 }
                 break;
             }
-            if (missingCols.length > 0 && !dbErr) {
-                dbErr = { message: `files টেবিলে এই কলামগুলো নেই: ${missingCols.join(', ')}। SQL চালিয়ে যোগ করুন (embed/download এর জন্য 'mirrors' জরুরি)।` };
+            const requiredMissing = missingCols.filter((c) => c !== 'profile'); // 'profile' is optional
+            if (requiredMissing.length > 0 && !dbErr) {
+                dbErr = { message: `files টেবিলে এই কলামগুলো নেই: ${requiredMissing.join(', ')}। SQL চালিয়ে যোগ করুন (embed/download এর জন্য 'mirrors' জরুরি)।` };
             }
             if (dbErr) {
                 console.error('Supabase save error:', dbErr.message);

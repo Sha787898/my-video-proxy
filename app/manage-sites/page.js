@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
+import ProfilesEditor from '../components/ProfilesEditor';
 import { IconGear, IconUpload, IconKey, IconGlobe, IconMail, IconLink, IconCheckCircle, IconX, IconEye, IconEyeOff, IconServer, IconPlus, IconPencil } from '../components/Icons';
 import { createClient } from '@supabase/supabase-js';
 
@@ -205,6 +206,8 @@ export default function ManageSitesPage() {
                             <span className="ms-badge">{nodes.length} total</span>
                         </div>
                     </section>
+
+                    <ProfilesEditor supabase={supabase} userId={user?.id} nodes={nodes} />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                         {nodes.map((node, index) => {
