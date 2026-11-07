@@ -99,6 +99,8 @@ export async function POST(request) {
         // ---------- 2) লিংক ----------
         const body = await request.json();
         const { links } = body;
+        // the instant-link flow (/api/queue) already made the file row and its MultiServer id; mirror results go to that same id
+        const wantId = typeof body.fileId === 'string' && /^[a-z0-9]{6,12}$/.test(body.fileId) ? body.fileId : null;
         if (!links || typeof links !== 'string' || links.trim() === '') {
             return NextResponse.json({ error: 'No links provided' }, { status: 400 });
         }
@@ -233,7 +235,7 @@ export async function POST(request) {
 
             // আগে সফল হওয়া কিন্তু এবার Worker-এ না আসা লিংক (যেমন Vidara) মুছে না ফেলে রেখে দিই
             try {
-                const fileId = info.id;
+                const fileId = (linkArray.length === 1 && wantId) || info.id;
                 if (fileId) {
                     const { data: prev } = await supabase.from('files').select('mirrors').eq('id', fileId).maybeSingle();
                     if (prev && Array.isArray(prev.mirrors)) {
@@ -266,7 +268,7 @@ export async function POST(request) {
 
             const fileResult = {
                 ok: true,
-                id: info.id || Math.random().toString(36).substring(2, 10),
+                id: (linkArray.length === 1 && wantId) || info.id || Math.random().toString(36).substring(2, 10),
                 name: info.title || 'GDrive_Video.mp4',
                 size: formatSize(info.size),
                 status: resolved.some((m) => m.type !== 'task') ? 'Active' : 'Processing',

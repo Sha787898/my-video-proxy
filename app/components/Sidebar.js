@@ -7,6 +7,7 @@ import {
     IconDashboard, IconFolder, IconUpload, IconGlobe, IconCloud, IconIdCard, IconLaptop,
     IconLayers, IconCode, IconChart, IconSliders, IconKey, IconPlay, IconChevronDown, IconMenu, IconX, IconSearch, IconChevronRight,
 } from './Icons';
+import QueueRunner from './QueueRunner';
 
 const NAV = [
     { href: '/dashboard', label: 'Dashboard', Icon: IconDashboard },
@@ -18,6 +19,7 @@ const NAV = [
             { href: '/gdrive-upload', label: 'GDrive Mirror', Icon: IconCloud },
             { href: '/drive-upload', label: 'GDrive File ID', Icon: IconIdCard },
             { href: '/web-upload', label: 'Direct Web Upload', Icon: IconLaptop },
+            { href: '/processing-files', label: 'Processing Queue', Icon: IconLayers },
         ],
     },
     { href: '/embed-generator', label: 'Link Generator', Icon: IconCode },
@@ -110,7 +112,7 @@ function CommandPalette({ open, onClose }) {
 function Logo() {
     return (
         <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
-            <span className="w-8 h-8 shrink-0 rounded-[10px] bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center font-black text-white text-[11px] shadow-lg shadow-blue-500/25">
+            <span className="w-8 h-8 shrink-0 rounded-[10px] bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white text-[11px] ring-1 ring-white/10">
                 MS
             </span>
             <span className="font-bold text-[13px] text-white tracking-[0.14em]">MULTISERVER</span>
@@ -165,6 +167,7 @@ export default function Sidebar() {
 
     return (
         <>
+            <QueueRunner />
             {/* mobile top bar */}
             <div className="lg:hidden fixed top-0 inset-x-0 z-30 h-14 px-4 flex items-center justify-between bg-slate-950/85 backdrop-blur-xl border-b border-white/10 pt-[env(safe-area-inset-top)]">
                 <Logo />

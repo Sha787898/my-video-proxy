@@ -4,6 +4,7 @@ export const COPY_KINDS = [
     ['title', 'Title'],
     ['embed', 'Embed'],
     ['page', 'File'],
+    ['titleEmbed', 'Title + Embed'],
     ['all', 'All'],
 ];
 
@@ -14,7 +15,7 @@ export function buildCopy(kind, files, links) {
         if (kind === 'title') return title;
         if (kind === 'embed') return l.embed;
         if (kind === 'page') return l.page;
-        if (kind === 'titleEmbed') return `${title}\n${l.embed}`;
+        if (kind === 'titleEmbed') return `${title}${f.size ? ` [${f.size}]` : ''}\n${l.embed}`; // Name.mkv [1.17 GB]  +  embed link
         const lines = [title];
         if (f.size) lines.push(`Size: ${f.size}`);
         lines.push(`Embed: ${l.embed}`);

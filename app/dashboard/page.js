@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '../components/Sidebar';
+import DashboardTraffic from '../components/DashboardTraffic';
 import { createClient } from '@supabase/supabase-js';
 import {
     IconDashboard, IconFolder, IconShieldCheck, IconActivity, IconLogout,
@@ -125,6 +126,8 @@ export default function DashboardPage() {
                             <p className="ms-muted text-xs mt-1">Row-level security protects your data</p>
                         </div>
                     </div>
+
+                    <DashboardTraffic supabase={supabase} userId={user?.id} />
 
                     {/* Quick actions */}
                     <section className="space-y-3">

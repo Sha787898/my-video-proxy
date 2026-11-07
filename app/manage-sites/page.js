@@ -262,7 +262,7 @@ export default function ManageSitesPage() {
                                             <button
                                                 type="button"
                                                 onClick={() => handleOpenModal(node, 'key')}
-                                                className={`ms-btn ms-btn-sm ms-btn-block justify-between ${node.key ? 'ms-btn-ghost' : 'ms-btn-primary'}`}
+                                                className={`ms-btn ms-btn-sm ms-btn-block justify-between ${node.key ? 'ms-btn-ghost' : 'ms-btn-soft'}`}
                                             >
                                                 <span className="flex items-center gap-2"><IconKey size={15} /> {node.key ? 'API key set' : 'Add API key'}</span>
                                                 {node.key ? <IconPencil size={14} /> : <IconPlus size={14} />}
@@ -273,7 +273,7 @@ export default function ManageSitesPage() {
                                             <button
                                                 type="button"
                                                 onClick={() => handleOpenModal(node, 'email')}
-                                                className={`ms-btn ms-btn-sm ms-btn-block justify-between ${node.email ? 'ms-btn-ghost' : 'ms-btn-primary'}`}
+                                                className={`ms-btn ms-btn-sm ms-btn-block justify-between ${node.email ? 'ms-btn-ghost' : 'ms-btn-soft'}`}
                                             >
                                                 <span className="flex items-center gap-2 min-w-0"><IconMail size={15} className="shrink-0" /> <span className="truncate">{node.email ? `${node.extraLabel}: ${node.email}` : `Add ${node.extraLabel}`}</span></span>
                                                 {node.email ? <IconPencil size={14} className="shrink-0" /> : <IconPlus size={14} className="shrink-0" />}

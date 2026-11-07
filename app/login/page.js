@@ -166,7 +166,7 @@ export default function AuthPage() {
 
                 {/* Brand */}
                 <div className="text-center space-y-2">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center font-black text-white text-xl mx-auto shadow-lg shadow-blue-600/30">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center font-black text-white text-xl mx-auto ">
                         MS
                     </div>
                     <h1 className="ms-h1">MultiServer Cloud</h1>

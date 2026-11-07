@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { trackView } from '../../utils/trackView';
 import { THEMES, LOADERS, LOOKS, WAITS, parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked, themeVars } from '../../utils/playerConfig';
 
 // Watch Party uses Supabase Realtime "broadcast" only (no database table needed)
@@ -118,6 +119,8 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId, conf
         setPanel(null);
         say(`${cur.name} ${why}. Switched to ${list[next].name}`);
     }, [say]);
+
+    useEffect(() => { trackView(fileId, 'embed'); }, [fileId]);
 
     // ---------- saved preferences + auto-join from ?room=CODE ----------
     useEffect(() => {

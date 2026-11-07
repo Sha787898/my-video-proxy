@@ -65,7 +65,7 @@ export default function WebUploadPage() {
 
             if (error) throw error;
             setStatus('File uploaded successfully! Added to processing queue.');
-            setTimeout(() => router.push('/file-manager'), 1500);
+            setTimeout(() => router.push('/processing-files'), 1500);
         } catch (err) {
             setStatus(`Error: ${err.message}`);
             setUploading(false);

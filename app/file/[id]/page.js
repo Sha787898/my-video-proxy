@@ -6,6 +6,7 @@ import { resolveMirrors } from '../../utils/mirrors';
 import { embedBase } from '../../utils/embedOrigin';
 import { parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked, themeVars, THEMES, BGS, BRANDS } from '../../utils/playerConfig';
 import { Bg3D, BrandMark } from '../../components/Bg3D';
+import { trackView } from '../../utils/trackView';
 
 // This page only reads public data: no login session is stored or used.
 const supabase = createClient(
@@ -268,6 +269,7 @@ function FileDownloadContent({ params }) {
     const [ov, setOv] = useState({});
     const [cfgOpen, setCfgOpen] = useState(false);
     useEffect(() => { setOv(readOverrides()); }, []);
+    useEffect(() => { if (id && id !== 'default') trackView(id, 'page'); }, [id]);
     const cfgObj = parseConfig(file && file.config);
     const prefs = resolvePrefs(cfgObj, ov);
     const vars = themeVars(prefs);

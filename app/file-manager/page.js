@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
     IconFolder, IconUpload, IconSearch, IconFilm, IconChevronDown, IconChevronLeft, IconChevronRight, IconLink, IconCode,
-    IconPencil, IconWrench, IconTrash, IconCopy, IconExternal, IconAlert, IconInfo, IconActivity, IconInbox, IconCheck, IconX, IconRefresh,
+    IconPencil, IconWrench, IconTrash, IconCopy, IconExternal, IconAlert, IconInfo, IconActivity, IconInbox, IconCheck, IconX, IconRefresh, IconPlay,
 } from '../components/Icons';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
@@ -18,6 +18,8 @@ const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
+
+const FOLDERS_KEY = 'fm_folders';
 
 const STATUS_BADGE = {
     Completed: 'ms-badge-green',
@@ -40,6 +42,10 @@ export default function FileManagerPage() {
     const [activeIds, setActiveIds] = useState([]);
     const [profiles, setProfiles] = useState([]);
     const [repairAsk, setRepairAsk] = useState(null); // { list, profile }
+    // folders: { folders:[{id,name}], map:{ fileId: folderId } } saved in settings (no SQL needed)
+    const [fm, setFm] = useState({ folders: [], map: {} });
+    const [folder, setFolder] = useState(null); // null = all files, 'none' = not in a folder, or a folder id
+    const [folderAsk, setFolderAsk] = useState(null); // { mode:'new'|'rename', name }
 
     const [searchInput, setSearchInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -82,6 +88,10 @@ export default function FileManagerPage() {
 
         const rows = settingsRes.data || [];
         setDomains(domainsFromSettings(rows));
+        try {
+            const raw = JSON.parse(rows.find((r) => r.key === FOLDERS_KEY)?.value || 'null');
+            if (raw && Array.isArray(raw.folders)) setFm({ folders: raw.folders.filter((x) => x && x.id && x.name).slice(0, 100), map: raw.map && typeof raw.map === 'object' ? raw.map : {} });
+        } catch (e) { /* ignore */ }
         setProfiles(parseProfiles(rows.find((r) => r.key === PROFILES_KEY)?.value));
         const get = (k) => rows.find((r) => r.key === k)?.value || '';
         setActiveIds(
@@ -120,6 +130,8 @@ export default function FileManagerPage() {
         const q = searchQuery.trim().toLowerCase();
         const list = files.filter((f) => {
             if (q && !(f.name || '').toLowerCase().includes(q)) return false;
+            if (folder === 'none' && fm.map[f.id]) return false;
+            if (folder && folder !== 'none' && fm.map[f.id] !== folder) return false;
             if (statusFilter !== 'All' && statusOf(f) !== statusFilter) return false;
             return true;
         });
@@ -127,7 +139,7 @@ export default function FileManagerPage() {
         if (sortBy === 'name') return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
         return list;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [files, searchQuery, statusFilter, activeIds, profiles, sortBy]);
+    }, [files, searchQuery, statusFilter, activeIds, profiles, sortBy, folder, fm]);
 
     // "/" jumps to the search box
     useEffect(() => {
@@ -216,6 +228,41 @@ export default function FileManagerPage() {
     };
 
     // Repair: একই Drive লিংক আবার পাঠাই; Worker শুধু ব্যর্থ/ফাঁকা সার্ভারগুলো নতুন করে চেষ্টা করে
+    const saveFm = async (next) => {
+        const live = new Set(files.map((f) => f.id));
+        const map = {};
+        Object.keys(next.map).forEach((id) => { if (live.has(id) && next.folders.some((x) => x.id === next.map[id])) map[id] = next.map[id]; });
+        const clean = { folders: next.folders, map };
+        setFm(clean);
+        const { error } = await supabase.from('settings').upsert({ user_id: user.id, key: FOLDERS_KEY, value: JSON.stringify(clean) }, { onConflict: 'user_id,key' });
+        if (error) flash('Folder save failed: ' + error.message);
+    };
+    const folderCount = (id) => (id === 'none' ? files.filter((f) => !fm.map[f.id]).length : files.filter((f) => fm.map[f.id] === id).length);
+    const submitFolder = async () => {
+        const name = (folderAsk?.name || '').trim().slice(0, 40);
+        if (!name) return;
+        if (folderAsk.mode === 'new') {
+            const id = 'f' + Date.now().toString(36);
+            await saveFm({ ...fm, folders: [...fm.folders, { id, name }] });
+            setFolder(id);
+        } else {
+            await saveFm({ ...fm, folders: fm.folders.map((x) => (x.id === folder ? { ...x, name } : x)) });
+        }
+        setFolderAsk(null);
+        setPage(1);
+    };
+    const deleteFolder = async () => {
+        const cur = fm.folders.find((x) => x.id === folder);
+        if (!cur || !confirm(`Delete the folder "${cur.name}"? The files inside are kept and go back to "No folder".`)) return;
+        await saveFm({ folders: fm.folders.filter((x) => x.id !== folder), map: fm.map });
+        setFolder(null);
+    };
+    const moveFiles = async (ids, folderId) => {
+        const map = { ...fm.map };
+        ids.forEach((id) => { if (folderId) map[id] = folderId; else delete map[id]; });
+        await saveFm({ ...fm, map });
+        flash(folderId ? `Moved ${ids.length} file(s) to "${fm.folders.find((x) => x.id === folderId)?.name}"` : `${ids.length} file(s) removed from their folder`);
+    };
     const profileName = (id) => (id === 'default' || !id ? 'Default' : (profiles.find((p) => p.id === id)?.name || 'Default'));
     const askRepair = (list) => {
         const first = list[0] && list[0].profile;
@@ -302,6 +349,27 @@ export default function FileManagerPage() {
                             <span className="min-w-0 break-words">{notice}</span>
                         </div>
                     )}
+
+                    {/* Folders */}
+                    <div className="ms-card p-3 sm:p-4 space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button type="button" onClick={() => { setFolder(null); setPage(1); }} className={`ms-btn ms-btn-sm ${folder === null ? 'ms-btn-primary' : 'ms-btn-ghost'}`}><IconFolder size={14} /> All files <span className="opacity-70">{files.length}</span></button>
+                            {fm.folders.map((x) => (
+                                <button key={x.id} type="button" onClick={() => { setFolder(x.id); setPage(1); }} className={`ms-btn ms-btn-sm max-w-[220px] ${folder === x.id ? 'ms-btn-primary' : 'ms-btn-ghost'}`}><IconFolder size={14} className="shrink-0" /> <span className="truncate">{x.name}</span> <span className="opacity-70">{folderCount(x.id)}</span></button>
+                            ))}
+                            {fm.folders.length > 0 && <button type="button" onClick={() => { setFolder('none'); setPage(1); }} className={`ms-btn ms-btn-sm ${folder === 'none' ? 'ms-btn-primary' : 'ms-btn-ghost'}`}>No folder <span className="opacity-70">{folderCount('none')}</span></button>}
+                            <button type="button" onClick={() => setFolderAsk({ mode: 'new', name: '' })} className="ms-btn ms-btn-soft ms-btn-sm sm:ml-auto">+ New folder</button>
+                        </div>
+                        {folder && folder !== 'none' && (
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/10">
+                                <p className="text-sm text-slate-300 min-w-0 truncate">File Manager <span className="text-slate-500">›</span> <b className="text-white">{fm.folders.find((x) => x.id === folder)?.name}</b></p>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => setFolderAsk({ mode: 'rename', name: fm.folders.find((x) => x.id === folder)?.name || '' })} className="ms-btn ms-btn-ghost ms-btn-sm"><IconPencil size={13} /> Rename</button>
+                                    <button type="button" onClick={deleteFolder} className="ms-btn ms-btn-danger ms-btn-sm"><IconTrash size={13} /> Delete folder</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Search + filters */}
                     <div className="ms-card p-3 sm:p-4 space-y-3">
@@ -446,8 +514,11 @@ export default function FileManagerPage() {
                                             <button type="button" onClick={() => toggleExpand(file.id)} title="Server links" aria-expanded={isOpen} className="ms-btn ms-btn-ghost ms-btn-icon">
                                                 <IconChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                                             </button>
-                                            <button type="button" onClick={() => copyText(pageLink(file), 'Download page link copied')} title="Copy download page link" className="ms-btn ms-btn-ghost ms-btn-icon">
+                                            <button type="button" onClick={() => copyText(pageLink(file), 'Download page link copied')} title="Copy file (download page) link" className="ms-btn ms-btn-ghost ms-btn-icon">
                                                 <IconLink size={16} />
+                                            </button>
+                                            <button type="button" onClick={() => copyText(embedLink(file), 'Embed link copied')} title="Copy embed link" className="ms-btn ms-btn-ghost ms-btn-icon">
+                                                <IconPlay size={16} />
                                             </button>
                                             <button type="button" onClick={() => copyText(iframeCode(file), 'Embed code copied')} title="Copy embed iframe code" className="ms-btn ms-btn-ghost ms-btn-icon">
                                                 <IconCode size={16} />
@@ -479,6 +550,10 @@ export default function FileManagerPage() {
                                                         </button>
                                                     ))}
                                                     <span className="ms-badge ml-auto">Profile: {profileName(file.profile)}</span>
+                                                    <select value={fm.map[file.id] || ''} onChange={(e) => moveFiles([file.id], e.target.value)} aria-label="Folder" className="ms-input !w-auto !min-h-[34px] !text-xs">
+                                                        <option value="">No folder</option>
+                                                        {fm.folders.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                                                    </select>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                     <div>
@@ -563,6 +638,11 @@ export default function FileManagerPage() {
                         <div className="sticky bottom-3 z-20 ms-card p-3 flex flex-wrap items-center justify-between gap-2 !border-blue-400/40 shadow-2xl shadow-black/50 backdrop-blur-xl">
                             <span className="text-xs font-semibold text-white px-1">{selected.size} selected</span>
                             <div className="flex flex-wrap gap-2">
+                                <select value="" onChange={(e) => { if (e.target.value !== '__') moveFiles(selectedFiles.map((f) => f.id), e.target.value === '__none' ? '' : e.target.value); }} aria-label="Move to folder" className="ms-input !w-auto !min-h-[34px] !text-xs">
+                                    <option value="">Move to…</option>
+                                    <option value="__none">No folder</option>
+                                    {fm.folders.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                                </select>
                                 {COPY_KINDS.map(([k, label]) => (
                                     <button key={k} type="button" onClick={() => copyKind(k, selectedFiles, label)} className="ms-btn ms-btn-ghost ms-btn-sm">
                                         <IconCopy size={14} /> {label}
@@ -579,6 +659,19 @@ export default function FileManagerPage() {
                     )}
                 </main>
             </div>
+
+            {folderAsk && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-3" role="dialog" aria-modal="true">
+                    <form onSubmit={(e) => { e.preventDefault(); submitFolder(); }} className="ms-card w-full max-w-sm p-5 space-y-4 ms-fade-up">
+                        <h3 className="text-sm font-bold text-white">{folderAsk.mode === 'new' ? 'New folder' : 'Rename folder'}</h3>
+                        <input autoFocus maxLength={40} value={folderAsk.name} onChange={(e) => setFolderAsk({ ...folderAsk, name: e.target.value })} placeholder="Folder name" className="ms-input" aria-label="Folder name" />
+                        <div className="flex gap-3">
+                            <button type="button" onClick={() => setFolderAsk(null)} className="ms-btn ms-btn-ghost flex-1">Cancel</button>
+                            <button type="submit" className="ms-btn ms-btn-primary flex-1">{folderAsk.mode === 'new' ? 'Create' : 'Save'}</button>
+                        </div>
+                    </form>
+                </div>
+            )}
 
             {repairAsk && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-3" role="dialog" aria-modal="true">

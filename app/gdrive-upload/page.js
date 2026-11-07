@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { embedBase } from '../utils/embedOrigin';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
@@ -8,13 +9,14 @@ import ProfilePicker from '../components/ProfilePicker';
 import { buildCopy, copyToClipboard, COPY_KINDS } from '../utils/copyFormat';
 import { IconFolder, IconCloud, IconUpload, IconInfo, IconCheckCircle, IconAlert, IconCopy, IconRefresh, IconFilm, IconServer, IconX, IconCheck } from '../components/Icons';
 import { createClient } from '@supabase/supabase-js';
+import { resolveMirrors, domainsFromSettings } from '../utils/mirrors';
+import { subscribe, isRunning, queueState, kick } from '../utils/queueRunner';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const CONCURRENCY = 3; // links processed at the same time; each one is shown the moment it is done
 
 function statusBadge(status) {
     const s = String(status || '').toLowerCase();
@@ -32,13 +34,14 @@ export default function GDriveUploadPage() {
     const [folderUrl, setFolderUrl] = useState('');
     const [linksInput, setLinksInput] = useState('');
     const [profile, setProfile] = useState('default');
-    const [running, setRunning] = useState(false);
-    const [progress, setProgress] = useState({ done: 0, total: 0 });
+    const [running, setRunning] = useState(false); // only while the file records are being made (a second or two)
     const [results, setResults] = useState([]);
     const [errors, setErrors] = useState([]);
-    const [missingKeys, setMissingKeys] = useState([]);
+    const [domains, setDomains] = useState({});
+    const [extracting, setExtracting] = useState(false);
+    const [folderInfo, setFolderInfo] = useState(null);
+    const [, tick] = useState(0);
     const [toast, setToast] = useState('');
-    const cancelRef = useRef(false);
     const toastTimer = useRef(null);
 
     useEffect(() => {
@@ -55,6 +58,25 @@ export default function GDriveUploadPage() {
     }, [router]);
 
     useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+    // live status of the files just submitted: refresh from the database while the background mirror works
+    const idsKey = results.map((r) => r.id).join(',');
+    useEffect(() => {
+        if (!user || !idsKey) return undefined;
+        const ids = idsKey.split(',');
+        const refresh = async () => {
+            const { data } = await supabase.from('files').select('id, name, size, status, mirrors').in('id', ids);
+            if (data) setResults((prev) => prev.map((r) => { const n = data.find((d) => d.id === r.id); return n ? { ...r, name: n.name, size: n.size, status: n.status, mirrors: Array.isArray(n.mirrors) ? n.mirrors : [] } : r; }));
+        };
+        const t = setInterval(refresh, 4000);
+        const un = subscribe(() => { tick((n) => n + 1); refresh(); });
+        return () => { clearInterval(t); un(); };
+    }, [user, idsKey]);
+
+    useEffect(() => {
+        if (!user) return;
+        supabase.from('settings').select('key, value').eq('user_id', user.id).then(({ data }) => setDomains(domainsFromSettings(data || [])));
+    }, [user]);
 
     if (loadingAuth) {
         return (
@@ -86,76 +108,67 @@ export default function GDriveUploadPage() {
         say(ok ? `${label} copied` : 'Copy failed: the browser blocked the clipboard');
     };
 
-    // Append the folder link to the link queue
-    const handleExtractFolder = () => {
-        if (!folderUrl.trim()) return;
-        setLinksInput((prev) => (prev ? prev + '\n' : '') + folderUrl.trim());
-        setFolderUrl('');
+    // Read a public Drive folder and put every file link into the list
+    const handleExtractFolder = async () => {
+        if (!folderUrl.trim() || extracting) return;
+        setExtracting(true);
+        setFolderInfo(null);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch('/api/drive-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                body: JSON.stringify({ url: folderUrl.trim() }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Server answered ${res.status}`);
+            const have = new Set(linksInput.split('\n').map((l) => l.trim()).filter(Boolean));
+            const add = data.files.map((f) => f.url).filter((u) => !have.has(u));
+            setLinksInput((prev) => (prev.trim() ? prev.trim() + '\n' : '') + add.join('\n'));
+            setFolderInfo({ ok: true, text: `${data.files.length} file(s) found in ${data.folders} folder(s)${data.capped ? ' (limit reached)' : ''}. ${add.length} new link(s) added to the list.` });
+            setFolderUrl('');
+        } catch (err) {
+            setFolderInfo({ ok: false, text: err.message });
+        } finally {
+            setExtracting(false);
+        }
     };
 
+    // Step 1: the records and MultiServer links are made at once. Step 2 (mirroring) runs in the background queue.
     const handleBulkUpload = async (e) => {
         e.preventDefault();
         if (running) return;
 
         const clean = [...new Set(linksInput.split('\n').map((l) => l.trim()).filter((l) => l.length > 0 && !l.includes('1xxxxxxx') && !l.includes('2xxxxxxx')))];
-        if (clean.length === 0) {
-            say('Add at least one Google Drive link');
-            return;
-        }
+        if (clean.length === 0) { say('Add at least one Google Drive link'); return; }
 
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (!token) { router.push('/login'); return; }
 
-        cancelRef.current = false;
         setRunning(true);
-        setResults([]);
         setErrors([]);
-        setMissingKeys([]);
-        setProgress({ done: 0, total: clean.length });
-
-        const queue = [...clean];
-        const failedLinks = [];
-        let done = 0;
-
-        const worker = async () => {
-            while (queue.length > 0 && !cancelRef.current) {
-                const link = queue.shift();
-                try {
-                    const res = await fetch('/api/upload', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                        body: JSON.stringify({ links: link, uploadType: 'gdrive', profile }),
-                    });
-                    let data = {};
-                    try { data = await res.json(); } catch (err) { /* not JSON */ }
-                    if (!res.ok) throw new Error(data.error || `Server answered ${res.status}`);
-                    const got = data.files || [];
-                    if (got.length) setResults((prev) => [...prev.filter((x) => !got.some((g) => g.id === x.id)), ...got]);
-                    if (data.errors && data.errors.length) {
-                        failedLinks.push(link);
-                        setErrors((prev) => [...prev, ...data.errors.map((er) => ({ link: er.link || link, error: er.error }))]);
-                    }
-                    if (data.missingKeys && data.missingKeys.length) setMissingKeys((prev) => [...new Set([...prev, ...data.missingKeys])]);
-                } catch (err) {
-                    failedLinks.push(link);
-                    setErrors((prev) => [...prev, { link, error: err.message }]);
-                }
-                done += 1;
-                setProgress({ done, total: clean.length });
-            }
-        };
-
-        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, clean.length) }, worker));
-
-        // links that did not work stay in the box so they can be sent again with one click
-        const notTried = cancelRef.current ? queue : [];
-        setLinksInput([...failedLinks, ...notTried].join('\n'));
-        setRunning(false);
+        try {
+            const res = await fetch('/api/queue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ links: clean.join('\n'), profile }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Server answered ${res.status}`);
+            setResults((prev) => [...data.files.map((f) => ({ ...f, mirrors: [] })), ...prev.filter((x) => !data.files.some((g) => g.id === x.id))]);
+            setErrors(data.errors || []);
+            setLinksInput((data.errors || []).map((er) => er.link).join('\n'));
+            kick(supabase); // start the background work right now
+        } catch (err) {
+            setErrors([{ link: `${clean.length} link(s)`, error: err.message }]);
+        } finally {
+            setRunning(false);
+        }
     };
 
-    const stop = () => { cancelRef.current = true; };
-    const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
+    const waiting = results.filter((r) => r.status === 'Processing').length;
+    const mirrorsOf = (f) => resolveMirrors(f.mirrors, domains);
 
     return (
         <div className="ms-app flex">
@@ -180,7 +193,7 @@ export default function GDriveUploadPage() {
                             <div className="space-y-2">
                                 <div className="flex flex-wrap items-center justify-between gap-1">
                                     <label className="ms-label" htmlFor="gd-folder">Add a shared folder link</label>
-                                    <span className="text-[11px] text-blue-400 font-semibold">Adds it to the list below</span>
+                                    <span className="text-[11px] text-blue-400 font-semibold">Every file inside is added to the list below</span>
                                 </div>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <input
@@ -191,10 +204,11 @@ export default function GDriveUploadPage() {
                                         placeholder="https://drive.google.com/drive/folders/..."
                                         className="ms-input min-w-0 flex-1"
                                     />
-                                    <button type="button" onClick={handleExtractFolder} className="ms-btn ms-btn-ghost ms-btn-block sm:w-auto!">
-                                        <IconFolder size={16} /> Add
+                                    <button type="button" onClick={handleExtractFolder} disabled={extracting} className="ms-btn ms-btn-ghost ms-btn-block sm:w-auto!">
+                                        {extracting ? <IconRefresh size={16} className="ms-spin" /> : <IconFolder size={16} />} {extracting ? 'Reading folder…' : 'Extract files'}
                                     </button>
                                 </div>
+                                {folderInfo && <p className={`text-xs break-words ${folderInfo.ok ? 'text-emerald-400' : 'text-red-300'}`}>{folderInfo.text}</p>}
                             </div>
 
                             <div className="flex items-center gap-3">
@@ -215,42 +229,31 @@ export default function GDriveUploadPage() {
                                     disabled={running}
                                 />
                                 <p className="ms-muted text-xs">
-                                    Links must be publicly shared. {linksInput.split('\n').filter((l) => l.trim()).length} line(s). Each link shows up below as soon as it is ready.
+                                    Links must be publicly shared. {linksInput.split('\n').filter((l) => l.trim()).length} line(s). Your MultiServer links appear below at once; the servers are filled in the background.
                                 </p>
                             </div>
 
-                            <div className="flex flex-col sm:flex-row gap-2">
-                                <button type="submit" disabled={running} className="ms-btn ms-btn-primary ms-btn-block">
-                                    {running ? <IconRefresh size={16} className="ms-spin" /> : <IconUpload size={16} />}
-                                    {running ? `Working ${progress.done}/${progress.total}` : 'Upload links'}
-                                </button>
-                                {running && (
-                                    <button type="button" onClick={stop} className="ms-btn ms-btn-ghost sm:w-auto!"><IconX size={16} /> Stop after current</button>
-                                )}
-                            </div>
-
-                            {(running || progress.total > 0) && (
-                                <div className="h-1.5 rounded-full bg-white/10 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-                                    <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-300 transition-all duration-500" style={{ width: `${pct}%` }} />
-                                </div>
-                            )}
+                            <button type="submit" disabled={running} className="ms-btn ms-btn-primary ms-btn-block">
+                                {running ? <IconRefresh size={16} className="ms-spin" /> : <IconUpload size={16} />}
+                                {running ? 'Making links…' : 'Generate links'}
+                            </button>
                         </form>
                     </div>
 
-                    {!running && progress.total > 0 && (
-                        <div className={`ms-alert ${errors.length ? 'ms-alert-amber' : 'ms-alert-green'} ms-fade-up`}>
-                            {errors.length ? <IconAlert size={18} className="shrink-0" /> : <IconCheckCircle size={18} className="shrink-0" />}
+                    {results.length > 0 && (
+                        <div className="ms-alert ms-alert-green ms-fade-up">
+                            <IconCheckCircle size={18} className="shrink-0" />
                             <p className="min-w-0 break-words">
-                                {results.length} of {progress.total} link(s) done{errors.length ? `, ${errors.length} failed` : ''}.
-                                {errors.length > 0 && ' The failed links are back in the box above, so you can send them again.'}
-                                {missingKeys.length > 0 && ` Missing API keys: ${missingKeys.join(', ')}.`}
+                                {results.length} link(s) ready to copy now.{' '}
+                                {waiting > 0 ? `${waiting} still being sent to the servers in the background. ` : 'All servers are done. '}
+                                <Link href="/processing-files" className="underline font-semibold">Open Processing Queue</Link>
                             </p>
                         </div>
                     )}
 
                     {errors.length > 0 && (
                         <div className="ms-card p-4 space-y-2">
-                            <h2 className="ms-h2">Failed links</h2>
+                            <h2 className="ms-h2">Not added</h2>
                             {errors.map((er, i) => (
                                 <div key={`${er.link}-${i}`} className="rounded-xl border border-red-500/25 bg-red-500/[0.06] px-3 py-2 text-xs min-w-0">
                                     <p className="ms-code text-slate-300 break-all">{er.link}</p>
@@ -290,7 +293,7 @@ export default function GDriveUploadPage() {
                                                     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                                                         <span className="ms-badge">{file.size}</span>
                                                         <span className={`ms-badge ${statusBadge(file.status)}`}>{file.status}</span>
-                                                        {file.profile_name && file.profile_name !== 'Default' && <span className="ms-badge">{file.profile_name}</span>}
+                                                        {file.profile && file.profile !== 'default' && <span className="ms-badge">{file.profile}</span>}
                                                         {file.already_exists && <span className="ms-badge ms-badge-amber">Already existed</span>}
                                                     </div>
                                                 </div>
@@ -327,11 +330,18 @@ export default function GDriveUploadPage() {
                                             </button>
                                         </div>
 
-                                        {file.mirrors && file.mirrors.length > 0 && (
+                                        {file.status === 'Processing' && (
+                                            <p className="text-xs ms-muted flex items-center gap-2">
+                                                <IconRefresh size={12} className={isRunning(file.id) ? 'ms-spin' : ''} />
+                                                {isRunning(file.id) ? 'Sending to the servers now…' : (queueState(file.id).n ? 'Waiting for the next try…' : 'Waiting in the queue…')}
+                                            </p>
+                                        )}
+
+                                        {mirrorsOf(file).length > 0 && (
                                             <details className="group" open>
-                                                <summary className="ms-label flex items-center gap-1.5 cursor-pointer select-none"><IconServer size={14} /> Server links ({file.mirrors.length})</summary>
+                                                <summary className="ms-label flex items-center gap-1.5 cursor-pointer select-none"><IconServer size={14} /> Server links ({mirrorsOf(file).length})</summary>
                                                 <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                                    {file.mirrors.map((m) => (
+                                                    {mirrorsOf(file).map((m) => (
                                                         <button
                                                             key={m.id}
                                                             type="button"
