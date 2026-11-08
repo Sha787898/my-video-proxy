@@ -7,6 +7,7 @@ import { embedBase } from '../../utils/embedOrigin';
 import { parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked, themeVars, THEMES, BGS, BRANDS } from '../../utils/playerConfig';
 import { Bg3D, BrandMark } from '../../components/Bg3D';
 import { trackView } from '../../utils/trackView';
+import { parseQuality } from '../../utils/quality';
 
 // This page only reads public data: no login session is stored or used.
 const supabase = createClient(
@@ -193,6 +194,36 @@ const CSS = `
 .dl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .dl-chip { font-size: 10px; font-weight: 600; letter-spacing: .04em; padding: 3px 8px; border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid var(--line); color: #c4ccda; }
 .dl-chip.g { color: #86efac; border-color: rgba(34,197,94,.3); background: rgba(34,197,94,.08); }
+.dl-chip.h { color: #fcd34d; border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.1); }
+.dl-chip.s { color: var(--ac-tint); border-color: rgba(var(--ac-rgb),.35); background: rgba(var(--ac-rgb),.12); }
+.dl-grid { display: block; }
+.dl-acts { display: flex; gap: 8px; margin-top: 10px; }
+.dl-acts button { flex: 1; min-height: 38px; border-radius: 11px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: #d6dce8; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .2s, border-color .2s; }
+.dl-acts button:hover { background: rgba(255,255,255,.09); border-color: rgba(var(--ac-rgb),.45); }
+.dl-spec { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; }
+.dl-spec > div { padding: 9px 11px; border-radius: 11px; border: 1px solid var(--line); background: rgba(255,255,255,.03); min-width: 0; }
+.dl-spec dt { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #67748a; }
+.dl-spec dd { margin: 3px 0 0; font-size: 12.5px; font-weight: 600; color: #f1f1f3; overflow-wrap: anywhere; }
+.dl-h2-first { margin-top: 16px; }
+.dl-row .t.b { color: #86efac; background: rgba(34,197,94,.14); }
+@media (min-width: 1024px) {
+  .dl-ic { width: 56px; height: 56px; border-radius: 15px; }
+  .dl-head { gap: 16px; padding-bottom: 18px; }
+  .dl-chips { gap: 8px; margin-top: 12px; }
+  .dl-chip { font-size: 11.5px; padding: 5px 12px; }
+  .dl-colB { position: sticky; top: 76px; align-self: start; padding: 18px 18px 14px; border-radius: 16px; background: rgba(255,255,255,.025); border: 1px solid var(--line); }
+  .dl-colB .dl-h2-first { margin-top: 0; }
+  .dl-watch .pl { width: 60px; height: 60px; transition: transform .25s, box-shadow .25s; }
+  .dl-watch:hover .pl { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(var(--ac-rgb),.18); }
+  .dl-row { min-height: 52px; }
+  .dl-card { max-width: 1080px; padding: 26px 28px; border-radius: 22px; }
+  .dl-name { font-size: 18px; }
+  .dl-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 28px; align-items: start; margin-top: 4px; }
+  .dl-colB .dl-h2-first { margin-top: 18px; }
+  .dl-colB .dl-list { max-height: 430px; overflow-y: auto; padding-right: 4px; }
+  .dl-main { min-height: 54px; font-size: 15px; }
+  .dl-foot { text-align: center; }
+}
 .dl-watch { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; aspect-ratio: 16 / 9; margin-top: 14px; border-radius: 14px; border: 1px solid var(--line); background: radial-gradient(circle at 50% 40%, rgba(var(--ac-rgb),.22), rgba(7,11,18,.9) 70%); color: #fff; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: border-color .2s, transform .2s; }
 .dl-watch:hover { border-color: rgba(var(--ac-rgb),.6); transform: translateY(-1px); }
 .dl-watch .pl { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(var(--ac-rgb),.4); border: 1px solid rgba(var(--ac-rgb),.5); }
@@ -268,6 +299,7 @@ function FileDownloadContent({ params }) {
     const [sel, setSel] = useState(null);
     const [ov, setOv] = useState({});
     const [cfgOpen, setCfgOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
     useEffect(() => { setOv(readOverrides()); }, []);
     useEffect(() => { if (id && id !== 'default') trackView(id, 'page'); }, [id]);
     const cfgObj = parseConfig(file && file.config);
@@ -297,6 +329,15 @@ function FileDownloadContent({ params }) {
     const mirrors = resolveMirrors(file?.mirrors, file?.domains).filter((m) => m.url);
     const best = mirrors.find((m) => m.type === 'download') || mirrors.find((m) => m.type === 'stream');
     const hasPlayer = mirrors.some((m) => m.embed);
+    const q = parseQuality(file?.name);
+    const streamN = mirrors.filter((m) => m.type === 'stream').length;
+    const copyPage = async () => {
+        try { await navigator.clipboard.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch (e) { /* ignore */ }
+    };
+    const spec = [
+        ['Resolution', q.res], ['Video codec', q.codec], ['HDR', q.hdr], ['Bit depth', q.bit], ['Source', q.source],
+        ['File size', file?.size], ['Servers', mirrors.length ? `${mirrors.length} (${streamN} stream · ${mirrors.length - streamN} download)` : ''],
+    ].filter(([, v]) => v);
 
     return (
         <div className={`dl-root ${prefs.anim === false ? 'dl-noanim' : ''}`} style={file ? vars : undefined}>
@@ -366,12 +407,20 @@ function FileDownloadContent({ params }) {
                                 <h1 className="dl-name">{file.name}</h1>
                                 <div className="dl-chips">
                                     {file.size && <span className="dl-chip">{file.size}</span>}
-                                    {file.quality && <span className="dl-chip g">{file.quality}</span>}
+                                    {q.found ? (<>
+                                        {q.res && <span className="dl-chip g">{q.res}</span>}
+                                        {q.hdr && <span className={`dl-chip ${/DoVi|HDR/.test(q.hdr) ? 'h' : ''}`}>{q.hdr}</span>}
+                                        {q.bit && <span className="dl-chip">{q.bit}</span>}
+                                        {q.codec && <span className="dl-chip">{q.codec}</span>}
+                                        {q.source && <span className="dl-chip s">{q.source}</span>}
+                                    </>) : (file.quality && file.quality !== '1080p WEB-DL' && <span className="dl-chip g">{file.quality}</span>)}
                                     <span className="dl-chip">ID {id}</span>
                                 </div>
                             </div>
                         </header>
 
+                        <div className="dl-grid">
+                        <div className="dl-colA">
                         {hasPlayer && (watch ? (
                             <div className="dl-frame">
                                 <iframe
@@ -393,6 +442,21 @@ function FileDownloadContent({ params }) {
                             </button>
                         )}
 
+                        <div className="dl-acts">
+                            <button type="button" onClick={copyPage}>{copied ? 'Link copied' : 'Copy page link'}</button>
+                            {hasPlayer && !watch && <button type="button" onClick={() => setWatch(true)}>Play here</button>}
+                        </div>
+                        </div>
+
+                        <aside className="dl-colB">
+                        {spec.length > 0 && (
+                            <>
+                                <h2 className="dl-h2 dl-h2-first">File details</h2>
+                                <dl className="dl-spec">
+                                    {spec.map(([k, v]) => (<div key={k}><dt>{k}</dt><dd>{v}</dd></div>))}
+                                </dl>
+                            </>
+                        )}
                         {mirrors.length > 0 ? (
                             <>
                                 <h2 className="dl-h2">All servers</h2>
@@ -401,6 +465,7 @@ function FileDownloadContent({ params }) {
                                         <li key={m.id}>
                                             <button type="button" className="dl-row" style={{ '--i': i }} onClick={() => setSel(m)}>
                                                 <span className="n">{m.name}</span>
+                                                {best && m.id === best.id && <span className="t b">Best</span>}
                                                 <span className={`t ${m.type === 'stream' ? 's' : ''}`}>{m.type === 'stream' ? 'Stream' : 'Download'}</span>
                                                 <span className="go">{Svg.down}</span>
                                             </button>
@@ -411,6 +476,9 @@ function FileDownloadContent({ params }) {
                         ) : (
                             <div className="dl-empty">No download servers are available for this file yet.</div>
                         )}
+
+                        </aside>
+                        </div>
 
                         <p className="dl-foot">
                             Every link is checked before it opens. Links open in a new tab without sending this page&apos;s address, and this page uses no cookies or login.

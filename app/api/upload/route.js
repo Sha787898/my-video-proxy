@@ -3,6 +3,7 @@ import { embedBase } from '../../utils/embedOrigin';
 import { createClient } from '@supabase/supabase-js';
 import { SERVERS, PDLINK_SERVERS, buildMirror, resolveMirrors, domainsFromSettings } from '../../utils/mirrors';
 import { parseProfiles, PROFILES_KEY } from '../../utils/profiles';
+import { parseQuality } from '../../utils/quality';
 
 // Vercel-এ অনেক লিংক একসাথে দিলে timeout এড়াতে (বিল্ড এরর দিলে এই লাইনটা মুছে দিন)
 export const maxDuration = 60;
@@ -289,7 +290,7 @@ export async function POST(request) {
                 id: fileResult.id,
                 name: fileResult.name,
                 size: fileResult.size,
-                quality: '1080p WEB-DL',
+                quality: parseQuality(fileResult.name).label || '', // read from the file name (HDR / DoVi / codec / source); nothing is guessed
                 date: new Date().toISOString().split('T')[0],
                 status: fileResult.status,
                 download_link: best,

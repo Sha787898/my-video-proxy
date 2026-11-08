@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { embedBase } from '../../utils/embedOrigin';
 import { parseProfiles, PROFILES_KEY } from '../../utils/profiles';
+import { parseQuality } from '../../utils/quality';
 
 export const maxDuration = 30;
 
@@ -87,7 +88,7 @@ export async function POST(request) {
             const id = newId();
             const name = titles[idx] || `Drive file ${it.did.slice(0, 8)}`;
             rows.push({
-                id, name, size: 'Pending', quality: '1080p WEB-DL', date: new Date().toISOString().split('T')[0], status: 'Processing',
+                id, name, size: 'Pending', quality: parseQuality(name).label || '', date: new Date().toISOString().split('T')[0], status: 'Processing',
                 download_link: null, url: `${siteOrigin}/file/${id}`, embed_url: `${embedBase(siteOrigin)}/embed/${id}`,
                 original_url: it.link, user_id: userId, profile, mirrors: [],
             });
