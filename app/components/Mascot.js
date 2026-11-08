@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { MASCOTS, mascotById } from '../utils/mascots';
+import { answer, chipsFor, langOf, PAGE_INFO, GO_PAGES } from '../utils/mascotBrain';
 import { parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked } from '../utils/playerConfig';
 
 // ==========================================================================
@@ -16,6 +17,10 @@ import { parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked } fro
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 const LS_POS = 'ms_mascot_pos';
+const LS_ROAM = 'ms_mascot_roam';
+const LS_NAME = 'ms_mascot_name';
+const LS_CHAT = 'ms_mascot_chat_seen';
+let aiOff = false; // set when the online brain is not available (no key / not signed in): the offline brain answers everything
 
 // your OWN sticker characters: files you put in public/mascots/ plus a list in public/mascots/mascots.json
 // { "characters": [ { "id": "mine", "name": "My girl", "idle": "idle.webp", "reactions": ["hello.webp", "happy.webp"] } ] }
@@ -25,7 +30,7 @@ export function cleanCustom(json) {
     const list = json && Array.isArray(json.characters) ? json.characters : [];
     list.slice(0, 12).forEach((c) => {
         if (!c || !/^[a-z0-9-]{2,24}$/.test(String(c.id)) || !FILE_OK.test(String(c.idle))) return;
-        const reactions = (Array.issince ? [] : Array.isArray(c.reactions) ? c.reactions : []).filter((f) => FILE_OK.test(String(f))).slice(0, 12);
+        const reactions = (Array.isArray(c.reactions) ? c.reactions : []).filter((f) => FILE_OK.test(String(f))).slice(0, 12);
         out.push({ id: String(c.id), name: String(c.name || c.id).replace(/[<>]/g, '').slice(0, 20), sticker: true, idle: `/mascots/${c.idle}`, reactions: reactions.map((f) => `/mascots/${f}`) });
     });
     return out;
@@ -37,6 +42,8 @@ const TOUCH = [
     ['wave', 'Hi hi! 👋'], ['peace', 'Peace! ✌️'], ['heart', 'Thank you! 💖'], ['wink', 'Hehe~ 😉'],
     ['cheer', 'You can do it! ✨'], ['shy', 'Eh? You touched me… 🙈'], ['love', 'You are the best! 💕'], ['wave', 'Boop! Hello there!'],
 ];
+const TEASE = ['Catch me if you can! 😜', 'Boo! Did I scare you? 👻', 'I was watching your cursor… 👀', 'Psst, I came closer 🐾', 'Hehe, you can not catch me! 🏃‍♀️', 'Hey! Over here! 🙋‍♀️', 'Tag, you are it! 😆'];
+const SIT = ['Let me sit for a bit 🪑', 'My feet are tired… 🥱', 'Do not mind me, just resting 😌', 'La la la~ 🎵'];
 const CHATTER = ['Remember to drink some water 💧', 'You are doing great today ✨', 'Need a stretch? Roll your shoulders! 🌸', 'I am here if you need me 💬', 'Take a short break, you deserve it ☕'];
 const PAGE = {
     '/dashboard': ['Welcome back! Let me show you around 🌟', 'Your numbers are on this page 📈'],
@@ -53,8 +60,26 @@ const PAGE = {
     download: ['Enjoy the show! 🍿', 'Pick any server. They are all checked ✅'],
 };
 
+// things she can point at on the current page: [text on the button, English, Bangla]
+const PAGE_STEPS = {
+    '/gdrive-upload': [
+        [/extract/i, 'Paste a Drive FOLDER link, then press this: I list every file inside 📂', 'ড্রাইভ ফোল্ডারের লিংক দিয়ে এটা চাপুন: ভেতরের সব ফাইল বের করে দেব 📂'],
+        [/generate links/i, 'Press this and your MultiServer links appear instantly. Mirroring continues in the background 🚀', 'এটা চাপলেই MultiServer লিংক সাথে সাথে পাবেন, মিররিং ব্যাকগ্রাউন্ডে চলবে 🚀'],
+    ],
+    '/file-manager': [
+        [/repair/i, 'Repair re-sends a file to the servers it is missing from 🔧', 'Repair চাপলে যে সার্ভারে ফাইল নেই সেখানে আবার পাঠানো হবে 🔧'],
+        [/folder/i, 'Make folders to keep your files tidy 📁', 'ফোল্ডার বানিয়ে ফাইল গুছিয়ে রাখুন 📁'],
+    ],
+    '/processing-files': [
+        [/force sync|start all/i, 'Press this to push stuck files again right now ⚡', 'আটকে থাকা ফাইল এখনই আবার পাঠাতে এটা চাপুন ⚡'],
+    ],
+    '/embed-generator': [
+        [/advanced/i, 'Advanced mode adds other sites\' embed links too 🔧', 'Advanced মোডে অন্য সাইটের এম্বেড লিংকও পাবেন 🔧'],
+    ],
+};
+
 const CSS = `
-.mc-wrap { position: fixed; z-index: 45; pointer-events: none; width: var(--mc-w, 112px); user-select: none; -webkit-user-select: none; touch-action: none; }
+.mc-wrap { position: fixed; z-index: 45; pointer-events: none; width: var(--mc-w, 112px); user-select: none; -webkit-user-select: none; }
 .mc-char { touch-action: none; position: relative; width: 100%; aspect-ratio: 5 / 6; pointer-events: auto; cursor: grab; background: none; border: 0; padding: 0; -webkit-tap-highlight-color: transparent; filter: drop-shadow(0 8px 14px rgba(0,0,0,.45)); animation: mc-float 3.6s ease-in-out infinite; outline: none; }
 .mc-char:active { cursor: grabbing; }
 .mc-char:focus-visible { outline: 2px solid rgba(255,255,255,.7); outline-offset: 4px; border-radius: 16px; }
@@ -66,6 +91,12 @@ const CSS = `
 @keyframes mc-sway { 0%, 100% { transform: rotate(-1.6deg); } 50% { transform: rotate(1.6deg); } }
 .mc-breath { transform-box: fill-box; transform-origin: 50% 100%; animation: mc-breath 3.6s ease-in-out infinite; }
 @keyframes mc-breath { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.025); } }
+.mc-head { transform-box: fill-box; transform-origin: 50% 96%; animation: mc-tilt 6.5s ease-in-out infinite; }
+@keyframes mc-tilt { 0%, 100% { transform: rotate(-1.8deg) translateY(0); } 30% { transform: rotate(2.2deg) translateY(-1px); } 60% { transform: rotate(-.6deg) translateY(1px); } }
+.mc-ahoge { transform-box: fill-box; transform-origin: 20% 100%; animation: mc-ahoge 2.6s ease-in-out infinite; }
+@keyframes mc-ahoge { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(8deg); } }
+.mc-giggle .mc-head { animation: mc-giggle .22s ease-in-out infinite alternate; }
+@keyframes mc-giggle { from { transform: rotate(-3deg); } to { transform: rotate(3deg) translateY(-2px); } }
 .mc-blink { transform-box: fill-box; transform-origin: 50% 55%; animation: mc-blink 4.6s infinite; }
 @keyframes mc-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.08); } }
 .mc-arm { transition: transform .35s cubic-bezier(.3,1.4,.5,1); }
@@ -92,20 +123,62 @@ const CSS = `
 @keyframes mc-s-shy { 0%, 100% { transform: scale(1); } 50% { transform: scale(.9) rotate(-5deg); } }
 @keyframes mc-s-shake { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
 @keyframes mc-s-spin { to { transform: rotate(360deg); } }
-.mc-bubble { position: absolute; bottom: calc(100% + 6px); max-width: 210px; min-width: 90px; width: max-content; padding: 8px 12px; border-radius: 14px; background: #fff; color: #1a1a22; font: 600 12px/1.4 Inter, system-ui, sans-serif; box-shadow: 0 10px 26px rgba(0,0,0,.45); pointer-events: none; animation: mc-pop .25s cubic-bezier(.3,1.5,.5,1) both; }
+.mc-wrap.mc-walk .mc-char { animation: mc-hop .4s ease-in-out infinite; }
+@keyframes mc-hop { 0%, 100% { transform: translateY(0) rotate(var(--mc-lean, 0deg)); } 50% { transform: translateY(-9px) rotate(var(--mc-lean, 0deg)); } }
+.mc-wrap.mc-sit .mc-char { animation: mc-sitbob 3.2s ease-in-out infinite; }
+.mc-wrap.mc-sit .mc-char svg { transform: translateY(6%) scaleY(.87); transform-origin: 50% 100%; }
+@keyframes mc-sitbob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(2px) rotate(1deg); } }
+.mc-st-tease { animation: mc-s-wig .4s ease-in-out 4; }
+.mc-chatbtn { position: absolute; top: 0; left: -4px; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.9); background: linear-gradient(135deg, #ff6b73, #e5383b); color: #fff; font-size: 11px; line-height: 1; cursor: pointer; pointer-events: auto; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,.4); transition: transform .2s; padding: 0; }
+.mc-chatbtn:hover { transform: scale(1.12) rotate(-6deg); }
+.mc-chatbtn.new::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid rgba(229,56,59,.7); animation: mc-ping 1.6s ease-out infinite; }
+@keyframes mc-ping { from { transform: scale(.8); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }
+.mc-chat { position: absolute; bottom: calc(100% + 10px); width: 304px; max-width: calc(100vw - 20px); display: flex; flex-direction: column; border-radius: 18px; background: rgba(18,18,24,.97); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 50px rgba(0,0,0,.6); color: #ececf2; font: 500 13px/1.45 Inter, system-ui, sans-serif; pointer-events: auto; overflow: hidden; animation: mc-pop .25s cubic-bezier(.3,1.5,.5,1) both; touch-action: auto; }
+.mc-chat, .mc-chat * { user-select: text; -webkit-user-select: text; }
+.mc-chat.r { right: 0; } .mc-chat.l { left: 0; }
+.mc-chat-h { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: linear-gradient(90deg, rgba(229,56,59,.28), rgba(229,56,59,.06)); border-bottom: 1px solid rgba(255,255,255,.08); }
+.mc-chat-h b { font-size: 13px; } .mc-chat-h small { opacity: .55; font-size: 11px; margin-right: auto; }
+.mc-chat-h button { width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(255,255,255,.08); color: #fff; cursor: pointer; font-size: 15px; line-height: 1; }
+.mc-chat-h button:hover { background: rgba(229,56,59,.8); }
+.mc-dot { width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; box-shadow: 0 0 8px #3ddc84; }
+.mc-chat-b { height: 250px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; }
+.mc-m { max-width: 86%; padding: 8px 11px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; animation: mc-pop .2s ease-out both; }
+.mc-m.bot { align-self: flex-start; background: rgba(255,255,255,.09); border-bottom-left-radius: 4px; }
+.mc-m.me { align-self: flex-end; background: #e5383b; color: #fff; border-bottom-right-radius: 4px; }
+.mc-go { display: block; margin-top: 7px; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
+.mc-go:hover { background: rgba(229,56,59,.85); }
+.mc-typing { display: flex; gap: 4px; padding: 11px 13px; }
+.mc-typing i { width: 6px; height: 6px; border-radius: 50%; background: #cfd3e6; animation: mc-dots 1s ease-in-out infinite; }
+.mc-typing i:nth-child(2) { animation-delay: .15s; } .mc-typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes mc-dots { 0%, 80%, 100% { transform: translateY(0); opacity: .4; } 40% { transform: translateY(-4px); opacity: 1; } }
+.mc-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; }
+.mc-chips button { padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.05); color: #e8e8ee; font: 600 11.5px Inter, system-ui, sans-serif; cursor: pointer; }
+.mc-chips button:hover { background: rgba(229,56,59,.7); border-color: transparent; }
+.mc-chat-f { display: flex; gap: 6px; padding: 8px 10px 10px; border-top: 1px solid rgba(255,255,255,.08); }
+.mc-chat-f input { flex: 1; min-width: 0; padding: 9px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: #fff; font: 500 13px Inter, system-ui, sans-serif; outline: none; }
+.mc-chat-f input:focus { border-color: rgba(229,56,59,.8); }
+.mc-chat-f button { width: 36px; height: 36px; border-radius: 50%; border: 0; background: #e5383b; color: #fff; font-size: 14px; cursor: pointer; }
+.mc-chat-f button:disabled { opacity: .5; cursor: default; }
+.mc-bubble { position: absolute; bottom: calc(100% + 6px); max-width: 240px; min-width: 90px; width: max-content; padding: 8px 12px; border-radius: 14px; background: #fff; color: #1a1a22; font: 600 12px/1.4 Inter, system-ui, sans-serif; box-shadow: 0 10px 26px rgba(0,0,0,.45); pointer-events: none; animation: mc-pop .25s cubic-bezier(.3,1.5,.5,1) both; }
 .mc-bubble::after { content: ''; position: absolute; top: 100%; width: 12px; height: 12px; background: #fff; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .mc-bubble.r { right: 8px; } .mc-bubble.r::after { right: 26px; }
 .mc-bubble.l { left: 8px; } .mc-bubble.l::after { left: 26px; }
 @keyframes mc-pop { from { opacity: 0; transform: translateY(6px) scale(.85); } to { opacity: 1; transform: none; } }
-.mc-tools { position: absolute; top: -4px; right: -6px; display: flex; flex-direction: column; gap: 4px; opacity: 0; transform: translateX(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
+.mc-tools { position: absolute; top: 2px; right: -10px; display: flex; flex-direction: column; gap: 3px; padding: 3px; border-radius: 999px; background: rgba(14,14,18,.72); border: 1px solid rgba(255,255,255,.1); backdrop-filter: blur(8px); opacity: 0; transform: translateX(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
 .mc-wrap:hover .mc-tools, .mc-wrap:focus-within .mc-tools, .mc-wrap.mc-touch .mc-tools { opacity: 1; transform: none; pointer-events: auto; }
-.mc-tools button { width: 26px; height: 26px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: rgba(14,14,18,.88); color: #e8e8ee; font: 700 13px/1 Inter, system-ui, sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); transition: background .2s, transform .2s; }
-.mc-tools button:hover { background: rgba(229,56,59,.85); transform: scale(1.1); }
+.mc-tools button { width: 20px; height: 20px; border-radius: 50%; border: 0; background: transparent; color: #d7d9e4; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: background .2s, transform .2s, color .2s; }
+.mc-tools button svg { width: 12px; height: 12px; display: block; }
+.mc-tools button:hover { background: rgba(229,56,59,.9); color: #fff; transform: scale(1.12); }
 .mc-tools button.off { opacity: .55; }
 .mc-summon { position: fixed; z-index: 45; width: 42px; height: 42px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: rgba(14,14,18,.9); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; backdrop-filter: blur(6px); transition: transform .2s, border-color .2s; }
 .mc-summon:hover { transform: scale(1.1) rotate(-6deg); border-color: rgba(255,107,115,.7); }
-@media (max-width: 640px) { .mc-wrap { --mc-w: 84px !important; } .mc-bubble { max-width: 170px; font-size: 11.5px; } }
-@media (prefers-reduced-motion: reduce) { .mc-char, .mc-sway, .mc-breath, .mc-blink, .mc-wavehand, .mc-up, .mc-twinkle, .mc-z { animation: none !important; } }
+.mc-spot { position: fixed; z-index: 44; pointer-events: none; border-radius: 12px; border: 2px solid #ff6b73; box-shadow: 0 0 0 4px rgba(229,56,59,.3), 0 0 0 9999px rgba(0,0,0,.42); transition: left .45s ease, top .45s ease, width .45s ease, height .45s ease; animation: mc-spotp 1.4s ease-in-out infinite; }
+@keyframes mc-spotp { 50% { border-color: #fff; } }
+.mc-tourbar { position: fixed; z-index: 47; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-radius: 999px; background: rgba(18,18,24,.96); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 12px 34px rgba(0,0,0,.55); color: #ececf2; font: 600 12px Inter, system-ui, sans-serif; }
+.mc-tourbar button { padding: 6px 12px; border-radius: 999px; border: 0; background: #e5383b; color: #fff; font: 700 12px Inter, system-ui, sans-serif; cursor: pointer; }
+.mc-tourbar button.g { background: rgba(255,255,255,.1); }
+@media (max-width: 640px) { .mc-wrap { --mc-w: 84px !important; } .mc-bubble { max-width: 170px; font-size: 11.5px; } .mc-chat { position: fixed; left: 10px !important; right: 10px !important; bottom: 10px; width: auto; max-width: none; } .mc-chat-b { height: 38vh; } }
+@media (prefers-reduced-motion: reduce) { .mc-wrap.mc-walk .mc-char, .mc-wrap.mc-sit .mc-char, .mc-chatbtn.new::after, .mc-char, .mc-sway, .mc-breath, .mc-blink, .mc-wavehand, .mc-up, .mc-twinkle, .mc-z { animation: none !important; } }
 `;
 
 const heartPath = 'M0 -4 C-1 -9 -9 -9 -9 -3 C-9 3 -2 7 0 10 C2 7 9 3 9 -3 C9 -9 1 -9 0 -4Z';
@@ -115,11 +188,11 @@ const starPath = 'M0 -9 L2.2 -2.2 L9 0 L2.2 2.2 L0 9 L-2.2 2.2 L-9 0 L-2.2 -2.2Z
 function Girl({ c, mood, look }) {
     const arms = {
         idle: [10, -10], wave: [10, -150], peace: [10, -140], cheer: [150, -150], heart: [165, -165], shy: [-150, 150], love: [160, -160],
-        wink: [10, -140], dizzy: [25, -25], sleep: [6, -6], pout: [-60, 60],
+        wink: [10, -140], dizzy: [25, -25], sleep: [6, -6], pout: [-60, 60], walk: [30, -30], sit: [22, -22], giggle: [-150, 150], stretch: [160, -160], tease: [10, -10],
     }[mood] || [10, -10];
-    const happy = ['cheer', 'love', 'heart'].includes(mood);
+    const happy = ['cheer', 'love', 'heart', 'giggle', 'stretch'].includes(mood);
     const eyeClosed = mood === 'sleep';
-    const winkR = mood === 'wink' || mood === 'peace';
+    const winkR = mood === 'wink' || mood === 'peace' || mood === 'tease';
     const ex = look.x; const ey = look.y;
 
     const eye = (cx, side) => {
@@ -133,7 +206,7 @@ function Girl({ c, mood, look }) {
         return (
             <g className="mc-blink">
                 <ellipse cx={cx} cy={cy} rx="10" ry="12" fill="#fff" stroke="#3b2a2a" strokeWidth="1" />
-                <ellipse cx={cx + sx} cy={cy + sy} rx="7.4" ry="9.8" fill="url(#mc-iris)" />
+                <ellipse cx={cx + sx} cy={cy + sy} rx="7.4" ry="9.8" fill={`url(#mc-iris-${c.id})`} />
                 <ellipse cx={cx + sx} cy={cy + sy + 0.6} rx="3.4" ry="5" fill="#1d1216" />
                 <path d={`M${cx + sx - 6} ${cy + sy - 2} Q${cx + sx} ${cy + sy - 11} ${cx + sx + 6} ${cy + sy - 2} Q${cx + sx} ${cy + sy - 6} ${cx + sx - 6} ${cy + sy - 2}Z`} fill="#000" opacity=".28" />
                 <ellipse cx={cx + sx - 2.6} cy={cy + sy - 3.8} rx="2.9" ry="3.2" fill="#fff" />
@@ -141,6 +214,7 @@ function Girl({ c, mood, look }) {
                 <circle cx={cx + sx + 4.4} cy={cy + sy - 1.4} r=".8" fill="#fff" opacity=".8" />
                 <path d={`M${cx - 11} ${cy - 4} Q${cx} ${cy - 15} ${cx + 11} ${cy - 4}`} stroke="#2a1d1d" strokeWidth="3.2" fill="none" strokeLinecap="round" />
                 <path d={`M${cx - 9} ${cy + 9} Q${cx} ${cy + 13} ${cx + 9} ${cy + 9}`} stroke="#3b2a2a" strokeWidth=".9" fill="none" opacity=".5" />
+                <path d={side === 'l' ? `M${cx - 11} ${cy - 4} l-4.5 -3.5 M${cx - 9} ${cy - 8} l-3 -4` : `M${cx + 11} ${cy - 4} l4.5 -3.5 M${cx + 9} ${cy - 8} l3 -4`} stroke="#2a1d1d" strokeWidth="2.2" strokeLinecap="round" />
             </g>
         );
     };
@@ -149,8 +223,9 @@ function Girl({ c, mood, look }) {
         if (mood === 'sleep') return <ellipse cx="100" cy="128" rx="3" ry="3.4" fill="#d9777a" />;
         if (mood === 'dizzy') return <path d="M90 129 q5 -5 10 0 t10 0" stroke="#a8474b" strokeWidth="2.2" fill="none" strokeLinecap="round" />;
         if (mood === 'shy') return <path d="M94 130 q3 -3 6 0 q3 3 6 0" stroke="#a8474b" strokeWidth="2" fill="none" strokeLinecap="round" />;
+        if (mood === 'tease') return (<g><path d="M91 124 Q100 136 109 124 Z" fill="#c9444a" /><path d="M95 129 Q100 146 105 129 Z" fill="#ff7d86" /><path d="M100 131 L100 138" stroke="#e0606b" strokeWidth="1" /></g>);
         if (mood === 'pout') return <path d="M92 132 Q100 126 108 132" stroke="#a8474b" strokeWidth="2.4" fill="none" strokeLinecap="round" />;
-        if (happy || mood === 'wave') return (<g><path d="M89 123 Q100 142 111 123 Z" fill="#c9444a" /><path d="M94 132 Q100 138 106 132 Q100 129 94 132Z" fill="#ff8c94" /></g>);
+        if (happy || mood === 'wave' || mood === 'giggle') return (<g><path d="M89 123 Q100 142 111 123 Z" fill="#c9444a" /><path d="M94 132 Q100 138 106 132 Q100 129 94 132Z" fill="#ff8c94" /></g>);
         return <path d="M91 125 Q100 134 109 125" stroke="#a8474b" strokeWidth="2.4" fill="none" strokeLinecap="round" />;
     };
 
@@ -203,10 +278,19 @@ function Girl({ c, mood, look }) {
     return (
         <svg viewBox="0 0 200 240" role="img" aria-label={`${c.name}, the helper`}>
             <defs>
-                <radialGradient id="mc-iris" cx="50%" cy="68%" r="75%">
+                <radialGradient id={`mc-iris-${c.id}`} cx="50%" cy="68%" r="75%">
                     <stop offset="0%" stopColor="#fff" stopOpacity=".55" />
                     <stop offset="45%" stopColor={c.eye} />
                     <stop offset="100%" stopColor={c.eye} stopOpacity=".92" />
+                </radialGradient>
+                <linearGradient id={`mc-hg-${c.id}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={c.hairDark} />
+                    <stop offset="50%" stopColor={c.hair} />
+                    <stop offset="100%" stopColor={c.hair} />
+                </linearGradient>
+                <radialGradient id="mc-blush" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#ff7d86" stopOpacity=".95" />
+                    <stop offset="100%" stopColor="#ff7d86" stopOpacity="0" />
                 </radialGradient>
                 <linearGradient id="mc-hairshine" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#fff" stopOpacity=".5" />
@@ -222,16 +306,19 @@ function Girl({ c, mood, look }) {
                 <ellipse cx="85" cy="228" rx="12" ry="6" fill={c.accent} />
                 <ellipse cx="115" cy="228" rx="12" ry="6" fill={c.accent} />
             </g>
-            <ellipse cx="100" cy="100" rx="47" ry="43" fill={c.skin} />
+            <g className="mc-head">
+            <path d="M52 96 Q51 56 100 54 Q149 56 148 96 Q147 126 128 141 Q114 149 100 150 Q86 149 72 141 Q53 126 52 96Z" fill={c.skin} />
+            <path d="M60 112 Q64 132 82 144" stroke="#c98c78" strokeWidth="2" fill="none" opacity=".18" strokeLinecap="round" />
             <ellipse cx="100" cy="84" rx="40" ry="10" fill="#c98c78" opacity=".16" />
             <circle cx="100" cy="117" r="1.1" fill="#c98c78" opacity=".7" />
-            <ellipse cx="70" cy="117" rx="9" ry="5.5" fill="#ff8c94" opacity={mood === 'shy' || mood === 'love' ? 0.85 : 0.5} />
-            <ellipse cx="130" cy="117" rx="9" ry="5.5" fill="#ff8c94" opacity={mood === 'shy' || mood === 'love' ? 0.85 : 0.5} />
+            <ellipse cx="70" cy="118" rx="12" ry="7" fill="url(#mc-blush)" opacity={mood === 'shy' || mood === 'love' ? 1 : 0.7} />
+            <ellipse cx="130" cy="118" rx="12" ry="7" fill="url(#mc-blush)" opacity={mood === 'shy' || mood === 'love' ? 1 : 0.7} />
             {eye(80, 'l')}
             {eye(120, 'r')}
             {brows}
             {mouth()}
-            <path d="M52 98 Q50 46 100 44 Q150 46 148 98 Q134 74 118 88 Q106 66 94 88 Q76 72 52 98Z" fill={c.hair} />
+            <path d="M52 98 Q50 46 100 44 Q150 46 148 98 Q134 74 118 88 Q106 66 94 88 Q76 72 52 98Z" fill={`url(#mc-hg-${c.id})`} />
+            <path d="M66 62 Q100 48 134 62" stroke="#fff" strokeWidth="4.5" fill="none" strokeLinecap="round" opacity=".28" />
             <path d="M70 62 Q86 50 106 52" stroke="#fff" strokeWidth="3" fill="none" strokeLinecap="round" opacity=".35" />
             <path d="M60 80 Q82 56 100 58 Q124 56 142 80 Q124 62 100 66 Q76 62 60 80Z" fill="url(#mc-hairshine)" />
             <path d="M52 98 Q50 118 58 142 Q66 124 64 98Z" fill={c.hair} />
@@ -239,9 +326,10 @@ function Girl({ c, mood, look }) {
             <path d="M58 104 Q56 122 60 136" stroke={c.hairDark} strokeWidth="1.2" fill="none" opacity=".55" />
             <path d="M142 104 Q144 122 140 136" stroke={c.hairDark} strokeWidth="1.2" fill="none" opacity=".55" />
             <path d="M92 52 Q94 66 90 80 M108 52 Q106 66 110 80 M76 58 Q78 70 74 84 M124 58 Q122 70 126 84" stroke={c.hairDark} strokeWidth="1.3" fill="none" strokeLinecap="round" opacity=".5" />
-            <path d="M100 46 Q94 30 108 22" stroke={c.hair} strokeWidth="3.4" fill="none" strokeLinecap="round" />
+            <path className="mc-ahoge" d="M100 46 Q92 30 108 20" stroke={c.hair} strokeWidth="3.6" fill="none" strokeLinecap="round" />
             <g stroke="#ff6f7a" strokeWidth="1.3" strokeLinecap="round" opacity=".7"><path d="M64 113 l3 5 M69 112 l3 5 M74 112 l3 5" /><path d="M126 112 l3 5 M131 112 l3 5 M136 113 l3 5" /></g>
             {accessory()}
+            </g>
             {arm('l', arms[0])}
             {arm('r', arms[1])}
 
@@ -284,6 +372,26 @@ export default function Mascot({ config, fetchConfig = false, page }) {
     const [pos, setPos] = useState({ r: 18, b: 18 });
     const [drag, setDrag] = useState(false);
     const [touch, setTouch] = useState(false);
+    const router = useRouter();
+    const [walkMs, setWalkMs] = useState(0);
+    const [spot, setSpot] = useState(null);
+    const [tourInfo, setTourInfo] = useState(null);
+    const tourRef = useRef(null);
+    const [lean, setLean] = useState(0);
+    const [roam, setRoam] = useState(true);
+    const [chatOpen, setChatOpen] = useState(false);
+    const [msgs, setMsgs] = useState([]);
+    const [input, setInput] = useState('');
+    const [typing, setTyping] = useState(false);
+    const [myName, setMyName] = useState('');
+    const [chatSeen, setChatSeen] = useState(true);
+    const posRef = useRef({ r: 18, b: 18 });
+    const ptr = useRef(null);
+    const nextRoam = useRef(0);
+    const lastDodge = useRef(0);
+    const chatBody = useRef(null);
+    const chatOpenRef = useRef(false);
+    const msgsRef = useRef([]);
     const wrapRef = useRef(null);
     const tm = useRef({}); // timers
     const last = useRef(0);
@@ -291,6 +399,9 @@ export default function Mascot({ config, fetchConfig = false, page }) {
     const lastTouch = useRef(null);
     const moodRef = useRef('idle');
     moodRef.current = mood;
+    posRef.current = pos;
+    chatOpenRef.current = chatOpen;
+    msgsRef.current = msgs;
 
     useEffect(() => { setRaw(config); }, [config]);
 
@@ -298,6 +409,7 @@ export default function Mascot({ config, fetchConfig = false, page }) {
     useEffect(() => {
         setMounted(true); last.current = Date.now();
         setOv(readOverrides());
+        try { setRoam(localStorage.getItem(LS_ROAM) !== '0'); setMyName(localStorage.getItem(LS_NAME) || ''); setChatSeen(localStorage.getItem(LS_CHAT) === '1'); } catch (e) { setChatSeen(false); }
         try { const p = JSON.parse(localStorage.getItem(LS_POS) || 'null'); if (p && typeof p.r === 'number' && typeof p.b === 'number') setPos(p); } catch (e) { /* ignore */ }
         const onPrefs = () => setOv(readOverrides());
         window.addEventListener('ms-prefs', onPrefs);
@@ -324,9 +436,9 @@ export default function Mascot({ config, fetchConfig = false, page }) {
     const on = prefs.mascot !== false;
     const talk = prefs.mascotTalk !== false;
 
-    const react = useCallback((m, text, ms = 2600) => {
+    const react = useCallback((m, text, ms = 2600, keepIdle = false) => {
         clearTimeout(tm.current.mood);
-        last.current = Date.now();
+        if (!keepIdle) last.current = Date.now();
         setMood(m);
         if (text) {
             setSay(text);
@@ -362,6 +474,7 @@ export default function Mascot({ config, fetchConfig = false, page }) {
         if (!mounted || !on) return undefined;
         let raf = 0;
         const move = (e) => {
+            ptr.current = { x: e.clientX, y: e.clientY };
             if (raf) return;
             raf = requestAnimationFrame(() => {
                 raf = 0;
@@ -389,6 +502,11 @@ export default function Mascot({ config, fetchConfig = false, page }) {
         const iv = setInterval(() => {
             const idle = Date.now() - last.current;
             if (idle > 60000 && moodRef.current === 'idle') { setMood('sleep'); setSay(''); }
+            else if (moodRef.current === 'idle' && !press.current && !tourRef.current && idle > 5000 && Math.random() < 0.3) {
+                const r = Math.random();
+                if (r < 0.4) { setLook({ x: Math.round((Math.random() * 5 - 2.5) * 2) / 2, y: Math.round((Math.random() * 3 - 1) * 2) / 2 }); clearTimeout(tm.current.glance); tm.current.glance = setTimeout(() => setLook({ x: 0, y: 0 }), 1500); }
+                else react(pick(['giggle', 'stretch', 'wink', 'peace', 'giggle']), '', 1700, true);
+            }
             else if (talk && idle > 24000 && idle < 60000 && moodRef.current === 'idle' && Math.random() < 0.35) {
                 const pool = PAGE[key] || CHATTER;
                 react(pick(['wave', 'wink', 'heart', 'peace']), pick(Math.random() < 0.5 ? pool : CHATTER), 2600);
@@ -400,12 +518,230 @@ export default function Mascot({ config, fetchConfig = false, page }) {
 
     useEffect(() => () => { Object.values(tm.current).forEach(clearTimeout); }, []);
 
-    // touch / drag
+    const speak = useCallback((text, ms = 3200) => {
+        setSay(text);
+        clearTimeout(tm.current.say);
+        tm.current.say = setTimeout(() => setSay(''), ms);
+    }, []);
+
+    // walk along the screen to a position (distance from the right edge, in px)
+    const walkTo = useCallback((r, after) => {
+        const p = posRef.current;
+        const dist = Math.abs(r - p.r);
+        if (dist < 24) { if (after) after(); return; }
+        const ms = Math.max(700, Math.round((dist / 80) * 1000));
+        clearTimeout(tm.current.walk);
+        setLean(r < p.r ? 5 : -5);
+        setWalkMs(ms);
+        setMood('walk');
+        setPos({ r, b: p.b });
+        tm.current.walk = setTimeout(() => { setWalkMs(0); setMood('idle'); if (after) after(); }, ms + 60);
+    }, []);
+
     const press = useRef(null);
+
+    // ----- guided tour: she walks to a button, lights it up and says what it does -----
+    const visibleEl = (e) => { const r = e.getBoundingClientRect(); return r.width > 8 && r.height > 8 && r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth; };
+    const endTour = useCallback((text) => {
+        tourRef.current = null;
+        clearTimeout(tm.current.tour);
+        setSpot(null); setTourInfo(null);
+        if (text) react('cheer', text, 3200);
+        else setMood('idle');
+    }, [react]);
+    const tourStep = useCallback((i) => {
+        const t = tourRef.current;
+        if (!t) return;
+        let idx = i; let el = null;
+        while (idx < t.steps.length) {
+            const st = t.steps[idx];
+            el = st.href ? [...document.querySelectorAll(`a[href="${st.href}"]`)].find(visibleEl) : [...document.querySelectorAll('button,a,h1,h2,summary,label')].find((e) => visibleEl(e) && st.re.test(e.textContent || ''));
+            if (el) break;
+            idx += 1;
+        }
+        if (!el) { endTour(t.lang === 'bn' ? 'এই ছিল সব! কিছু জানতে চাইলে আমাকে জিজ্ঞেস করুন 💬' : 'That was everything! Ask me if you need anything else 💬'); return; }
+        t.i = idx;
+        const st = t.steps[idx];
+        try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* ignore */ }
+        clearTimeout(tm.current.tour);
+        tm.current.tour = setTimeout(() => {
+            if (tourRef.current !== t) return;
+            const rect = el.getBoundingClientRect();
+            const wrap = wrapRef.current;
+            const w = wrap ? wrap.offsetWidth : 112; const h = wrap ? wrap.offsetHeight : 134;
+            let x = rect.right + 18;
+            if (x + w > window.innerWidth - 8) x = rect.left - 18 - w;
+            const r = Math.max(8, Math.min(window.innerWidth - w - 8, window.innerWidth - (x + w)));
+            const b = Math.max(8, Math.min(window.innerHeight - h - 80, window.innerHeight - (rect.top + rect.height / 2 + h / 2)));
+            setSpot({ x: rect.left - 6, y: rect.top - 6, w: rect.width + 12, h: rect.height + 12 });
+            setTourInfo({ n: idx + 1, of: t.steps.length });
+            const p = posRef.current;
+            const ms = Math.max(600, Math.min(1500, Math.round(Math.hypot(r - p.r, b - p.b) / 0.45)));
+            setLean(r < p.r ? 5 : -5);
+            setWalkMs(ms); setMood('walk'); setPos({ r, b });
+            clearTimeout(tm.current.walk);
+            tm.current.walk = setTimeout(() => {
+                setWalkMs(0);
+                if (tourRef.current !== t) return;
+                react('wave', st.say[t.lang] || st.say.en, 9000, true);
+                speak(st.say[t.lang] || st.say.en, 9000);
+                tm.current.tour = setTimeout(() => { if (tourRef.current === t) tourStep(idx + 1); }, 9500);
+            }, ms + 60);
+        }, 380);
+    }, [endTour, react, speak]);
+    const startTour = useCallback((lang = 'en') => {
+        const pageSteps = (PAGE_STEPS[key] || []).map(([re, en, bn]) => ({ re, say: { en, bn } }));
+        const navSteps = fetchConfig ? Object.keys(GO_PAGES).map((href) => ({ href, say: { en: `${GO_PAGES[href]}: ${PAGE_INFO[href] ? PAGE_INFO[href].en : ''}`, bn: `${GO_PAGES[href]}: ${PAGE_INFO[href] ? PAGE_INFO[href].bn : ''}` } })) : [];
+        const steps = [...pageSteps, ...navSteps];
+        if (!steps.length) { react('shy', lang === 'bn' ? 'এই পেজে দেখানোর মতো বাটন পাইনি 🙈' : 'I could not find anything to point at here 🙈', 2800); return; }
+        clearTimeout(tm.current.sit); clearTimeout(tm.current.peek);
+        setChatOpen(false);
+        tourRef.current = { steps, i: 0, lang };
+        tourStep(0);
+    }, [key, fetchConfig, react, tourStep]);
+
+    // roaming: now and then she walks around, sits down, hunts your cursor to tease you, or peeks from the screen edge
+    useEffect(() => {
+        if (!mounted || !on || !roam || prefs.anim === false) return undefined;
+        if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+        nextRoam.current = Date.now() + 7000;
+        const iv = setInterval(() => {
+            if (document.hidden || chatOpenRef.current || tourRef.current || press.current || moodRef.current !== 'idle' || Date.now() < nextRoam.current) return;
+            const el = wrapRef.current;
+            if (!el) return;
+            nextRoam.current = Date.now() + 9000 + Math.random() * 9000;
+            const w = el.offsetWidth;
+            const maxR = Math.max(8, window.innerWidth - w - 8);
+            const clampR = (v) => Math.max(8, Math.min(maxR, v));
+            const roll = Math.random();
+            if (roll < 0.38) {
+                walkTo(clampR(8 + Math.random() * (maxR - 8)));
+            } else if (roll < 0.56) {
+                setMood('sit');
+                speak(pick(SIT), 3000);
+                clearTimeout(tm.current.sit);
+                tm.current.sit = setTimeout(() => { if (moodRef.current === 'sit') setMood('idle'); }, 9000 + Math.random() * 6000);
+            } else if (roll < 0.8 && ptr.current) {
+                walkTo(clampR(window.innerWidth - ptr.current.x - w / 2), () => react('tease', pick(TEASE), 2800, true));
+            } else if (roll < 0.92) {
+                const right = posRef.current.r < window.innerWidth / 2;
+                walkTo(right ? -w * 0.55 : window.innerWidth - w * 0.45, () => {
+                    setMood('idle');
+                    speak('👀', 3200);
+                    clearTimeout(tm.current.peek);
+                    tm.current.peek = setTimeout(() => {
+                        react('cheer', 'Boo! 👻', 2000, true);
+                        tm.current.peek = setTimeout(() => walkTo(clampR(8 + Math.random() * (maxR - 8))), 1500);
+                    }, 3600);
+                });
+            } else {
+                walkTo(clampR(8 + Math.random() * (maxR - 8)));
+            }
+        }, 1500);
+        return () => { clearInterval(iv); };
+    }, [mounted, on, roam, prefs.anim, walkTo, speak, react]);
+
+    // ----- chat -----
+    useEffect(() => { if (chatBody.current) chatBody.current.scrollTop = chatBody.current.scrollHeight; }, [msgs, typing, chatOpen]);
+    useEffect(() => {
+        if (!chatOpen) return undefined;
+        const k = (e) => { if (e.key === 'Escape') setChatOpen(false); };
+        window.addEventListener('keydown', k);
+        return () => window.removeEventListener('keydown', k);
+    }, [chatOpen]);
+
+    const openChat = () => {
+        if (tourRef.current) endTour('');
+        last.current = Date.now();
+        clearTimeout(tm.current.walk); clearTimeout(tm.current.peek); clearTimeout(tm.current.sit);
+        setWalkMs(0);
+        if (moodRef.current === 'sleep' || moodRef.current === 'walk' || moodRef.current === 'sit') setMood('idle');
+        setSay('');
+        const el = wrapRef.current;
+        const w = el ? el.offsetWidth : 112; const h = el ? el.offsetHeight : 134;
+        const p = posRef.current;
+        const r = Math.max(12, Math.min(window.innerWidth - w - 12, p.r));
+        const b = Math.max(12, Math.min(window.innerHeight - h - 440, p.b));
+        if (r !== p.r || b !== p.b) setPos({ r, b });
+        if (!msgsRef.current.length) {
+            const hi = myName ? `Hi ${myName}! I am ${c.name}. Ask me anything about the site, or just chat ✨` : `Hi! I am ${c.name}. Ask me how to upload, copy links, fix a stuck file… or press “Show me around” ✨`;
+            setMsgs([{ id: 'hi', from: 'bot', text: hi }]);
+        }
+        setChatOpen(true);
+        setChatSeen(true);
+        try { localStorage.setItem(LS_CHAT, '1'); } catch (e) { /* ignore */ }
+        react('wave', '', 1800);
+    };
+    const closeChat = () => { setChatOpen(false); clearInterval(tm.current.type); };
+
+    const askAI = async (history, ctx) => {
+        if (aiOff) return null;
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return null;
+            const ctl = new AbortController();
+            const t = setTimeout(() => ctl.abort(), 22000);
+            const res = await fetch('/api/mascot-chat', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
+                body: JSON.stringify({ messages: history.map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text })), page: ctx.page, name: ctx.name }),
+                signal: ctl.signal,
+            });
+            clearTimeout(t);
+            const j = await res.json();
+            if (j && j.ok) return j;
+            if (j && j.reason === 'no_key') aiOff = true;
+        } catch (e) { /* the offline brain answers */ }
+        return null;
+    };
+
+    const send = async (raw) => {
+        const text = String(raw === undefined ? input : raw).trim().slice(0, 400);
+        if (!text || typing) return;
+        setInput('');
+        last.current = Date.now();
+        const history = [...msgsRef.current, { id: `u${Date.now()}`, from: 'me', text }];
+        setMsgs(history);
+        setTyping(true);
+        react('wink', '', 1400);
+        const ctx = { page: key, admin: !!fetchConfig, name: myName };
+        let res = answer(text, ctx);
+        if (res.unknown) {
+            const ai = await askAI(history, ctx);
+            if (ai) res = { text: ai.text, mood: 'wave', go: fetchConfig ? ai.go : null, lang: langOf(text) };
+        } else {
+            await new Promise((ok) => setTimeout(ok, 350 + Math.random() * 450));
+        }
+        if (res.remember) { setMyName(res.remember.name); try { localStorage.setItem(LS_NAME, res.remember.name); } catch (e) { /* ignore */ } }
+        setTyping(false);
+        const id = `b${Date.now()}`;
+        const chars = Array.from(res.text);
+        setMsgs((m) => [...m, { id, from: 'bot', text: '', go: res.go || null }]);
+        clearInterval(tm.current.type);
+        let i = 0;
+        tm.current.type = setInterval(() => {
+            i += 2;
+            const part = chars.slice(0, i).join('');
+            setMsgs((m) => m.map((x) => (x.id === id ? { ...x, text: part } : x)));
+            if (i >= chars.length) clearInterval(tm.current.type);
+        }, 20);
+        react(res.mood || 'wave', '', 2600, true);
+        if (res.tour) setTimeout(() => { closeChat(); startTour(res.lang); }, 1400);
+    };
+
+    // touch / drag
     const onDown = (e) => {
         e.preventDefault();
         last.current = Date.now();
-        press.current = { x: e.clientX, y: e.clientY, r: pos.r, b: pos.b, moved: false };
+        let r0 = pos.r; let b0 = pos.b;
+        if (walkMs > 0 && wrapRef.current) {
+            // she was walking: freeze where she is right now, then she can be dragged from there
+            r0 = Math.round(window.innerWidth - wrapRef.current.getBoundingClientRect().right);
+            clearTimeout(tm.current.walk); clearTimeout(tm.current.peek);
+            setWalkMs(0); setPos({ r: r0, b: b0 });
+            if (moodRef.current === 'walk') setMood('idle');
+        }
+        press.current = { x: e.clientX, y: e.clientY, r: r0, b: b0, moved: false };
         try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
         if (e.pointerType === 'touch') setTouch(true);
     };
@@ -457,6 +793,13 @@ export default function Mascot({ config, fetchConfig = false, page }) {
         react('cheer', `Hi, I am ${next.name}! ✨`, 2600);
     };
     const toggleTalk = () => { saveOverrides({ ...readOverrides(), mascotTalk: !talk }); setOv(readOverrides()); react('wink', talk ? 'I will be quiet 🤐' : 'I can chat again! 💬', 2000); };
+    const toggleRoam = () => {
+        const v = !roam;
+        setRoam(v);
+        try { localStorage.setItem(LS_ROAM, v ? '1' : '0'); } catch (e) { /* ignore */ }
+        if (!v) { clearTimeout(tm.current.walk); clearTimeout(tm.current.peek); clearTimeout(tm.current.sit); setWalkMs(0); if (['walk', 'sit'].includes(moodRef.current)) setMood('idle'); }
+        react(v ? 'cheer' : 'wink', v ? 'Yay, I can explore! 🚶‍♀️' : 'Okay, I will stay right here 🧍‍♀️', 2200);
+    };
     const hide = () => { saveOverrides({ ...readOverrides(), mascot: false }); setOv(readOverrides()); };
     const show = () => { saveOverrides({ ...readOverrides(), mascot: true }); setOv(readOverrides()); setTimeout(() => react('wave', 'I am back! 👋', 2600), 60); };
 
@@ -477,8 +820,27 @@ export default function Mascot({ config, fetchConfig = false, page }) {
     return (
         <>
             <style>{CSS}</style>
-            <div ref={wrapRef} className={`mc-wrap ${prefs.anim === false ? 'mc-still' : ''} ${drag ? 'mc-drag' : ''} ${touch ? 'mc-touch' : ''}`} style={{ right: pos.r, bottom: pos.b }} onPointerEnter={() => { if (moodRef.current === 'idle' && Date.now() - last.current > 20000) react('wave', '', 1800); last.current = Date.now(); }}>
-                {say && <div className={`mc-bubble ${flipRight ? 'r' : 'l'}`} role="status">{say}</div>}
+            {spot && <div className="mc-spot" style={{ left: spot.x, top: spot.y, width: spot.w, height: spot.h }} aria-hidden="true" />}
+            {tourInfo && (
+                <div className="mc-tourbar" role="group" aria-label="Tour">
+                    <span>🧭 {tourInfo.n}/{tourInfo.of}</span>
+                    <button type="button" onClick={() => { clearTimeout(tm.current.tour); clearTimeout(tm.current.walk); setWalkMs(0); tourStep(tourRef.current.i + 1); }}>Next ▸</button>
+                    <button type="button" className="g" onClick={() => endTour('Okay! Ask me any time 💬')}>Stop</button>
+                </div>
+            )}
+            <div ref={wrapRef} className={`mc-wrap ${prefs.anim === false ? 'mc-still' : ''} ${drag ? 'mc-drag' : ''} ${touch ? 'mc-touch' : ''} ${mood === 'walk' ? 'mc-walk' : ''} ${mood === 'sit' ? 'mc-sit' : ''} ${mood === 'giggle' ? 'mc-giggle' : ''}`} style={{ right: pos.r, bottom: pos.b, '--mc-lean': `${lean}deg`, transition: walkMs ? `right ${walkMs}ms ease-in-out, bottom ${walkMs}ms ease-in-out` : undefined }} onPointerEnter={(e) => {
+                if (e.pointerType === 'mouse' && roam && prefs.anim !== false && !chatOpen && !press.current && moodRef.current === 'idle' && Date.now() - lastDodge.current > 40000 && Math.random() < 0.2) {
+                    lastDodge.current = Date.now();
+                    const w = wrapRef.current ? wrapRef.current.offsetWidth : 112;
+                    const maxR = Math.max(8, window.innerWidth - w - 8);
+                    const away = pos.r + (pos.r > window.innerWidth / 2 ? -1 : 1) * (170 + Math.random() * 150);
+                    walkTo(Math.max(8, Math.min(maxR, away)), () => react('tease', 'Catch me if you can! 😜', 2600, true));
+                    return;
+                }
+                if (moodRef.current === 'idle' && Date.now() - last.current > 20000) react('wave', '', 1800);
+                last.current = Date.now();
+            }}>
+                {say && !chatOpen && <div className={`mc-bubble ${flipRight ? 'r' : 'l'}`} role="status">{say}</div>}
                 <button
                     type="button"
                     className="mc-char"
@@ -493,11 +855,40 @@ export default function Mascot({ config, fetchConfig = false, page }) {
                 >
                     {c.src ? <Sticker c={c} mood={mood} /> : <Girl c={c} mood={mood} look={look} />}
                 </button>
+                {chatOpen && (
+                    <div className={`mc-chat ${flipRight ? 'r' : 'l'}`} role="dialog" aria-label={`Chat with ${c.name}`}>
+                        <div className="mc-chat-h">
+                            <span className="mc-dot" /><b>{c.name}</b><small>online helper</small>
+                            <button type="button" onClick={closeChat} aria-label="Close chat">×</button>
+                        </div>
+                        <div className="mc-chat-b" ref={chatBody}>
+                            {msgs.map((m) => (
+                                <div key={m.id} className={`mc-m ${m.from}`}>
+                                    {m.text}
+                                    {m.go && fetchConfig && <button type="button" className="mc-go" onClick={() => { router.push(m.go[0]); react('cheer', '', 1800); }}>Open {m.go[1]} →</button>}
+                                </div>
+                            ))}
+                            {typing && <div className="mc-m bot mc-typing" aria-label="typing"><i /><i /><i /></div>}
+                        </div>
+                        {msgs.length <= 2 && !typing && (
+                            <div className="mc-chips">
+                                {chipsFor(langOf(msgs.length ? (msgs.find((x) => x.from === 'me') || { text: '' }).text : '')).map((q) => <button key={q} type="button" onClick={() => send(q)}>{q}</button>)}
+                            </div>
+                        )}
+                        <form className="mc-chat-f" onSubmit={(e) => { e.preventDefault(); send(); }}>
+                            <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask me anything…" maxLength={400} autoFocus aria-label="Message" />
+                            <button type="submit" disabled={typing || !input.trim()} aria-label="Send">➤</button>
+                        </form>
+                    </div>
+                )}
+                {!drag && <button type="button" className={`mc-chatbtn ${chatSeen ? '' : 'new'}`} onClick={() => (chatOpen ? closeChat() : openChat())} aria-label="Chat with the helper" title="Chat with me">💬</button>}
                 {!locked && (
                     <div className="mc-tools">
-                        <button type="button" onClick={swap} aria-label="Change character" title="Change character">↻</button>
-                        <button type="button" onClick={toggleTalk} className={talk ? '' : 'off'} aria-label={talk ? 'Stop chatting' : 'Allow chatting'} title={talk ? 'Quiet mode' : 'Let her chat'}>…</button>
-                        <button type="button" onClick={hide} aria-label="Hide the helper" title="Hide">×</button>
+                        <button type="button" onClick={() => startTour('en')} aria-label="Show me around" title="Show me around"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5Z" /></svg></button>
+                        <button type="button" onClick={swap} aria-label="Change character" title="Change character"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 0 0-14-4M4 4v4h4M4 13a8 8 0 0 0 14 4M20 20v-4h-4" /></svg></button>
+                        <button type="button" onClick={toggleTalk} className={talk ? '' : 'off'} aria-label={talk ? 'Stop chatting' : 'Allow chatting'} title={talk ? 'Quiet mode' : 'Let her chat'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12Z" />{!talk && <path d="M4 4l16 16" />}</svg></button>
+                        <button type="button" onClick={toggleRoam} className={roam ? '' : 'off'} aria-label={roam ? 'Stop wandering' : 'Let her wander'} title={roam ? 'Stay here' : 'Let her wander'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="13" cy="4.5" r="1.6" /><path d="M9 21l3-6 3 3v4M12 15l-1-5 4 1 2 3M10 10l-3 2" /></svg></button>
+                        <button type="button" onClick={hide} aria-label="Hide the helper" title="Hide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
                     </div>
                 )}
             </div>
