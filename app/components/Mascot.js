@@ -286,7 +286,7 @@ export default function Mascot({ config, fetchConfig = false, page }) {
     const [touch, setTouch] = useState(false);
     const wrapRef = useRef(null);
     const tm = useRef({}); // timers
-    const last = useRef(Date.now());
+    const last = useRef(0);
     const clicks = useRef([]);
     const lastTouch = useRef(null);
     const moodRef = useRef('idle');
@@ -296,7 +296,7 @@ export default function Mascot({ config, fetchConfig = false, page }) {
 
     // first paint is client-only: the character uses random choices and the current time
     useEffect(() => {
-        setMounted(true);
+        setMounted(true); last.current = Date.now();
         setOv(readOverrides());
         try { const p = JSON.parse(localStorage.getItem(LS_POS) || 'null'); if (p && typeof p.r === 'number' && typeof p.b === 'number') setPos(p); } catch (e) { /* ignore */ }
         const onPrefs = () => setOv(readOverrides());
