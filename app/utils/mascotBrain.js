@@ -46,6 +46,12 @@ const J_BN = [
 
 // id, keywords (English, Banglish, Bangla), reply, mood, optional page to open, admin-only
 const INTENTS = [
+    { id: 'canmake', kw: ['link banaite', 'banaite paro', 'banate paro', 'banaite parbe', 'banai dite', 'can you make', 'can you create', 'can you generate', 'can you upload', 'make links for me', 'create link', 'link banao', 'link banai', 'আপলোড করে দিতে', 'লিংক বানাতে পারো', 'লিংক বানাতে পারবে', 'লিংক বানিয়ে দাও'],
+      en: 'I cannot touch your files myself, but I walk you through it and take you to the right page 😊 On GDrive Upload you paste Drive links, press "Generate links" and your MultiServer links appear instantly. Want me to open it?', bn: 'ফাইলে আমি নিজে হাত দিতে পারি না, কিন্তু ধাপে ধাপে শিখিয়ে দিই আর সঠিক পেজে নিয়ে যাই 😊 GDrive Upload এ Drive লিংক পেস্ট করে "Generate links" চাপলেই MultiServer লিংক সাথে সাথে পাবেন। খুলে দেব?', mood: 'wink', go: ['/gdrive-upload', 'GDrive Upload'] },
+    { id: 'creator', kw: ['who made you', 'who created you', 'who built you', 'your creator', 'ke banaise', 'ke baniyeche', 'tomake ke', 'কে বানিয়েছে', 'তোমাকে কে'], en: 'The owner of this site made me, to keep you company and help while you work 💕 I live right here in the corner!', bn: 'এই সাইটের মালিক আমাকে বানিয়েছেন, যাতে আপনার কাজে সঙ্গ দিতে আর সাহায্য করতে পারি 💕 আমি এই কোণেই থাকি!', mood: 'heart' },
+    { id: 'sad', kw: ['sad', 'depressed', 'lonely', 'cry', 'crying', 'upset', 'mon kharap', 'mon khub kharap', 'kharap lagche', 'মন খারাপ', 'একা লাগছে', 'কষ্ট'], en: 'Aww, come here 🤗 Tough days happen. Take a deep breath, drink some water, and remember small steps count. I am right here if you want to chat or just have company 💕', bn: 'আহা, কাছে এসো 🤗 খারাপ দিনও আসে। একটু গভীর শ্বাস নাও, পানি খাও, আর মনে রেখো ছোট ছোট পদক্ষেপও গুরুত্বপূর্ণ। কথা বলতে চাইলে আমি আছি 💕', mood: 'heart' },
+    { id: 'angry', kw: ['stupid', 'dumb', 'idiot', 'useless', 'noob', 'bad bot', 'faltu', 'bokachoda', 'বোকা', 'ফালতু'], en: 'Ouch 🥺 I am still learning! Tell me what you needed in other words and I will try harder. Or press the 🧭 button and I will show you around myself 💪', bn: 'উহ্ 🥺 আমি এখনো শিখছি! কী লাগবে একটু অন্যভাবে বলুন, আরও চেষ্টা করব। অথবা 🧭 বাটন চাপুন, আমি নিজে ঘুরিয়ে দেখাব 💪', mood: 'shy' },
+    { id: 'weather', kw: ['weather', 'news', 'score', 'match', 'stock', 'price of', 'আবহাওয়া', 'খবর'], en: 'I cannot look at live things like weather, news or scores from here 🌦️ But anything about this site, quick maths, the time or a chat, I am all yours!', bn: 'আবহাওয়া, খবর বা স্কোরের মতো লাইভ জিনিস আমি এখান থেকে দেখতে পারি না 🌦️ কিন্তু সাইট, হিসাব, সময় বা গল্প, সবকিছুতে আমি আছি!', mood: 'wink' },
     { id: 'greet', kw: ['hi', 'hello', 'hey', 'hola', 'yo', 'salam', 'assalamu', 'সালাম', 'হাই', 'হ্যালো', 'হেই'], en: ['Hi hi! 👋 How can I help?', 'Hello! I am here, ask me anything 💬'], bn: ['হাই হাই! 👋 কীভাবে সাহায্য করব?', 'হ্যালো! যা জানতে চান জিজ্ঞেস করুন 💬'], mood: 'wave' },
     { id: 'how', kw: ['how are you', 'how r u', 'kemon acho', 'kemon aco', 'kemon asen', 'কেমন আছ', 'কেমন আছো', 'কেমন আছেন', 'whats up', 'sup'], en: 'I am great, thanks for asking! Servers are humming and I had a nap ☺️', bn: 'আমি দারুণ আছি! সার্ভার ঠিকঠাক চলছে আর আমি একটু ঘুমিয়ে নিয়েছি ☺️', mood: 'heart' },
     { id: 'who', kw: ['who are you', 'your name', 'who r u', 'tumi ke', 'tomar nam', 'tumi ki', 'তুমি কে', 'তোমার নাম', 'about you'], en: 'I am your little helper character! I live on this site, know where everything is and I love to chat. Ask me how to upload, copy links, fix a stuck file… anything 🌸', bn: 'আমি এই সাইটের ছোট্ট হেল্পার! সবকিছু কোথায় আছে আমি জানি, আর গল্প করতে ভালোবাসি। আপলোড, লিংক কপি, আটকে থাকা ফাইল, যা খুশি জিজ্ঞেস করুন 🌸', mood: 'wave' },
@@ -163,12 +169,19 @@ export function answer(text, ctx = {}) {
         return res;
     }
 
+    // nothing matched: stay friendly, never a dead end
+    const q = norm.endsWith('?') || /\b(how|what|why|when|where|can|could|ki|kivabe|kemne|kano|kobe|kothay)\b/.test(norm);
     return {
-        text: L(
-            pick(['Hmm, I am not sure about that one 🤔 Try asking about uploading, the queue, profiles, copying links, folders or analytics!', 'I did not quite get that 🙈 I know this site best: ask me how to upload, copy links or fix a stuck file!']),
-            pick(['হুম, এটা ঠিক বুঝলাম না 🤔 আপলোড, কিউ, প্রোফাইল, লিংক কপি, ফোল্ডার বা অ্যানালিটিক্স নিয়ে জিজ্ঞেস করে দেখুন!', 'ঠিক বুঝতে পারিনি 🙈 এই সাইটের ব্যাপারে আমি সবচেয়ে ভালো জানি: আপলোড, লিংক কপি বা আটকে থাকা ফাইল নিয়ে জিজ্ঞেস করুন!']),
-        ),
-        mood: 'shy',
+        text: q
+            ? L(
+                pick(['Good question! 🤔 I do not have a proper answer for that one offline, but I know this site really well: uploads, queue, profiles, folders, copying links, analytics. Which one is it close to?', 'Hmm, that one is outside my little brain 🙈 Say it with other words, or pick a topic below and I will guide you!']),
+                pick(['ভালো প্রশ্ন! 🤔 এটার সঠিক উত্তর আমার কাছে নেই, তবে সাইট নিয়ে আমি অনেক কিছু জানি: আপলোড, কিউ, প্রোফাইল, ফোল্ডার, লিংক কপি, অ্যানালিটিক্স। কোনটার কাছাকাছি?', 'হুম, এটা আমার ছোট্ট মাথার বাইরে 🙈 অন্যভাবে বলুন, নয়তো নিচ থেকে একটা বিষয় বেছে নিন, আমি দেখিয়ে দেব!']),
+            )
+            : L(
+                pick(['Hehe, tell me more! 😊 Or ask me something about the site and I will show off 🌟', 'I am listening 👂 If you need a hand with uploads, links or the queue, just say the word!']),
+                pick(['হেহে, আরও বলুন! 😊 নয়তো সাইট নিয়ে কিছু জিজ্ঞেস করুন, আমি দেখিয়ে দেব 🌟', 'আমি শুনছি 👂 আপলোড, লিংক বা কিউ নিয়ে সাহায্য লাগলে বলে ফেলুন!']),
+            ),
+        mood: 'wink',
         unknown: true,
         lang,
     };

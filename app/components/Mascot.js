@@ -245,6 +245,7 @@ function Girl({ c, mood, look }) {
 
     const top = () => {
         const body = <path d="M66 146 Q100 136 134 146 L141 208 Q100 220 59 208Z" fill={c.outfit} />;
+        if (c.top === 'uniform') return (<g><path d="M66 146 Q100 136 134 146 L141 208 Q100 220 59 208Z" fill="#fff" /><path d="M66 146 Q100 168 134 146 L141 170 Q100 196 59 170Z" fill={c.outfit} /><path d="M82 146 L100 172 L118 146" fill="#fff" /><path d="M59 170 Q100 196 141 170" stroke={c.accent} strokeWidth="2.5" fill="none" /><path d="M100 168 L88 180 L92 160Z M100 168 L112 180 L108 160Z" fill="#e5384f" /><circle cx="100" cy="168" r="3.2" fill="#c42a40" /><path d="M62 200 Q100 212 138 200 L141 208 Q100 220 59 208Z" fill={c.outfit} /><path d="M60 207 Q100 219 140 207" stroke={c.accent} strokeWidth="1.8" fill="none" /></g>);
         if (c.top === 'hoodie') return (<g>{body}<path d="M76 144 Q100 166 124 144 Q100 152 76 144Z" fill={c.outfitDark} /><path d="M92 156 L90 176 M108 156 L110 176" stroke="#fff" strokeWidth="2" strokeLinecap="round" /><rect x="82" y="186" width="36" height="14" rx="6" fill={c.outfitDark} opacity=".7" /></g>);
         if (c.top === 'sweater') return (<g>{body}<path d="M80 144 Q100 158 120 144" stroke={c.outfitDark} strokeWidth="7" fill="none" strokeLinecap="round" /><path d="M62 190 Q100 200 138 190" stroke={c.accent} strokeWidth="4" fill="none" /></g>);
         if (c.top === 'jacket') return (<g>{body}<path d="M100 148 L100 214" stroke={c.outfitDark} strokeWidth="3" /><path d="M84 144 L100 166 L116 144" fill={c.accent} opacity=".9" /><rect x="94" y="150" width="12" height="3" rx="1.5" fill={c.outfitDark} /></g>);
@@ -253,6 +254,7 @@ function Girl({ c, mood, look }) {
     };
 
     const accessory = () => {
+        if (c.acc === 'ribbon') return (<g><path d="M52 66 Q40 52 30 58 Q36 72 50 74Z" fill={c.accent} /><path d="M52 66 Q56 48 70 46 Q68 62 56 72Z" fill={c.accent} /><circle cx="52" cy="67" r="5.5" fill="#6aa8f0" /><path d="M32 60 Q38 66 48 70" stroke="#fff" strokeWidth="1.2" fill="none" opacity=".6" /><path d="M148 76 q8 3 6 12" stroke="#fff" strokeWidth="2" fill="none" opacity=".5" strokeLinecap="round" /></g>);
         if (c.acc === 'cat') return (<g><path d="M56 78 Q100 36 144 78" stroke={c.accent} strokeWidth="5" fill="none" strokeLinecap="round" /><path d="M58 70 L64 40 L82 58Z" fill={c.accent} /><path d="M142 70 L136 40 L118 58Z" fill={c.accent} /><path d="M62 62 L66 48 L74 57Z" fill="#ffd3d6" /><path d="M138 62 L134 48 L126 57Z" fill="#ffd3d6" /></g>);
         if (c.acc === 'star') return (<g><path d={starPath} transform="translate(68 70) scale(1.1)" fill={c.accent} stroke="#fff" strokeWidth=".8" /><path d={starPath} transform="translate(134 62) scale(.6)" fill={c.accent} /></g>);
         if (c.acc === 'phones') return (<g><path d="M52 98 Q52 40 100 40 Q148 40 148 98" stroke={c.accent} strokeWidth="5.5" fill="none" strokeLinecap="round" /><rect x="42" y="92" width="14" height="26" rx="7" fill={c.accent} /><rect x="144" y="92" width="14" height="26" rx="7" fill={c.accent} /><rect x="46" y="97" width="6" height="16" rx="3" fill="#fff" opacity=".5" /></g>);

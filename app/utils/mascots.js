@@ -1,6 +1,7 @@
 // The mascot characters: plain data, so the admin page, the download page and the mascot itself can share it.
 // Every character is drawn in code (SVG), so there are no image files to upload.
 export const GIRLS = [
+    { id: 'yuki', name: 'Yuki', style: 'long', acc: 'ribbon', top: 'uniform', skin: '#ffeade', hair: '#eef0fa', hairDark: '#aeb6d6', eye: '#2f8fe8', outfit: '#25306b', outfitDark: '#171f4d', accent: '#8fc4ff' },
     { id: 'mika', name: 'Mika', style: 'twin', acc: 'cat', top: 'hoodie', skin: '#ffe3d1', hair: '#e5383b', hairDark: '#b3262e', eye: '#7a1f2b', outfit: '#2a2a31', outfitDark: '#17171b', accent: '#ff6b73' },
     { id: 'luna', name: 'Luna', style: 'bob', acc: 'star', top: 'sweater', skin: '#ffe6d6', hair: '#d9dbea', hairDark: '#a9adc9', eye: '#7c5cf0', outfit: '#2c3a6b', outfitDark: '#1d2750', accent: '#ffd166' },
     { id: 'sora', name: 'Sora', style: 'long', acc: 'phones', top: 'jacket', skin: '#fde0cc', hair: '#4f9cf5', hairDark: '#2f6fc9', eye: '#1f6f8b', outfit: '#f2f4f8', outfitDark: '#cdd3df', accent: '#22c5b0' },
