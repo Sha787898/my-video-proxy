@@ -8,6 +8,7 @@ import {
     IconLayers, IconCode, IconChart, IconSliders, IconKey, IconPlay, IconChevronDown, IconMenu, IconX, IconSearch, IconChevronRight,
 } from './Icons';
 import QueueRunner from './QueueRunner';
+import Mascot from './Mascot';
 
 const NAV = [
     { href: '/dashboard', label: 'Dashboard', Icon: IconDashboard },
@@ -168,6 +169,7 @@ export default function Sidebar() {
     return (
         <>
             <QueueRunner />
+            <Mascot fetchConfig />
             {/* mobile top bar */}
             <div className="lg:hidden fixed top-0 inset-x-0 z-30 h-14 px-4 flex items-center justify-between bg-slate-950/85 backdrop-blur-xl border-b border-white/10 pt-[env(safe-area-inset-top)]">
                 <Logo />

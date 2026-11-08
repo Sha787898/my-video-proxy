@@ -7,6 +7,8 @@ import { embedBase } from '../../utils/embedOrigin';
 import { parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked, themeVars, THEMES, BGS, BRANDS } from '../../utils/playerConfig';
 import { Bg3D, BrandMark } from '../../components/Bg3D';
 import { trackView } from '../../utils/trackView';
+import Mascot from '../../components/Mascot';
+import { MASCOTS } from '../../utils/mascots';
 import { parseQuality } from '../../utils/quality';
 
 // This page only reads public data: no login session is stored or used.
@@ -312,7 +314,7 @@ function FileDownloadContent({ params }) {
         if (!Object.keys(ok).length) return;
         setOv((prev) => { const next = { ...prev, ...ok }; saveOverrides(next); return next; });
     };
-    const anyOpen = can('theme') || can('bg') || can('brand') || can('anim');
+    const anyOpen = can('theme') || can('bg') || can('brand') || can('anim') || can('mascot');
 
     useEffect(() => {
         let dead = false;
@@ -373,6 +375,14 @@ function FileDownloadContent({ params }) {
                             {can('brand') && (<>
                                 <h4>Name animation</h4>
                                 <div className="dl-seg">{BRANDS.map(([k, l]) => <button key={k} type="button" className={prefs.brand === k ? 'on' : ''} onClick={() => patch({ brand: k })}>{l}</button>)}</div>
+                            </>)}
+                            {can('mascot') && (<>
+                                <h4>Mascot</h4>
+                                <div className="dl-seg">
+                                    <button type="button" className={prefs.mascot !== false ? 'on' : ''} onClick={() => patch({ mascot: true })}>On</button>
+                                    <button type="button" className={prefs.mascot === false ? 'on' : ''} onClick={() => patch({ mascot: false })}>Off</button>
+                                </div>
+                                {prefs.mascot !== false && <div className="dl-seg">{MASCOTS.map((m) => <button key={m.id} type="button" className={prefs.mascotChar === m.id ? 'on' : ''} onClick={() => patch({ mascotChar: m.id })}>{m.name}</button>)}</div>}
                             </>)}
                             {can('anim') && (<>
                                 <h4>Motion</h4>
@@ -488,6 +498,7 @@ function FileDownloadContent({ params }) {
             </main>
 
             {sel && <SecureModal mirror={sel} onClose={() => setSel(null)} />}
+            {file && <Mascot config={file.config ?? null} page="download" />}
         </div>
     );
 }

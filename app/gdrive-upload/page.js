@@ -160,6 +160,7 @@ export default function GDriveUploadPage() {
             setErrors(data.errors || []);
             setLinksInput((data.errors || []).map((er) => er.link).join('\n'));
             kick(supabase); // start the background work right now
+            try { window.dispatchEvent(new CustomEvent('ms-mascot', { detail: { mood: 'cheer', text: `${data.files.length} link(s) ready! 🎉` } })); } catch (e) { /* ignore */ }
         } catch (err) {
             setErrors([{ link: `${clean.length} link(s)`, error: err.message }]);
         } finally {

@@ -8,6 +8,7 @@ import { IconPlay, IconActivity, IconCheck, IconLock, IconRefresh, IconInfo, Ico
 import {
     THEMES, LOADERS, LOOKS, WAITS, BGS, BRANDS, FACTORY, SETTING_ROWS, parseConfig, resolvePrefs, themeVars,
 } from '../utils/playerConfig';
+import { MASCOTS } from '../utils/mascots';
 import { Bg3D, BrandMark } from '../components/Bg3D';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -264,6 +265,23 @@ export default function PlayerSettingsPage() {
                                         {r.key === 'anim' && behaveToggle(r)}
                                         {r.key === 'bg' && <Seg value={defaults.bg} options={BGS} onChange={(v) => setDef({ bg: v })} />}
                                         {r.key === 'brand' && <Seg value={defaults.brand} options={BRANDS} onChange={(v) => setDef({ brand: v })} />}
+                                        {r.key === 'mascot' && (
+                                            <div className="space-y-3">
+                                                {behaveToggle(r)}
+                                                {defaults.mascot && (
+                                                    <>
+                                                        <div className="space-y-1.5">
+                                                            <p className="ms-muted text-xs">Default character (visitors can pick another one unless you lock this)</p>
+                                                            <Seg value={defaults.mascotChar} options={MASCOTS.map((m) => [m.id, m.name])} onChange={(v) => setDef({ mascotChar: v })} />
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <Toggle on={!!defaults.mascotTalk} onChange={(v) => setDef({ mascotTalk: v })} label="Mascot chat default" />
+                                                            <span className="text-xs text-slate-400">{defaults.mascotTalk ? 'Speech bubbles on' : 'Quiet (no speech bubbles)'}</span>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
                                     </Row>
                                 ))}
                                 <div className="py-4 space-y-2">

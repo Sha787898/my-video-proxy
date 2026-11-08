@@ -8,6 +8,8 @@
 // Plain JS, no React: safe to import from server and client components.
 // ==========================================================================
 
+import { MASCOT_IDS } from './mascots';
+
 export const THEMES = [
     { id: 'red', name: 'Crimson', ac: '#e5383b', hi: '#ff6b73', rgb: '229,56,59', tint: '#ffc2c4' },
     { id: 'blue', name: 'Ocean', ac: '#3b7bf5', hi: '#6ba6ff', rgb: '59,123,245', tint: '#b9d3ff' },
@@ -29,6 +31,7 @@ export const BRANDS = [['shine', 'Shine'], ['flip', 'Flip'], ['tilt', 'Tilt 3D']
 export const FACTORY = {
     theme: 'red', customColor: '#e5383b', look: 'dark', loader: 'ring', anim: true,
     bg: 'grid', brand: 'shine', brandName: 'MultiServer',
+    mascot: true, mascotChar: 'mika', mascotTalk: true,
     autoSwitch: false, autoSec: 15,
     block: true, guard: false, download: true, fullscreen: true, lock: true, party: false, title: true,
     sb: {},
@@ -43,6 +46,7 @@ export const SETTING_ROWS = {
         { key: 'anim', label: 'Animations', desc: 'Panel, button and background motion' },
         { key: 'bg', label: '3D background', desc: 'Moving background of the download page' },
         { key: 'brand', label: 'Name animation', desc: 'Animated logo and name on the download page' },
+        { key: 'mascot', label: 'Mascot', desc: 'A small animated helper character (download page and your dashboard pages)' },
     ],
     behave: [
         { key: 'block', label: 'Pop-up blocker', desc: 'Sandbox that blocks new tabs and redirects' },
@@ -57,10 +61,10 @@ export const SETTING_ROWS = {
 };
 
 // locking one setting also locks the values that belong to it
-const ALIAS = { customColor: 'theme', autoSec: 'autoSwitch', sb: 'block' };
+const ALIAS = { customColor: 'theme', autoSec: 'autoSwitch', sb: 'block', mascotChar: 'mascot', mascotTalk: 'mascot' };
 export const isLocked = (locked, key) => !!(locked && locked[ALIAS[key] || key]);
 
-const BOOLS = ['anim', 'autoSwitch', 'block', 'guard', 'download', 'fullscreen', 'lock', 'party', 'title'];
+const BOOLS = ['mascot', 'mascotTalk', 'anim', 'autoSwitch', 'block', 'guard', 'download', 'fullscreen', 'lock', 'party', 'title'];
 const HEX = /^#[0-9a-f]{6}$/i;
 
 // keeps only known keys with valid values (works for admin config and for visitor overrides)
@@ -74,6 +78,7 @@ export function sanitize(obj) {
     if (LOADERS.some(([k]) => k === obj.loader)) out.loader = obj.loader;
     if (BGS.some(([k]) => k === obj.bg)) out.bg = obj.bg;
     if (BRANDS.some(([k]) => k === obj.brand)) out.brand = obj.brand;
+    if (MASCOT_IDS.includes(obj.mascotChar)) out.mascotChar = obj.mascotChar;
     if (typeof obj.brandName === 'string') {
         const n = obj.brandName.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 24);
         if (n) out.brandName = n;
@@ -96,7 +101,7 @@ export function parseConfig(raw) {
     const defaults = sanitize(o && o.defaults);
     const locked = {};
     if (o && o.locked && typeof o.locked === 'object') {
-        Object.keys(o.locked).forEach((k) => { if (o.locked[k] === true && (k in FACTORY) && k !== 'sb' && k !== 'customColor' && k !== 'autoSec') locked[k] = true; });
+        Object.keys(o.locked).forEach((k) => { if (o.locked[k] === true && (k in FACTORY) && k !== 'sb' && k !== 'customColor' && k !== 'autoSec' && k !== 'mascotChar' && k !== 'mascotTalk') locked[k] = true; });
     }
     return { defaults, locked };
 }
@@ -117,6 +122,7 @@ export function readOverrides() {
 }
 export function saveOverrides(o) {
     try { localStorage.setItem(LS_PREFS, JSON.stringify(o)); } catch (e) { /* ignore */ }
+    try { setTimeout(() => window.dispatchEvent(new Event('ms-prefs')), 0); } catch (e) { /* ignore */ }
 }
 
 const mixHex = (hex, toward, amt) => {
