@@ -2,6 +2,8 @@
 // Every character is drawn in code (SVG), so there are no image files to upload.
 export const GIRLS = [
     // grown-up characters (20+): tall, slim, elegant
+    { id: 'hikari', name: 'Hikari', adult: true, style: 'wave', top: 'hoodie', bottom: 'shorts', acc: 'phones', skin: '#fde0cf', hair: '#f4a6c6', hairDark: '#c0678f', eye: '#7a5cf0', outfit: '#9a88e6', outfitDark: '#6f5fbd', skirt: '#2e3148', accent: '#ffd166', shoe: '#f2f2f8' },
+    { id: 'sana', name: 'Sana', adult: true, style: 'bun', top: 'tee', bottom: 'shorts', acc: 'pins', skin: '#f6d3ba', hair: '#2c3a58', hairDark: '#141c30', eye: '#e0568a', outfit: '#f6f3ec', outfitDark: '#d9d2c2', skirt: '#4a6fa5', accent: '#ff7a59', shoe: '#ffffff' },
     { id: 'aria', name: 'Aria', adult: true, style: 'long', top: 'blouse', acc: 'clip', skin: '#ffe9dc', hair: '#e7e9f6', hairDark: '#a9b0d4', eye: '#2f8fe8', outfit: '#fbfbff', outfitDark: '#cfd4ea', skirt: '#26316b', accent: '#e5384f', shoe: '#1b2150' },
     { id: 'rena', name: 'Rena', adult: true, style: 'wave', top: 'dress', acc: 'pins', skin: '#fde2d0', hair: '#8a2346', hairDark: '#4d1226', eye: '#e0a030', outfit: '#1d1d25', outfitDark: '#0f0f14', skirt: '#1d1d25', accent: '#e5383b', shoe: '#0f0f14' },
     { id: 'mio', name: 'Mio', adult: true, style: 'pony', top: 'sweater', acc: 'bow', skin: '#fbdcc8', hair: '#c47a52', hairDark: '#7e4328', eye: '#2fa36b', outfit: '#f6ead7', outfitDark: '#e0cfb2', skirt: '#3d5a80', accent: '#f78fb8', shoe: '#5a3a2a' },

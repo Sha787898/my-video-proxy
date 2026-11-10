@@ -31,7 +31,7 @@ export const BRANDS = [['shine', 'Shine'], ['flip', 'Flip'], ['tilt', 'Tilt 3D']
 export const FACTORY = {
     theme: 'red', customColor: '#e5383b', look: 'dark', loader: 'ring', anim: true,
     bg: 'grid', brand: 'shine', brandName: 'MultiServer',
-    mascot: true, mascotChar: 'aria', mascotTalk: true,
+    mascot: true, mascotChar: 'sana', mascotTalk: true,
     autoSwitch: false, autoSec: 15,
     block: true, guard: false, download: true, fullscreen: true, lock: true, party: false, title: true,
     sb: {},
