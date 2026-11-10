@@ -344,6 +344,153 @@ function Girl({ c, mood, look }) {
     );
 }
 
+// ---------- the grown-up characters: tall, slim, elegant anime women (20+) ----------
+function Woman({ c, mood, look }) {
+    const arms = {
+        idle: [7, -5, 7, -5], wave: [7, -5, 95, 80], peace: [7, -5, 95, 80], cheer: [105, 75, 105, 75], heart: [48, 140, 48, 140], shy: [-30, -150, -30, -150], love: [48, 140, 48, 140],
+        wink: [7, -5, 95, 80], dizzy: [18, -10, 18, -10], sleep: [5, -3, 5, -3], pout: [-40, -125, -40, -125], walk: [20, -12, 20, -12], sit: [10, -6, 10, -6], giggle: [-30, -150, -30, -150], stretch: [165, 8, 165, 8], tease: [7, -5, 7, -5],
+    }[mood] || [7, -5, 7, -5];
+    const happy = ['cheer', 'love', 'heart', 'giggle', 'stretch'].includes(mood);
+    const closed = mood === 'sleep';
+    const winkR = mood === 'wink' || mood === 'peace' || mood === 'tease';
+    const id = c.id;
+    const ink = '#2a1a22';
+    const EY = 58;
+
+    const eye = (cx, side) => {
+        const arc = (up) => <path d={`M${cx - 9} ${EY + (up ? 3 : 0)} Q${cx} ${EY + (up ? -8 : 7)} ${cx + 9} ${EY + (up ? 3 : 0)}`} stroke={ink} strokeWidth="2.4" fill="none" strokeLinecap="round" />;
+        if (closed) return arc(false);
+        if (happy && mood !== 'love' && mood !== 'heart') return arc(true);
+        if (winkR && side === 'r') return arc(true);
+        if (mood === 'love' || mood === 'heart') return <path d={heartPath} transform={`translate(${cx} ${EY}) scale(1.05)`} fill="#ff4d6d" />;
+        if (mood === 'dizzy') return <g stroke={ink} strokeWidth="2.4" strokeLinecap="round"><path d={`M${cx - 6} ${EY - 6} L${cx + 6} ${EY + 6}`} /><path d={`M${cx + 6} ${EY - 6} L${cx - 6} ${EY + 6}`} /></g>;
+        const sx = (mood === 'shy' ? -1 : look.x) * 0.9; const sy = (mood === 'shy' ? 2 : look.y) * 0.9;
+        const wing = side === 'l' ? `M${cx - 11} ${EY - 3} l-5 -3 M${cx - 9} ${EY - 8} l-3 -3.6` : `M${cx + 11} ${EY - 3} l5 -3 M${cx + 9} ${EY - 8} l3 -3.6`;
+        return (
+            <g className="mc-blink">
+                <ellipse cx={cx} cy={EY} rx="10.4" ry="12.6" fill="#fff" />
+                <ellipse cx={cx + sx} cy={EY + sy} rx="7.8" ry="10.6" fill={`url(#wi-${id})`} />
+                <ellipse cx={cx + sx} cy={EY + sy + .6} rx="3.6" ry="5.4" fill="#17101a" />
+                <path d={`M${cx - 10} ${EY} Q${cx} ${EY - 16} ${cx + 10} ${EY} Q${cx} ${EY - 8} ${cx - 10} ${EY}Z`} fill="#000" opacity=".22" />
+                <ellipse cx={cx + sx - 2.8} cy={EY + sy - 4.2} rx="3" ry="3.4" fill="#fff" />
+                <circle cx={cx + sx + 3.2} cy={EY + sy + 4.4} r="1.5" fill="#fff" opacity=".95" />
+                <circle cx={cx + sx + 4.8} cy={EY + sy - 1.5} r=".8" fill="#fff" opacity=".8" />
+                <path d={`M${cx - 11} ${EY - 3} Q${cx} ${EY - 17} ${cx + 11} ${EY - 3}`} stroke={ink} strokeWidth="3.2" fill="none" strokeLinecap="round" />
+                <path d={`M${cx - 8} ${EY - 9} Q${cx} ${EY - 14} ${cx + 8} ${EY - 9}`} stroke={ink} strokeWidth=".7" fill="none" opacity=".4" />
+                <path d={`M${cx - 8} ${EY + 11} Q${cx} ${EY + 14.5} ${cx + 8} ${EY + 11}`} stroke={ink} strokeWidth=".8" fill="none" opacity=".45" />
+                <path d={wing} stroke={ink} strokeWidth="2" strokeLinecap="round" />
+            </g>
+        );
+    };
+    const mouth = () => {
+        if (mood === 'sleep') return <ellipse cx="100" cy="82" rx="2.6" ry="3" fill="#d9777a" />;
+        if (mood === 'dizzy') return <path d="M91 82 q4.5 -4 9 0 t9 0" stroke="#a8474b" strokeWidth="1.9" fill="none" strokeLinecap="round" />;
+        if (mood === 'shy') return <path d="M95.5 82 q2.2 -2.6 4.5 0 q2.2 2.6 4.5 0" stroke="#a8474b" strokeWidth="1.8" fill="none" strokeLinecap="round" />;
+        if (mood === 'tease') return <g><path d="M92 79 Q100 89 108 79Z" fill="#c9444a" /><path d="M96 83 Q100 96 104 83Z" fill="#ff7d86" /></g>;
+        if (mood === 'pout') return <path d="M93 84 Q100 78 107 84" stroke="#a8474b" strokeWidth="2.2" fill="none" strokeLinecap="round" />;
+        if (happy || mood === 'wave') return <g><path d="M91 78 Q100 91 109 78Z" fill="#c9444a" /><path d="M95.5 84.5 Q100 88.5 104.5 84.5 Q100 82 95.5 84.5Z" fill="#ff8c94" /></g>;
+        return <g><path d="M93 80 Q100 87 107 80" stroke="#a8474b" strokeWidth="2.2" fill="none" strokeLinecap="round" /><path d="M97 83.5 Q100 85 103 83.5" stroke="#ff9aa2" strokeWidth="1.2" fill="none" strokeLinecap="round" /></g>;
+    };
+    const brows = mood === 'pout'
+        ? <g stroke="#5b3a30" strokeWidth="2.4" strokeLinecap="round"><path d="M76 42 L92 47" /><path d="M124 42 L108 47" /></g>
+        : <g stroke={c.hairDark} strokeWidth="2" strokeLinecap="round" fill="none"><path d={`M76 ${mood === 'shy' ? 41 : 44} Q84 ${mood === 'shy' ? 37 : 40} 93 ${mood === 'shy' ? 41 : 43}`} /><path d={`M107 ${mood === 'shy' ? 41 : 43} Q116 ${mood === 'shy' ? 37 : 40} 124 ${mood === 'shy' ? 41 : 44}`} /></g>;
+
+    const backHair = () => {
+        if (c.style === 'pony') return (<g><g className="mc-sway"><path d="M126 30 Q182 44 176 130 Q172 176 150 190 Q160 124 126 74Z" fill={`url(#wh-${id})`} /><path d="M140 60 Q170 80 164 150" stroke={c.hairDark} strokeWidth="1.6" fill="none" opacity=".5" /><circle cx="128" cy="36" r="5.5" fill={c.accent} /></g><path d="M62 52 Q56 96 70 118 L130 118 Q144 96 138 52 Q130 6 100 6 Q70 6 62 52Z" fill={c.hairDark} /></g>);
+        if (c.style === 'wave') return (<g className="mc-sway"><path d="M60 54 Q42 112 56 164 Q62 192 46 216 Q76 222 90 192 Q96 206 100 210 Q104 206 110 192 Q124 222 154 216 Q138 192 144 164 Q158 112 140 54 Q130 6 100 6 Q70 6 60 54Z" fill={`url(#wh-${id})`} /><path d="M70 130 Q64 170 74 196 M130 130 Q136 170 126 196" stroke={c.hairDark} strokeWidth="1.6" fill="none" opacity=".45" strokeLinecap="round" /></g>);
+        return (<g className="mc-sway"><path d="M60 54 Q46 120 58 186 Q64 220 86 214 L114 214 Q136 220 142 186 Q154 120 140 54 Q130 6 100 6 Q70 6 60 54Z" fill={`url(#wh-${id})`} /><path d="M72 120 Q66 170 76 206 M128 120 Q134 170 124 206 M100 110 L100 208" stroke={c.hairDark} strokeWidth="1.5" fill="none" opacity=".4" strokeLinecap="round" /></g>);
+    };
+
+    const body = () => {
+        const sk = `url(#ws-${id})`;
+        const skirt = <path d="M82 198 L118 198 Q126 236 150 308 Q100 318 50 308 Q74 236 82 198Z" fill={sk} stroke="#000" strokeOpacity=".15" strokeWidth=".8" />;
+        const folds = <path d="M86 206 Q78 252 68 308 M96 202 Q92 254 88 314 M106 202 Q110 254 112 314 M116 206 Q124 252 134 308" stroke="#000" strokeOpacity=".14" strokeWidth="1.5" fill="none" strokeLinecap="round" />;
+        const torso = <path d="M73 118 Q100 107 127 118 Q130 136 123 156 Q119 172 117 192 Q116 198 118 202 L82 202 Q84 198 83 192 Q81 172 77 156 Q70 136 73 118Z" fill={`url(#wt-${id})`} stroke="#000" strokeOpacity=".12" strokeWidth=".8" />;
+        const bust = <path d="M84 150 Q92 162 99 152 M101 152 Q108 162 116 150" stroke="#000" strokeOpacity=".09" strokeWidth="2" fill="none" strokeLinecap="round" />;
+        let top;
+        if (c.top === 'dress') top = (<g>{torso}{bust}<path d="M84 114 Q100 132 116 114" stroke={c.outfitDark} strokeWidth="3" fill="none" strokeLinecap="round" /><path d="M82 184 Q100 192 118 184 L118 198 Q100 204 82 198Z" fill={c.accent} /></g>);
+        else if (c.top === 'sweater') top = (<g>{torso}{bust}<path d="M88 112 Q100 126 112 112" stroke={c.outfitDark} strokeWidth="6" fill="none" strokeLinecap="round" /><path d="M82 198 Q100 206 118 198" stroke={c.outfitDark} strokeWidth="5" fill="none" /><path d="M92 140 L92 196 M100 140 L100 198 M108 140 L108 196" stroke={c.outfitDark} strokeWidth="1.1" opacity=".45" /></g>);
+        else top = (<g>{torso}{bust}<path d="M86 114 Q100 134 114 114" fill={c.outfitDark} opacity=".7" /><path d="M100 130 Q87 120 85 136 Q94 142 100 132Z M100 130 Q113 120 115 136 Q106 142 100 132Z" fill={c.accent} /><circle cx="100" cy="131" r="3.4" fill={c.accent} stroke="#000" strokeOpacity=".15" /><path d="M82 198 L118 198" stroke={c.skirt} strokeWidth="6" /></g>);
+        return (<g>
+            <path d="M84 308 Q80 344 85 378 L96 378 Q100 344 98 308Z" fill={c.skin} stroke="#c98c78" strokeOpacity=".4" strokeWidth=".8" />
+            <path d="M102 308 Q100 344 104 378 L115 378 Q120 344 116 308Z" fill={c.skin} stroke="#c98c78" strokeOpacity=".4" strokeWidth=".8" />
+            <path d="M82 378 L97 378 L98 392 Q90 396 80 392Z" fill={c.shoe || c.outfitDark} /><path d="M103 378 L118 378 L120 392 Q110 396 102 392Z" fill={c.shoe || c.outfitDark} />
+            {skirt}{folds}{top}
+        </g>);
+    };
+
+    const arm = (side, up, fore) => {
+        const L = side === 'l';
+        const sgn = L ? 1 : -1;
+        const sx = L ? 74 : 126;
+        const hand = mood === 'wave' && !L;
+        const peace = (mood === 'peace' || mood === 'wink') && !L;
+        const sh = { transform: `rotate(${up * sgn}deg)`, transformOrigin: `${sx}px 120px`, transformBox: 'view-box' };
+        const el = { transform: `rotate(${fore * sgn}deg)`, transformOrigin: `${sx}px 176px`, transformBox: 'view-box' };
+        const slv = c.top === 'sweater' ? 176 : 150;
+        return (
+            <g key={side} className="mc-arm" style={sh}>
+                <path d={`M${sx - 6 } 118 Q${sx - 7} 150 ${sx - 4.6} 176 L${sx + 4.6} 176 Q${sx + 7} 150 ${sx + 6} 118Z`} fill={c.skin} stroke="#c98c78" strokeOpacity=".35" strokeWidth=".7" />
+                <path d={`M${sx - 8} 116 Q${sx - 9} 134 ${sx - 7} ${slv > 160 ? 172 : 148} L${sx + 7} ${slv > 160 ? 172 : 148} Q${sx + 9} 134 ${sx + 8} 116Z`} fill={c.outfit} stroke={c.outfitDark} strokeWidth=".7" />
+                <g className="mc-arm" style={el}>
+                    <g className={hand ? 'mc-wavehand' : ''} style={hand ? { transformOrigin: `${sx}px 176px`, transformBox: 'view-box' } : undefined}>
+                        <path d={`M${sx - 4.8} 174 Q${sx - 5.6} 204 ${sx - 3.4} 232 L${sx + 3.4} 232 Q${sx + 5.6} 204 ${sx + 4.8} 174Z`} fill={c.skin} stroke="#c98c78" strokeOpacity=".35" strokeWidth=".7" />
+                        <path d={`M${sx - 3.8} 228 Q${sx - 6.4} 241 ${sx - 1} 247 Q${sx + 5} 247 ${sx + 4} 228Z`} fill={c.skin} stroke="#c98c78" strokeOpacity=".35" strokeWidth=".7" />
+                        {c.top !== 'sweater' ? null : <path d={`M${sx - 4.6} 174 Q${sx - 5.4} 190 ${sx - 4} 204 L${sx + 4} 204 Q${sx + 5.4} 190 ${sx + 4.6} 174Z`} fill={c.outfit} />}
+                        {peace && <g stroke={c.skin} strokeWidth="3.2" strokeLinecap="round"><path d={`M${sx - 2} 240 L${sx - 5} 256`} /><path d={`M${sx + 2} 240 L${sx + 5} 256`} /></g>}
+                    </g>
+                </g>
+            </g>
+        );
+    };
+
+    return (
+        <svg viewBox="0 -14 200 414" role="img" aria-label={`${c.name}, the helper`}>
+            <defs>
+                <linearGradient id={`wi-${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={c.hairDark} /><stop offset="35%" stopColor={c.eye} /><stop offset="100%" stopColor="#fff" stopOpacity=".7" /></linearGradient>
+                <linearGradient id={`wh-${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={c.hairDark} /><stop offset="40%" stopColor={c.hair} /><stop offset="100%" stopColor={c.hair} /></linearGradient>
+                <linearGradient id={`ws-${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor={c.skirt} /><stop offset="60%" stopColor={c.skirt} /><stop offset="100%" stopColor="#000" stopOpacity=".12" /></linearGradient>
+                <linearGradient id={`wt-${id}`} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor={c.outfit} /><stop offset="65%" stopColor={c.outfit} /><stop offset="100%" stopColor={c.outfitDark} /></linearGradient>
+                <radialGradient id={`wb-${id}`} cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#ff7d86" stopOpacity=".9" /><stop offset="100%" stopColor="#ff7d86" stopOpacity="0" /></radialGradient>
+            </defs>
+            <g transform="translate(12 11.5) scale(.88)">{backHair()}</g>
+            <g className="mc-breath">
+                <path d="M93 88 L93 112 Q100 118 107 112 L107 88Z" fill={c.skin} />
+                <path d="M93 94 Q100 104 107 94 L107 90 Q100 98 93 90Z" fill="#c98c78" opacity=".4" />
+                {body()}
+            </g>
+            <g transform="translate(12 11.5) scale(.88)"><g className="mc-head">
+                <path d="M65 52 Q65 24 100 21 Q135 24 135 52 Q135 72 122 85 Q111 95 100 96 Q89 95 78 85 Q65 72 65 52Z" fill={c.skin} stroke="#c98c78" strokeOpacity=".3" strokeWidth=".8" />
+                <path d="M68 72 Q74 88 90 94" stroke="#c98c78" strokeWidth="1.8" fill="none" opacity=".18" strokeLinecap="round" />
+                <ellipse cx="100" cy="42" rx="34" ry="9" fill="#c98c78" opacity=".16" />
+                <ellipse cx="80" cy="73" rx="11" ry="6" fill={`url(#wb-${id})`} opacity={mood === 'shy' || mood === 'love' ? 1 : 0.65} />
+                <ellipse cx="120" cy="73" rx="11" ry="6" fill={`url(#wb-${id})`} opacity={mood === 'shy' || mood === 'love' ? 1 : 0.65} />
+                <path d="M99 71 Q100 73 101.5 71.5" stroke="#c98c78" strokeWidth="1" fill="none" opacity=".7" strokeLinecap="round" />
+                {eye(84, 'l')}{eye(116, 'r')}
+                {brows}
+                {mouth()}
+                <path d="M62 58 Q56 6 100 5 Q144 6 138 58 Q134 32 118 36 Q112 20 104 38 Q100 24 96 38 Q88 20 82 36 Q66 32 62 58Z" fill={`url(#wh-${id})`} />
+                <path d="M100 8 Q82 14 72 46 Q88 34 100 34Z" fill={c.hair} opacity=".9" /><path d="M100 8 Q118 14 128 46 Q112 34 100 34Z" fill={c.hair} opacity=".9" />
+                <path d="M62 54 Q50 104 60 150 Q70 124 72 62Z" fill={c.hair} stroke={c.hairDark} strokeOpacity=".3" strokeWidth=".8" />
+                <path d="M138 54 Q150 104 140 150 Q130 124 128 62Z" fill={c.hair} stroke={c.hairDark} strokeOpacity=".3" strokeWidth=".8" />
+                <path d="M68 22 Q100 4 132 22" stroke="#fff" strokeWidth="4" fill="none" strokeLinecap="round" opacity=".32" />
+                <path d="M88 10 Q90 24 84 36 M112 10 Q110 24 116 36 M96 9 Q97 22 94 32" stroke={c.hairDark} strokeWidth="1.2" fill="none" opacity=".5" strokeLinecap="round" />
+                <path className="mc-ahoge" d="M100 6 Q92 -8 106 -14" stroke={c.hair} strokeWidth="3.2" fill="none" strokeLinecap="round" />
+                {c.acc === 'bow' && <g><path d="M122 18 L142 8 L142 30Z" fill={c.accent} /><path d="M122 18 L104 8 L104 30Z" fill={c.accent} /><circle cx="122" cy="18" r="4.6" fill="#fff" opacity=".6" /></g>}
+                {c.acc === 'clip' && <g><path d="M70 32 L90 25 L88 32 L72 39Z" fill={c.accent} /><circle cx="75" cy="35" r="2.2" fill="#fff" /></g>}
+                {c.acc === 'pins' && <g fill={c.accent}><rect x="66" y="30" width="13" height="3.6" rx="1.8" transform="rotate(-24 72 32)" /><rect x="66" y="38" width="13" height="3.6" rx="1.8" transform="rotate(-24 72 40)" /></g>}
+            </g></g>
+            {arm('l', arms[0], arms[1])}
+            {arm('r', arms[2], arms[3])}
+            {(mood === 'love' || mood === 'heart') && [0, 1, 2].map((i) => <path key={i} className="mc-up" style={{ animationDelay: `${i * 0.55}s` }} d={heartPath} transform={`translate(${70 + i * 30} ${-10 - i * 3})`} fill="#ff4d6d" />)}
+            {mood === 'cheer' && [[36, 24], [164, 30], [26, 96], [176, 104]].map(([x, y], i) => <path key={i} className="mc-twinkle" style={{ animationDelay: `${i * 0.2}s` }} d={starPath} transform={`translate(${x} ${y})`} fill="#ffd166" />)}
+            {mood === 'sleep' && <g fill="#cfd6ff" fontFamily="Inter, sans-serif" fontWeight="700"><text className="mc-z" x="146" y="24" fontSize="20">Z</text><text className="mc-z" style={{ animationDelay: '.7s' }} x="160" y="6" fontSize="14">z</text></g>}
+            {mood === 'dizzy' && <g stroke="#8ec5ff" strokeWidth="2.2" fill="none" strokeLinecap="round"><path d="M138 22 q6 -8 12 0 q-6 8 -12 0" /><circle cx="58" cy="22" r="3" fill="#8ec5ff" /></g>}
+            {mood === 'pout' && <g stroke="#e5383b" strokeWidth="2.4" strokeLinecap="round"><path d="M142 22 l8 -4 M144 14 l4 8 M150 22 l-8 -4" /></g>}
+        </svg>
+    );
+}
+
 // a sticker character (your own .webm / .webp / .png file): it cannot change its drawing, so it bounces, wiggles, shakes or spins
 function Sticker({ c, mood }) {
     const isVideo = /\.(webm|mp4)$/i.test(c.src);
@@ -469,6 +616,19 @@ export default function Mascot({ config, fetchConfig = false, page }) {
         const h = (e) => { const d = e.detail || {}; react(d.mood || 'cheer', d.text || '', 3000); };
         window.addEventListener('ms-mascot', h);
         return () => window.removeEventListener('ms-mascot', h);
+    }, [react]);
+
+    // she notices what happens around her: internet gone / back, you come back to the tab after a while
+    useEffect(() => {
+        let hiddenAt = 0;
+        const off = () => react('shy', 'The internet is gone! 😱', 4000);
+        const onl = () => react('cheer', 'Back online! 🌐', 3000);
+        const vis = () => {
+            if (document.hidden) hiddenAt = Date.now();
+            else if (hiddenAt && Date.now() - hiddenAt > 120000) { hiddenAt = 0; react('wave', 'Welcome back! I missed you 💕', 3200); }
+        };
+        window.addEventListener('offline', off); window.addEventListener('online', onl); document.addEventListener('visibilitychange', vis);
+        return () => { window.removeEventListener('offline', off); window.removeEventListener('online', onl); document.removeEventListener('visibilitychange', vis); };
     }, [react]);
 
     // eyes follow the pointer
@@ -830,7 +990,7 @@ export default function Mascot({ config, fetchConfig = false, page }) {
                     <button type="button" className="g" onClick={() => endTour('Okay! Ask me any time 💬')}>Stop</button>
                 </div>
             )}
-            <div ref={wrapRef} className={`mc-wrap ${prefs.anim === false ? 'mc-still' : ''} ${drag ? 'mc-drag' : ''} ${touch ? 'mc-touch' : ''} ${mood === 'walk' ? 'mc-walk' : ''} ${mood === 'sit' ? 'mc-sit' : ''} ${mood === 'giggle' ? 'mc-giggle' : ''}`} style={{ right: pos.r, bottom: pos.b, '--mc-lean': `${lean}deg`, transition: walkMs ? `right ${walkMs}ms ease-in-out, bottom ${walkMs}ms ease-in-out` : undefined }} onPointerEnter={(e) => {
+            <div ref={wrapRef} className={`mc-wrap ${prefs.anim === false ? 'mc-still' : ''} ${drag ? 'mc-drag' : ''} ${touch ? 'mc-touch' : ''} ${mood === 'walk' ? 'mc-walk' : ''} ${mood === 'sit' ? 'mc-sit' : ''} ${mood === 'giggle' ? 'mc-giggle' : ''}`} style={{ right: pos.r, bottom: pos.b, '--mc-lean': `${lean}deg`, '--mc-w': c.adult ? '98px' : undefined, transition: walkMs ? `right ${walkMs}ms ease-in-out, bottom ${walkMs}ms ease-in-out` : undefined }} onPointerEnter={(e) => {
                 if (e.pointerType === 'mouse' && roam && prefs.anim !== false && !chatOpen && !press.current && moodRef.current === 'idle' && Date.now() - lastDodge.current > 40000 && Math.random() < 0.2) {
                     lastDodge.current = Date.now();
                     const w = wrapRef.current ? wrapRef.current.offsetWidth : 112;
@@ -846,7 +1006,7 @@ export default function Mascot({ config, fetchConfig = false, page }) {
                 <button
                     type="button"
                     className="mc-char"
-                    style={c.src ? { aspectRatio: '1 / 1' } : undefined}
+                    style={c.src ? { aspectRatio: '1 / 1' } : c.adult ? { aspectRatio: '1 / 2' } : undefined}
                     aria-label={`${c.name}, the helper. Click to say hi, drag to move.`}
                     onPointerDown={onDown}
                     onPointerMove={onMove}
@@ -855,7 +1015,7 @@ export default function Mascot({ config, fetchConfig = false, page }) {
                     onDoubleClick={onDouble}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const t = pick(TOUCH, lastTouch.current); lastTouch.current = t; react(t[0], t[1], 2600); } }}
                 >
-                    {c.src ? <Sticker c={c} mood={mood} /> : <Girl c={c} mood={mood} look={look} />}
+                    {c.src ? <Sticker c={c} mood={mood} /> : c.adult ? <Woman c={c} mood={mood} look={look} /> : <Girl c={c} mood={mood} look={look} />}
                 </button>
                 {chatOpen && (
                     <div className={`mc-chat ${flipRight ? 'r' : 'l'}`} role="dialog" aria-label={`Chat with ${c.name}`}>

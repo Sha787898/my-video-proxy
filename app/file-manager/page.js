@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { mascotSayAuto } from '../utils/mascotSay';
 import { embedBase } from '../utils/embedOrigin';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -161,6 +162,7 @@ export default function FileManagerPage() {
 
     // ---------- কাজ ----------
     const flash = (msg) => {
+        mascotSayAuto(msg);
         setNotice(msg);
         setTimeout(() => setNotice(''), 6000);
     };

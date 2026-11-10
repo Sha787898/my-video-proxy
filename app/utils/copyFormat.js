@@ -1,3 +1,4 @@
+import { mascotSay } from './mascotSay';
 // One place that decides what "Copy title / embed / download / all" puts on the clipboard.
 //   files: [{ name, size, id }]   links(f) -> { page, embed }
 export const COPY_KINDS = [
@@ -28,6 +29,7 @@ export function buildCopy(kind, files, links) {
 export async function copyToClipboard(text) {
     try {
         await navigator.clipboard.writeText(text);
+        mascotSay('wink', 'Copied! 📋', {});
         return true;
     } catch (e) {
         try {

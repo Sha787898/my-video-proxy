@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { mascotSay, mascotSayAuto } from '../utils/mascotSay';
 import Link from 'next/link';
 import { embedBase } from '../utils/embedOrigin';
 import { useRouter } from 'next/navigation';
@@ -92,6 +93,7 @@ export default function GDriveUploadPage() {
     const links = (f) => ({ page: `${origin}/file/${f.id}`, embed: `${embedBase(origin)}/embed/${f.id}` });
 
     const say = (msg) => {
+        mascotSayAuto(msg);
         setToast(msg);
         clearTimeout(toastTimer.current);
         toastTimer.current = setTimeout(() => setToast(''), 2200);
@@ -127,8 +129,10 @@ export default function GDriveUploadPage() {
             setLinksInput((prev) => (prev.trim() ? prev.trim() + '\n' : '') + add.join('\n'));
             setFolderInfo({ ok: true, text: `${data.files.length} file(s) found in ${data.folders} folder(s)${data.capped ? ' (limit reached)' : ''}. ${add.length} new link(s) added to the list.` });
             setFolderUrl('');
+            mascotSay(data.files.length ? 'cheer' : 'shy', data.files.length ? `Found ${data.files.length} file${data.files.length === 1 ? '' : 's'} in ${data.folders} folder${data.folders === 1 ? '' : 's'}! 📂 ${add.length} new link${add.length === 1 ? '' : 's'} added` : 'That folder looks empty… 🤔', { force: true });
         } catch (err) {
             setFolderInfo({ ok: false, text: err.message });
+            mascotSay('shy', 'I could not read that folder 🥺 Is it shared as “anyone with the link”?', { force: true });
         } finally {
             setExtracting(false);
         }

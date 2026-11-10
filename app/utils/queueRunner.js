@@ -1,3 +1,4 @@
+import { mascotSay } from './mascotSay';
 // The background mirror queue.
 // A new upload only makes the file record (with its MultiServer links) at once; the real work -- sending the file to the
 // mirror servers -- is picked up here, one file per request, 3 at a time. The runner lives in the sidebar, which is on every
@@ -42,12 +43,12 @@ async function runJob(supabase, session, file) {
         if (!res.ok) throw new Error(data.error || `Server answered ${res.status}`);
         if (data.errors && data.errors.length && !(data.files || []).length) throw new Error(data.errors[0].error);
         const done = (data.files || [])[0];
-        if (done && done.status === 'Active') lsDel(`ms_q_${id}`);
+        if (done && done.status === 'Active') { lsDel(`ms_q_${id}`); mascotSay('cheer', `${String(file.title || file.original_url || 'A file').slice(0, 40)} is on all servers! ✅`, { force: true }); }
         else lsSet(`ms_q_${id}`, { n: queueState(id).n, at: Date.now(), err: done && done.failed && done.failed[0] ? done.failed[0].reason : '' });
     } catch (e) {
         const cur = queueState(id);
         lsSet(`ms_q_${id}`, { n: cur.n, at: Date.now(), err: e.message });
-        if (cur.n >= MAX_TRIES) await supabase.from('files').update({ status: 'Failed' }).eq('id', id);
+        if (cur.n >= MAX_TRIES) { await supabase.from('files').update({ status: 'Failed' }).eq('id', id); mascotSay('shy', 'One file failed after 4 tries 😢 Check the Processing Queue', { force: true }); }
     } finally {
         lsDel(`ms_lock_${id}`);
         S.running.delete(id);
