@@ -10,6 +10,7 @@ import { trackView } from '../../utils/trackView';
 import Mascot from '../../components/Mascot';
 import { MASCOTS } from '../../utils/mascots';
 import { parseQuality } from '../../utils/quality';
+import { parseFormat, formatAdded, timeAgo } from '../../utils/fileInfo';
 
 // This page only reads public data: no login session is stored or used.
 const supabase = createClient(
@@ -336,7 +337,13 @@ function FileDownloadContent({ params }) {
     const copyPage = async () => {
         try { await navigator.clipboard.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch (e) { /* ignore */ }
     };
+    const fmt = file ? parseFormat(file.name, file.mime) : parseFormat('');
+    const addedRaw = file ? (file.created_at || file.date) : '';
+    const addedTxt = addedRaw ? formatAdded(addedRaw) : '';
+    const agoTxt = addedRaw && /T|:/.test(String(addedRaw)) ? timeAgo(addedRaw) : '';
     const spec = [
+        ['File format', fmt.label ? `${fmt.label}${fmt.long ? ` (${fmt.long})` : ''}` : ''], ['Type', fmt.kind && fmt.mime ? `${fmt.kind} · ${fmt.mime}` : (fmt.mime || fmt.kind)],
+        ['Added on', addedTxt ? `${addedTxt}${agoTxt ? ` · ${agoTxt}` : ''}` : ''],
         ['Resolution', q.res], ['Video codec', q.codec], ['HDR', q.hdr], ['Bit depth', q.bit], ['Source', q.source],
         ['File size', file?.size], ['Servers', mirrors.length ? `${mirrors.length} (${streamN} stream · ${mirrors.length - streamN} download)` : ''],
     ].filter(([, v]) => v);
@@ -417,6 +424,7 @@ function FileDownloadContent({ params }) {
                                 <h1 className="dl-name">{file.name}</h1>
                                 <div className="dl-chips">
                                     {file.size && <span className="dl-chip">{file.size}</span>}
+                                    {fmt.label && <span className="dl-chip" title={fmt.long ? `${fmt.long}${fmt.note ? `: ${fmt.note}` : ''}` : undefined}>{fmt.label}</span>}
                                     {q.found ? (<>
                                         {q.res && <span className="dl-chip g">{q.res}</span>}
                                         {q.hdr && <span className={`dl-chip ${/DoVi|HDR/.test(q.hdr) ? 'h' : ''}`}>{q.hdr}</span>}
