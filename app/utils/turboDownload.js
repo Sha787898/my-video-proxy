@@ -4,7 +4,8 @@
 //  - pause / resume, automatic retry with back-off, live speed + ETA
 // Resume after closing the page is handled by the browser's own download manager (Instant mode).
 
-export const DL_BASE = (process.env.NEXT_PUBLIC_DL_WORKER || '').replace(/\/+$/, '');
+// '/dl' (recommended: same-origin, the worker address never appears) or a full custom-domain URL
+export const DL_BASE = (process.env.NEXT_PUBLIC_DL_BASE || process.env.NEXT_PUBLIC_DL_WORKER || '').replace(/\/+$/, '');
 
 export const fmtBytes = (b) => {
     if (!b || b < 0) return '0 B';
@@ -29,7 +30,19 @@ export async function getInfo(id) {
     } catch (e) { return null; }
 }
 
-export const directUrl = (id, name) => `${DL_BASE}/d/${encodeURIComponent(id)}/${encodeURIComponent(name || 'download')}`;
+// asks the worker for a short-lived link made for this visitor (kind: 'nav' = browser download, 'turbo' = in-page downloader)
+// the plain public link: works when you right-click > Copy link address, in FDM / IDM / aria2 (Range supported)
+export const publicPath = (id, name) => `${DL_BASE}/d/${encodeURIComponent(id)}/${encodeURIComponent(name || 'download')}`;
+export const absolute = (path) => { try { return new URL(path, window.location.href).href; } catch (e) { return path; } };
+
+export async function getLink(id, kind = 'nav') {
+    try {
+        const r = await fetch(`${DL_BASE}/token/${encodeURIComponent(id)}?kind=${kind}`, { cache: 'no-store', credentials: 'omit' });
+        const j = await r.json().catch(() => null);
+        if (r.ok && j && j.ok && j.url) return { ok: true, url: /^https?:/i.test(j.url) ? j.url : `${DL_BASE}${j.url}` };
+        return { ok: false, error: (j && j.error) || `The download server answered ${r.status}` };
+    } catch (e) { return { ok: false, error: 'Could not reach the download server. Check your connection and try again.' }; }
+}
 
 export const canWriteToDisk = () => typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function';
 const MEM_LIMIT = (typeof navigator !== 'undefined' && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '')) ? 600 * 1024 ** 2 : 1500 * 1024 ** 2;
@@ -38,11 +51,10 @@ export const memoryLimit = () => MEM_LIMIT;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // returns a controller: { start(), pause(), resume(), cancel() }
-export function createTurbo({ id, info, connections = 8, onUpdate }) {
+export function createTurbo({ id, info, url, connections = 8, onUpdate }) {
     const size = info.size;
     const CHUNK = size > 4 * 1024 ** 3 ? 32 * 1024 ** 2 : size > 512 * 1024 ** 2 ? 16 * 1024 ** 2 : 8 * 1024 ** 2;
     const total = Math.ceil(size / CHUNK);
-    const url = directUrl(id, info.name);
     const done = new Uint8Array(total);   // 1 = chunk finished
     const live = new Array(total).fill(0); // bytes of in-flight chunk
     const mem = [];                        // memory mode: chunk blobs
