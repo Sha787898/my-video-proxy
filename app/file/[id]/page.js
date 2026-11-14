@@ -8,6 +8,7 @@ import { parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked, them
 import { Bg3D, BrandMark } from '../../components/Bg3D';
 import { trackView } from '../../utils/trackView';
 import Mascot from '../../components/Mascot';
+import FastDownload from '../../components/FastDownload';
 import { MASCOTS } from '../../utils/mascots';
 import { parseQuality } from '../../utils/quality';
 import { parseFormat, formatAdded, timeAgo } from '../../utils/fileInfo';
@@ -453,6 +454,8 @@ function FileDownloadContent({ params }) {
                                 <span className="pl">{Svg.play}</span> Watch online
                             </button>
                         ))}
+
+                        <FastDownload id={id} />
 
                         {best && (
                             <button type="button" className="dl-main" onClick={() => setSel(best)}>
