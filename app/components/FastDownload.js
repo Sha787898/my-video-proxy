@@ -18,6 +18,7 @@ const I = {
     cloud: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 18a4 4 0 01-.5-8A6 6 0 0118 9a4.5 4.5 0 01-.5 9z" /></svg>,
     user: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0116 0" /></svg>,
     star: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.7-6.2 3.7 1.6-7L2 9.2l7.1-.6z" /></svg>,
+    chev: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>,
     link: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 14a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1M14 10a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1" /></svg>,
 };
 
@@ -57,6 +58,7 @@ export default function FastDownload({ id }) {
     const [copied, setCopied] = useState(false);
     const [note, setNote] = useState(null); // popup: { kind: 'wait' | 'busy', text }
     const [via, setVia] = useState(''); // '' auto · 'a' public Drive link · 'b' Google account (no quota)
+    const [opt, setOpt] = useState(false); // options row (connections, copy link) is folded by default
     const ctl = useRef(null);
     const lastTick = useRef(0);
 
@@ -122,114 +124,85 @@ export default function FastDownload({ id }) {
     const instant = (e) => { if (e) e.preventDefault(); go('instant'); };
     const turbo = () => go('turbo');
 
-    const eta = (mbps) => fmtTime((info.size * 8) / (mbps * 1e6));
-    const SERVERS = [
-        { k: '', n: 'Auto', d: 'Best working server', I: I.star },
-        { k: 'b', n: 'Server B', d: 'Google account · no daily limit', I: I.user },
-        { k: 'a', n: 'Server A', d: 'Public Drive link', I: I.cloud },
-    ];
-    const CONNS = [[4, 'Safe'], [8, 'Fast'], [16, 'Max']];
+    const SERVERS = [{ k: '', n: 'Auto' }, { k: 'b', n: 'Server B' }, { k: 'a', n: 'Server A' }];
     const canTurbo = info.ranges && info.size > 0;
+    const tp = u && u.state !== 'idle' && u.state !== 'cancelled';
 
     return (
         <section className={`fx ${running ? 'is-run' : ''} ${finished ? 'is-done' : ''}`} aria-label="Fast download">
             <style>{CSS}</style>
-            <i className="fx-edge" />
 
             <div className="fx-top">
-                <span className="fx-badge"><i>{I.bolt}</i> Cloud Fast Download</span>
-                <span className={`fx-live ${info.warn ? 'warn' : ''}`}><b />{info.warn ? 'Busy' : 'Server ready'}</span>
+                <span className="fx-badge"><i>{I.bolt}</i><b>Fast download</b>{info.size > 0 && <em>{fmtBytes(info.size)}</em>}</span>
+                <span className={`fx-live ${info.warn ? 'warn' : ''}`}><b />{info.warn ? 'Busy' : 'Ready'}</span>
             </div>
 
             {!running && !finished && (
                 <>
-                    <div className="fx-size">
-                        <div>
-                            <small>File size</small>
-                            <b>{info.size ? fmtBytes(info.size) : '—'}</b>
-                        </div>
-                        {info.size > 0 && (
-                            <div className="fx-eta" aria-label="Estimated time">
-                                <span><em>20 Mbps</em>{eta(20)}</span>
-                                <span><em>50 Mbps</em>{eta(50)}</span>
-                                <span><em>100 Mbps</em>{eta(100)}</span>
-                            </div>
+                    {info.warn && <p className="fx-warn">{info.warn}</p>}
+
+                    <div className="fx-row">
+                        <a className="fx-cta" href={info.protected ? '#' : publicPath(id, info.name, via)} download={info.name} rel="noopener" onClick={instant} aria-busy={busy}>
+                            {I.down}<span>{busy ? 'Preparing…' : 'Download'}</span>
+                            <span className="fx-shine" />
+                        </a>
+                        {canTurbo && (
+                            <button type="button" className="fx-turbo" onClick={turbo} disabled={tooBig || busy} title={tooBig ? 'Needs Chrome or Edge on a computer for this size' : `Turbo: ${conn} connections, pause and resume`}>
+                                {I.rocket}<span>Turbo</span>
+                            </button>
                         )}
                     </div>
 
                     {info.account && (
-                        <div className="fx-srv" role="radiogroup" aria-label="Server">
+                        <div className="fx-seg" role="radiogroup" aria-label="Server">
                             {SERVERS.map((x) => (
-                                <button key={x.k || 'auto'} type="button" role="radio" aria-checked={via === x.k} className={via === x.k ? 'on' : ''} onClick={() => setVia(x.k)}>
-                                    <i>{x.I}</i><b>{x.n}</b><small>{x.d}</small>
-                                </button>
+                                <button key={x.k || 'auto'} type="button" role="radio" aria-checked={via === x.k} className={via === x.k ? 'on' : ''} onClick={() => setVia(x.k)}>{x.n}</button>
                             ))}
                         </div>
                     )}
 
-                    {info.warn && <p className="fx-warn">{info.warn}</p>}
+                    <button type="button" className="fx-more" aria-expanded={opt} onClick={() => setOpt((o) => !o)}>
+                        <span>Resumable · Multi-connection · Hidden source</span>
+                        <i className={opt ? 'up' : ''}>{I.chev}</i>
+                    </button>
 
-                    <a className="fx-cta" href={info.protected ? '#' : publicPath(id, info.name, via)} download={info.name} rel="noopener" onClick={instant} aria-busy={busy}>
-                        <span className="fx-cta-i">{I.down}</span>
-                        <span className="fx-cta-t"><b>{busy ? 'Preparing…' : 'Download now'}</b><small>Instant start · browser can resume</small></span>
-                        <span className="fx-shine" />
-                    </a>
-
-                    {canTurbo && (
-                        <div className="fx-turbo">
-                            <button type="button" className="fx-tbtn" onClick={turbo} disabled={tooBig || busy} title={tooBig ? 'Too large for this browser' : ''}>
-                                <span>{I.rocket}</span>
-                                <b>Turbo mode</b>
-                                <small>{conn} connections · pause &amp; resume</small>
-                            </button>
-                            <div className="fx-conn" role="radiogroup" aria-label="Connections">
-                                {CONNS.map(([n, l]) => (
-                                    <button key={n} type="button" role="radio" aria-checked={conn === n} className={conn === n ? 'on' : ''} onClick={() => setConn(n)}><b>{n}</b><small>{l}</small></button>
-                                ))}
-                            </div>
+                    {opt && (
+                        <div className="fx-opts">
+                            {canTurbo && (
+                                <div className="fx-o">
+                                    <small>Turbo connections</small>
+                                    <div className="fx-seg" role="radiogroup" aria-label="Connections">
+                                        {[[4, 'Safe'], [8, 'Fast'], [16, 'Max']].map(([n, l]) => (
+                                            <button key={n} type="button" role="radio" aria-checked={conn === n} className={conn === n ? 'on' : ''} onClick={() => setConn(n)}>{n} <em>{l}</em></button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {tooBig && <p className="fx-warn">Turbo needs Chrome or Edge on a computer for files this big.</p>}
+                            {!info.protected && <button type="button" className="fx-copy" onClick={copyLink}>{I.link} {copied ? 'Link copied' : 'Copy link for IDM / FDM'}</button>}
                         </div>
-                    )}
-                    {tooBig && <p className="fx-warn">Turbo needs Chrome or Edge on a computer for files this big. Download now works everywhere.</p>}
-
-                    <div className="fx-feat">
-                        <span>{I.resume}<b>Resumable</b><small>Continue after a break</small></span>
-                        <span>{I.multi}<b>Multi-connection</b><small>Up to 16 at once</small></span>
-                        <span>{I.shield}<b>{info.protected ? 'Private link' : 'Hidden source'}</b><small>{info.protected ? 'Expires soon' : 'No origin shown'}</small></span>
-                    </div>
-
-                    {!info.protected && (
-                        <button type="button" className="fx-copy" onClick={copyLink}>{I.link} {copied ? 'Link copied' : 'Copy download link for IDM / FDM'}</button>
                     )}
                 </>
             )}
 
             {msg && <p className="fx-warn">{msg}</p>}
 
-            {u && u.state !== 'idle' && u.state !== 'cancelled' && (
+            {tp && (
                 <div className="fx-prog">
                     {finished ? (
-                        <div className="fx-done">
-                            <span>{I.check}</span>
-                            <div><b>Download complete</b><small>{fmtBytes(u.size)} saved to your device</small></div>
-                        </div>
+                        <div className="fx-done"><span>{I.check}</span><div><b>Download complete</b><small>{fmtBytes(u.size)} saved</small></div></div>
                     ) : (
                         <>
                             <div className="fx-hero">
                                 <Ring pct={u.pct} state={u.state} />
                                 <div className="fx-spd">
-                                    <b>{u.state === 'running' ? fmtBytes(u.speed) + '/s' : u.state === 'paused' ? 'Paused' : u.state === 'saving' ? 'Saving…' : '—'}</b>
-                                    <small>{u.state === 'running' ? `${((u.speed * 8) / 1e6).toFixed(1)} Mbps · ${fmtTime(u.eta)} left${finish ? ` · done ≈ ${finish}` : ''}` : `${fmtBytes(u.bytes)} of ${fmtBytes(u.size)}`}</small>
-                                    <Graph values={hist} />
+                                    <b>{u.state === 'running' ? `${fmtBytes(u.speed)}/s` : u.state === 'paused' ? 'Paused' : u.state === 'saving' ? 'Saving…' : '—'}</b>
+                                    <small>{fmtBytes(u.bytes)} of {fmtBytes(u.size)}{u.state === 'running' ? ` · ${fmtTime(u.eta)} left` : ''}</small>
+                                    <small className="fx-sub">{u.state === 'running' ? `${((u.speed * 8) / 1e6).toFixed(1)} Mbps · ${u.connections}/${conn} connections · ${u.done}/${u.total} parts${finish ? ` · done ≈ ${finish}` : ''}` : `${u.done}/${u.total} parts kept`}</small>
                                 </div>
                             </div>
-                            <div className="fx-map" aria-hidden="true">
-                                {(u.map || []).map((v, i) => <i key={i} className={v >= 1 ? 'd' : v > 0 ? 'a' : ''} style={v > 0 && v < 1 ? { '--p': v } : undefined} />)}
-                            </div>
-                            <div className="fx-stats">
-                                <span><small>Downloaded</small><b>{fmtBytes(u.bytes)}</b></span>
-                                <span><small>Connections</small><b>{u.state === 'running' ? u.connections : 0}/{conn}</b></span>
-                                <span><small>Parts</small><b>{u.done}/{u.total}</b></span>
-                            </div>
+                            <div className="fx-bar"><i style={{ width: `${Math.min(100, u.pct).toFixed(2)}%` }} /></div>
+                            <Graph values={hist} />
                         </>
                     )}
                     {u.state === 'error' && <p className="fx-warn">{u.error} <button type="button" className="fx-retry" onClick={() => ctl.current && ctl.current.resume()}>Retry</button></p>}
@@ -279,82 +252,64 @@ export default function FastDownload({ id }) {
 }
 
 const CSS = `
-.fx { position: relative; overflow: hidden; margin: 0 0 12px; padding: 16px; border-radius: 20px; display: flex; flex-direction: column; gap: 14px;
-  border: 1px solid rgba(var(--ac-rgb),.4); background: radial-gradient(520px 200px at 0% 0%, rgba(var(--ac-rgb),.22), transparent 65%), radial-gradient(400px 220px at 100% 100%, rgba(var(--ac-rgb),.12), transparent 60%), linear-gradient(180deg, rgba(20,26,40,.96), rgba(10,14,22,.98)); box-shadow: 0 18px 50px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06); }
-.fx-edge { position: absolute; top: 0; left: 18px; right: 18px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--ac-hi, #ff8a8f), transparent); background-size: 220% 100%; animation: fx-line 3.2s linear infinite; }
-@keyframes fx-line { to { background-position: -220% 0; } }
-.fx-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.fx-badge { display: inline-flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #fff; }
-.fx-badge i { width: 26px; height: 26px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(135deg, rgba(var(--ac-rgb),1), rgba(var(--ac-rgb),.55)); box-shadow: 0 4px 14px rgba(var(--ac-rgb),.45); }
-.fx-badge i svg { width: 14px; height: 14px; }
-.fx-live { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 800; color: #4ade80; padding: 5px 11px; border-radius: 99px; background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.3); }
-.fx-live b { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: fx-ping 1.8s infinite; }
-.fx-live.warn { color: #fbbf24; background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.35); }
-@keyframes fx-ping { 0% { box-shadow: 0 0 0 0 currentColor; } 70% { box-shadow: 0 0 0 7px transparent; } }
-.fx-size { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.fx-size small, .fx-stats small { display: block; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #6f7c92; }
-.fx-size > div > b { display: block; font-size: 30px; line-height: 1.05; font-weight: 800; color: #fff; letter-spacing: -.03em; }
-.fx-eta { display: flex; gap: 6px; flex-wrap: wrap; }
-.fx-eta span { display: flex; flex-direction: column; padding: 6px 10px; border-radius: 11px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); font-size: 12px; font-weight: 800; color: #f1f4fa; }
-.fx-eta em { font-style: normal; font-size: 9.5px; font-weight: 700; color: #7f8ba0; letter-spacing: .04em; }
-.fx-srv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-@media (max-width: 440px) { .fx-srv { grid-template-columns: 1fr; } }
-.fx-srv button { position: relative; text-align: left; display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; padding: 10px; border-radius: 13px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: #d6dce8; cursor: pointer; font: inherit; transition: border-color .2s, background .2s, transform .15s; }
-.fx-srv button:hover { transform: translateY(-1px); border-color: rgba(var(--ac-rgb),.5); }
-.fx-srv button i { grid-row: span 2; width: 28px; height: 28px; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.07); color: #aab5c7; }
-.fx-srv button b { font-size: 12.5px; font-weight: 800; color: #fff; } .fx-srv button small { font-size: 10px; color: #7f8ba0; font-weight: 600; line-height: 1.3; }
-.fx-srv button.on { border-color: rgba(var(--ac-rgb),.75); background: linear-gradient(180deg, rgba(var(--ac-rgb),.2), rgba(var(--ac-rgb),.06)); box-shadow: 0 0 0 1px rgba(var(--ac-rgb),.3), 0 8px 22px rgba(var(--ac-rgb),.18); }
-.fx-srv button.on i { background: rgba(var(--ac-rgb),.9); color: #fff; }
-.fx-warn { margin: 0; padding: 9px 12px; border-radius: 11px; font-size: 11.5px; color: #fbbf24; background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25); }
-.fx-cta { position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px; padding: 15px 18px; border-radius: 16px; color: #fff; text-decoration: none; cursor: pointer; background: linear-gradient(135deg, rgba(var(--ac-rgb),1), rgba(var(--ac-rgb),.7)); box-shadow: 0 12px 30px rgba(var(--ac-rgb),.4), inset 0 1px 0 rgba(255,255,255,.25); transition: transform .18s, box-shadow .2s, filter .2s; }
-.fx-cta:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(var(--ac-rgb),.5), inset 0 1px 0 rgba(255,255,255,.3); filter: brightness(1.06); }
-.fx-cta:active { transform: scale(.985); }
-.fx-cta-i { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.2); flex-shrink: 0; animation: fx-bob 2.2s ease-in-out infinite; }
-@keyframes fx-bob { 50% { transform: translateY(3px); } }
-.fx-cta-t b { display: block; font-size: 17px; font-weight: 800; letter-spacing: -.01em; } .fx-cta-t small { font-size: 11.5px; font-weight: 600; opacity: .85; }
-.fx-shine { position: absolute; top: 0; bottom: 0; width: 60px; left: -80px; transform: skewX(-20deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); animation: fx-sh 3.6s ease-in-out infinite; }
-@keyframes fx-sh { 0%, 55% { left: -80px; } 100% { left: 110%; } }
-.fx-turbo { display: grid; grid-template-columns: 1.25fr 1fr; gap: 8px; }
-@media (max-width: 440px) { .fx-turbo { grid-template-columns: 1fr; } }
-.fx-tbtn { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; text-align: left; padding: 11px 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: #fff; font: inherit; cursor: pointer; transition: background .2s, border-color .2s, transform .15s; }
-.fx-tbtn:hover:not(:disabled) { background: rgba(255,255,255,.1); border-color: rgba(var(--ac-rgb),.55); transform: translateY(-1px); }
-.fx-tbtn:disabled { opacity: .45; cursor: not-allowed; }
-.fx-tbtn span { grid-row: span 2; width: 34px; height: 34px; border-radius: 11px; display: flex; align-items: center; justify-content: center; background: rgba(var(--ac-rgb),.18); color: var(--ac-hi, #ff8a8f); }
-.fx-tbtn b { font-size: 13.5px; font-weight: 800; } .fx-tbtn small { font-size: 10.5px; color: #8e9bb0; font-weight: 600; }
-.fx-conn { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.fx-conn button { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px 4px; border-radius: 11px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: #b6c0d0; font: inherit; cursor: pointer; transition: all .15s; }
-.fx-conn button b { font-size: 14px; font-weight: 800; color: #fff; } .fx-conn button small { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #7f8ba0; }
-.fx-conn button.on { background: rgba(var(--ac-rgb),.85); border-color: transparent; box-shadow: 0 6px 16px rgba(var(--ac-rgb),.3); } .fx-conn button.on small { color: rgba(255,255,255,.85); }
-.fx-feat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-@media (max-width: 440px) { .fx-feat { grid-template-columns: 1fr; } .fx-feat span { flex-direction: row !important; text-align: left !important; } }
-.fx-feat span { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 10px 6px; border-radius: 13px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06); }
-.fx-feat svg { width: 16px; height: 16px; color: var(--ac-hi, #ff8a8f); margin-bottom: 3px; }
-.fx-feat b { font-size: 11.5px; font-weight: 800; color: #f1f4fa; } .fx-feat small { font-size: 9.5px; color: #7f8ba0; font-weight: 600; }
-.fx-copy { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 12px; border-radius: 12px; border: 1px dashed rgba(255,255,255,.18); background: transparent; color: #b6c0d0; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: all .2s; }
-.fx-copy:hover { color: #fff; border-color: rgba(var(--ac-rgb),.6); background: rgba(var(--ac-rgb),.08); }
-.fx-prog { display: flex; flex-direction: column; gap: 12px; }
-.fx-hero { display: flex; align-items: center; gap: 14px; }
-.fx-spd { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.fx-spd b { font-size: 28px; line-height: 1; font-weight: 800; color: #fff; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-.fx-spd small { font-size: 11px; color: #8e9bb0; font-weight: 600; }
-.fd-graph { width: 100%; height: 36px; display: block; margin-top: 4px; }
-.fx-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(9px, 1fr)); gap: 3px; padding: 10px; border-radius: 12px; background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.06); }
-.fx-map i { aspect-ratio: 1; border-radius: 3px; background: rgba(255,255,255,.07); }
-.fx-map i.d { background: var(--ac-hi, #ff8a8f); box-shadow: 0 0 6px rgba(var(--ac-rgb),.55); }
-.fx-map i.a { background: rgba(var(--ac-rgb), calc(.25 + var(--p, .3) * .6)); animation: fx-pulse 1s ease-in-out infinite; }
-@keyframes fx-pulse { 50% { transform: scale(.7); } }
-.fx-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.fx-stats span { padding: 9px 10px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); }
-.fx-stats b { display: block; margin-top: 2px; font-size: 14px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; }
-.fx-ctl { display: flex; gap: 8px; }
-.fx-ctl button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 11px; border-radius: 13px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07); color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; transition: background .2s; }
-.fx-ctl button:hover { background: rgba(255,255,255,.12); } .fx-ctl .go { background: rgba(var(--ac-rgb),.9); border-color: transparent; } .fx-ctl .bad { color: #ff9ea2; border-color: rgba(239,68,68,.35); }
+.fx { position: relative; overflow: hidden; margin: 0 0 10px; padding: 12px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px;
+  border: 1px solid rgba(var(--ac-rgb),.32); background: radial-gradient(420px 140px at 0% 0%, rgba(var(--ac-rgb),.16), transparent 65%), linear-gradient(180deg, rgba(20,26,40,.94), rgba(10,14,22,.96)); box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05); }
+.fx-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fx-badge { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.fx-badge i { width: 22px; height: 22px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; background: linear-gradient(135deg, rgba(var(--ac-rgb),1), rgba(var(--ac-rgb),.55)); }
+.fx-badge i svg { width: 12px; height: 12px; }
+.fx-badge b { font-size: 12.5px; font-weight: 800; color: #fff; letter-spacing: .01em; }
+.fx-badge em { font-style: normal; font-size: 11px; font-weight: 700; color: #8e9bb0; padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,.06); }
+.fx-live { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 800; color: #4ade80; flex-shrink: 0; }
+.fx-live b { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: fx-ping 1.8s infinite; }
+.fx-live.warn { color: #fbbf24; }
+@keyframes fx-ping { 0% { box-shadow: 0 0 0 0 currentColor; } 70% { box-shadow: 0 0 0 6px transparent; } }
+.fx-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.fx-cta { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 46px; padding: 0 18px; border-radius: 13px; color: #fff; font-size: 15px; font-weight: 800; text-decoration: none; cursor: pointer; background: linear-gradient(135deg, rgba(var(--ac-rgb),1), rgba(var(--ac-rgb),.72)); box-shadow: 0 6px 18px rgba(var(--ac-rgb),.35), inset 0 1px 0 rgba(255,255,255,.22); transition: transform .15s, filter .2s; -webkit-tap-highlight-color: transparent; }
+.fx-cta:hover { filter: brightness(1.07); transform: translateY(-1px); } .fx-cta:active { transform: scale(.985); }
+.fx-cta svg { width: 18px; height: 18px; }
+.fx-shine { position: absolute; top: 0; bottom: 0; width: 46px; left: -70px; transform: skewX(-20deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent); animation: fx-sh 3.8s ease-in-out infinite; pointer-events: none; }
+@keyframes fx-sh { 0%, 55% { left: -70px; } 100% { left: 115%; } }
+.fx-turbo { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 46px; padding: 0 16px; border-radius: 13px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: #fff; font: inherit; font-size: 13.5px; font-weight: 800; cursor: pointer; transition: background .2s, border-color .2s; -webkit-tap-highlight-color: transparent; }
+.fx-turbo:hover:not(:disabled) { background: rgba(255,255,255,.1); border-color: rgba(var(--ac-rgb),.55); }
+.fx-turbo:disabled { opacity: .4; cursor: not-allowed; } .fx-turbo svg { width: 16px; height: 16px; color: var(--ac-hi, #ff8a8f); }
+.fx-seg { display: flex; padding: 3px; gap: 3px; border-radius: 11px; background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.07); }
+.fx-seg button { flex: 1; min-height: 32px; border: 0; border-radius: 8px; background: transparent; color: #aab5c7; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; transition: background .15s, color .15s; -webkit-tap-highlight-color: transparent; }
+.fx-seg button em { font-style: normal; font-size: 9.5px; font-weight: 700; opacity: .7; text-transform: uppercase; letter-spacing: .04em; margin-left: 3px; }
+.fx-seg button.on { background: rgba(var(--ac-rgb),.9); color: #fff; box-shadow: 0 3px 10px rgba(var(--ac-rgb),.3); }
+.fx-more { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 2px; border: 0; background: transparent; color: #7f8ba0; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; text-align: left; }
+.fx-more:hover { color: #b6c0d0; }
+.fx-more i { display: inline-flex; transition: transform .2s; } .fx-more i.up { transform: rotate(180deg); }
+.fx-opts { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06); animation: fx-in .2s ease; }
+@keyframes fx-in { from { opacity: 0; transform: translateY(-4px); } }
+.fx-o small { display: block; margin-bottom: 5px; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #6f7c92; }
+.fx-copy { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; border-radius: 10px; border: 1px dashed rgba(255,255,255,.2); background: transparent; color: #b6c0d0; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.fx-copy:hover { color: #fff; border-color: rgba(var(--ac-rgb),.6); }
+.fx-warn { margin: 0; padding: 8px 10px; border-radius: 10px; font-size: 11.5px; line-height: 1.4; color: #fbbf24; background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25); }
+.fx-prog { display: flex; flex-direction: column; gap: 9px; }
+.fx-hero { display: flex; align-items: center; gap: 12px; }
+.fx-ring { flex-shrink: 0; width: 56px; height: 56px; }
+.fx-spd { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fx-spd b { font-size: 22px; line-height: 1.05; font-weight: 800; color: #fff; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.fx-spd small { font-size: 11px; color: #8e9bb0; font-weight: 600; } .fx-spd .fx-sub { font-size: 10.5px; color: #6f7c92; }
+.fx-bar { height: 6px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; }
+.fx-bar i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, rgba(var(--ac-rgb),.85), var(--ac-hi, #ff8a8f)); transition: width .25s linear; }
+.fd-graph { width: 100%; height: 28px; display: block; }
+.fx-ctl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fx-ctl button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; border-radius: 12px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07); color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.fx-ctl .go { background: rgba(var(--ac-rgb),.9); border-color: transparent; } .fx-ctl .bad { color: #ff9ea2; border-color: rgba(239,68,68,.35); }
 .fx-retry { border: 0; background: transparent; color: #ff8a8f; font: inherit; font-weight: 800; cursor: pointer; text-decoration: underline; }
-.fx-done { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 16px; background: linear-gradient(135deg, rgba(34,197,94,.2), rgba(34,197,94,.06)); border: 1px solid rgba(34,197,94,.4); animation: fd-pop .45s cubic-bezier(.2,1.4,.4,1); }
-.fx-done > span { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: #22c55e; box-shadow: 0 0 0 6px rgba(34,197,94,.18); }
-.fx-done b { display: block; font-size: 16px; color: #86efac; } .fx-done small { font-size: 12px; color: #9fb7a8; }
+.fx-done { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 13px; background: linear-gradient(135deg, rgba(34,197,94,.2), rgba(34,197,94,.06)); border: 1px solid rgba(34,197,94,.4); animation: fd-pop .4s cubic-bezier(.2,1.4,.4,1); }
+.fx-done > span { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: #22c55e; flex-shrink: 0; }
+.fx-done > span svg { width: 18px; height: 18px; }
+.fx-done b { display: block; font-size: 14px; color: #86efac; } .fx-done small { font-size: 11.5px; color: #9fb7a8; }
 @keyframes fd-pop { from { transform: scale(.94); opacity: 0; } }
-.fd-skel { height: 150px; border-radius: 20px; margin: 0 0 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); animation: fd-p 1.2s ease-in-out infinite; }
+@media (max-width: 420px) {
+  .fx { padding: 10px; border-radius: 14px; }
+  .fx-cta { font-size: 14.5px; padding: 0 12px; } .fx-turbo { padding: 0 13px; }
+  .fx-spd b { font-size: 20px; }
+}
+.fd-skel { height: 96px; border-radius: 16px; margin: 0 0 10px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); animation: fd-p 1.2s ease-in-out infinite; }
 @keyframes fd-p { 50% { opacity: .55; } }
 .fd-b { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: #f4f6fa; cursor: pointer; font: inherit; justify-content: center; text-align: center; }
 .fd-b b { font-size: 13px; font-weight: 800; } .fd-main { background: linear-gradient(135deg, rgba(var(--ac-rgb),.95), rgba(var(--ac-rgb),.7)); border-color: transparent; }
@@ -370,4 +325,5 @@ const CSS = `
 .fd-warn { width: 44px; height: 44px; margin: 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fbbf24; background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.35); }
 .fd-warn svg { width: 20px; height: 20px; }
 @media (prefers-reduced-motion: reduce) { .fx-edge, .fx-live b, .fx-cta-i, .fx-shine, .fx-map i.a, .fd-spin, .fd-pop, .fd-pop-c, .fx-done { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .fx-live b, .fx-shine, .fd-spin, .fd-pop, .fd-pop-c, .fx-done, .fx-opts { animation: none !important; } }
 `;
