@@ -32,12 +32,12 @@ export async function getInfo(id) {
 
 // asks the worker for a short-lived link made for this visitor (kind: 'nav' = browser download, 'turbo' = in-page downloader)
 // the plain public link: works when you right-click > Copy link address, in FDM / IDM / aria2 (Range supported)
-export const publicPath = (id, name) => `${DL_BASE}/d/${encodeURIComponent(id)}/${encodeURIComponent(name || 'download')}`;
+export const publicPath = (id, name, via) => `${DL_BASE}/d/${encodeURIComponent(id)}/${encodeURIComponent(name || 'download')}${via ? `?via=${via}` : ''}`;
 export const absolute = (path) => { try { return new URL(path, window.location.href).href; } catch (e) { return path; } };
 
-export async function getLink(id, kind = 'nav') {
+export async function getLink(id, kind = 'nav', via = '') {
     try {
-        const r = await fetch(`${DL_BASE}/token/${encodeURIComponent(id)}?kind=${kind}`, { cache: 'no-store', credentials: 'omit' });
+        const r = await fetch(`${DL_BASE}/token/${encodeURIComponent(id)}?kind=${kind}${via ? `&via=${via}` : ''}`, { cache: 'no-store', credentials: 'omit' });
         const j = await r.json().catch(() => null);
         if (r.ok && j && j.ok && j.url) return { ok: true, url: /^https?:/i.test(j.url) ? j.url : `${DL_BASE}${j.url}` };
         return { ok: false, error: (j && j.error) || `The download server answered ${r.status}` };

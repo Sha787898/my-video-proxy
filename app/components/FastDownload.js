@@ -49,6 +49,7 @@ export default function FastDownload({ id }) {
     const [hist, setHist] = useState([]);
     const [finish, setFinish] = useState('');
     const [copied, setCopied] = useState(false);
+    const [via, setVia] = useState(''); // '' auto · 'a' public Drive link · 'b' Google account (no quota)
     const ctl = useRef(null);
 
     useEffect(() => {
@@ -72,19 +73,19 @@ export default function FastDownload({ id }) {
         }
     };
     const copyLink = async () => {
-        try { await navigator.clipboard.writeText(absolute(publicPath(id, info.name))); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch (e) { /* ignore */ }
+        try { await navigator.clipboard.writeText(absolute(publicPath(id, info.name, via))); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch (e) { /* ignore */ }
     };
     const instant = async () => {
         setBusy(true); setMsg('');
-        const r = await getLink(id, 'nav');
+        const r = await getLink(id, 'nav', via);
         setBusy(false);
         if (!r.ok) { setMsg(r.error); return; }
         window.location.assign(r.url); // attachment response: the page stays, the browser downloads (and can resume)
     };
     const turbo = async () => {
         setMsg('');
-        let r = { ok: true, url: publicPath(id, info.name) };
-        if (info.protected) { setBusy(true); r = await getLink(id, 'turbo'); setBusy(false); }
+        let r = { ok: true, url: publicPath(id, info.name, via) };
+        if (info.protected) { setBusy(true); r = await getLink(id, 'turbo', via); setBusy(false); }
         if (!r.ok) { setMsg(r.error); return; }
         if (ctl.current) ctl.current.cancel();
         setHist([]);
@@ -100,6 +101,18 @@ export default function FastDownload({ id }) {
                 <span className="fd-sub">{info.size ? fmtBytes(info.size) : ''}{info.ranges ? ' · resumable' : ''}</span>
             </div>
 
+            {!running && !finished && info.account && (
+                <div className="fd-opt">
+                    <span>Server</span>
+                    <div className="fd-seg">
+                        <button type="button" className={via === '' ? 'on' : ''} onClick={() => setVia('')} title="Picks the best working server">Auto</button>
+                        <button type="button" className={via === 'b' ? 'on' : ''} onClick={() => setVia('b')} title="Through a Google account, no public-link quota">Server B</button>
+                        <button type="button" className={via === 'a' ? 'on' : ''} onClick={() => setVia('a')} title="Public Drive link">Server A</button>
+                    </div>
+                </div>
+            )}
+            {info.warn && <p className="fd-note">{info.warn}{info.account ? '' : ' Turbo is unavailable right now, Instant will retry the server.'}</p>}
+
             {!running && !finished && (
                 <div className="fd-btns">
                     {info.protected ? (
@@ -107,7 +120,7 @@ export default function FastDownload({ id }) {
                             {I.bolt}<span><b>{busy ? 'Preparing…' : 'Instant download'}</b><small>Starts now · browser can resume</small></span>
                         </button>
                     ) : (
-                        <a className="fd-b fd-main" href={publicPath(id, info.name)} download={info.name} rel="noopener">
+                        <a className="fd-b fd-main" href={publicPath(id, info.name, via)} download={info.name} rel="noopener">
                             {I.bolt}<span><b>Instant download</b><small>Starts now · browser can resume</small></span>
                         </a>
                     )}
