@@ -68,6 +68,7 @@ export default function DashboardPage() {
     const [q, setQ] = useState('');
     const [copied, setCopied] = useState('');
     const [origin, setOrigin] = useState('');
+    const [nowMs, setNowMs] = useState(0); // set after mount: the build must not read the clock
     const search = useRef(null);
 
     useEffect(() => {
@@ -96,6 +97,7 @@ export default function DashboardPage() {
             const h = new Date().getHours();
             setHello(h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : h < 21 ? 'Good evening' : 'Good night');
             setOrigin(window.location.origin);
+            setNowMs(Date.now());
             setLoading(false);
         })();
         return () => { dead = true; };
@@ -118,9 +120,10 @@ export default function DashboardPage() {
     }, []);
 
     const stats = useMemo(() => {
+        if (!nowMs) return { bytes: 0, processing: 0, series: Array(14).fill(0), week: 0, ready: 100 };
         const bytes = files.reduce((a, f) => a + parseBytes(f.size), 0);
         const processing = files.filter((f) => /process|pending|queue/i.test(f.status || '')).length;
-        const now = new Date();
+        const now = new Date(nowMs || 0);
         const days = Array.from({ length: 14 }, (_, i) => { const d = new Date(now); d.setDate(d.getDate() - (13 - i)); return dayKey(d); });
         const per = Object.fromEntries(days.map((k) => [k, 0]));
         files.forEach((f) => { const raw = f.created_at || f.date; if (!raw) return; const d = new Date(raw); if (isNaN(d)) return; const k = dayKey(d); if (k in per) per[k] += 1; });
@@ -128,7 +131,7 @@ export default function DashboardPage() {
         const week = series.slice(7).reduce((a, b) => a + b, 0);
         const ready = files.length ? Math.round(((files.length - processing) / files.length) * 100) : 100;
         return { bytes, processing, series, week, ready };
-    }, [files]);
+    }, [files, nowMs]);
 
     const shown = useMemo(() => {
         const s = q.trim().toLowerCase();
