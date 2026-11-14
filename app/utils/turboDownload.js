@@ -65,10 +65,20 @@ export function createTurbo({ id, info, url, connections = 8, onUpdate }) {
     let completed = 0; let t0 = 0; let lastT = 0; let lastB = 0; let speed = 0; let bytesBefore = 0;
     const bytesNow = () => { let b = 0; for (let i = 0; i < total; i++) b += done[i] ? Math.min(CHUNK, size - i * CHUNK) : live[i]; return b; };
 
+    // progress per chunk (0..1), grouped into at most 96 cells for the part map
+    const partMap = () => {
+        const cells = Math.min(96, total); const out = new Array(cells).fill(0); const cnt = new Array(cells).fill(0);
+        for (let i = 0; i < total; i++) {
+            const c = Math.min(cells - 1, Math.floor((i / total) * cells));
+            const len = Math.min(CHUNK, size - i * CHUNK);
+            out[c] += done[i] ? 1 : live[i] / len; cnt[c] += 1;
+        }
+        return out.map((v, i) => (cnt[i] ? v / cnt[i] : 0));
+    };
     const emit = () => {
         const b = bytesNow(); const now = performance.now();
         if (now - lastT > 400) { const inst = ((b - lastB) / ((now - lastT) / 1000)); speed = speed ? speed * 0.6 + inst * 0.4 : inst; lastT = now; lastB = b; }
-        onUpdate && onUpdate({ state, error, bytes: b, size, pct: size ? (b / size) * 100 : 0, speed: state === 'running' ? Math.max(0, speed) : 0, eta: speed > 1 ? (size - b) / speed : Infinity, connections: active, chunk: CHUNK, done: completed, total });
+        onUpdate && onUpdate({ map: partMap(), state, error, bytes: b, size, pct: size ? (b / size) * 100 : 0, speed: state === 'running' ? Math.max(0, speed) : 0, eta: speed > 1 ? (size - b) / speed : Infinity, connections: active, chunk: CHUNK, done: completed, total });
     };
 
     async function fetchChunk(i, signal) {
