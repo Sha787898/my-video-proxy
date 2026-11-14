@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getInfo, getLink, publicPath, absolute, createTurbo, fmtBytes, fmtTime, canWriteToDisk, memoryLimit, DL_BASE } from '../utils/turboDownload';
 
 const I = {
@@ -49,6 +50,7 @@ export default function FastDownload({ id }) {
     const [hist, setHist] = useState([]);
     const [finish, setFinish] = useState('');
     const [copied, setCopied] = useState(false);
+    const [note, setNote] = useState(null); // popup: { kind: 'wait' | 'busy', text }
     const [via, setVia] = useState(''); // '' auto · 'a' public Drive link · 'b' Google account (no quota)
     const ctl = useRef(null);
 
@@ -75,23 +77,41 @@ export default function FastDownload({ id }) {
     const copyLink = async () => {
         try { await navigator.clipboard.writeText(absolute(publicPath(id, info.name, via))); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch (e) { /* ignore */ }
     };
-    const instant = async () => {
-        setBusy(true); setMsg('');
-        const r = await getLink(id, 'nav', via);
+    // asks the server for 1 byte first, so a busy / quota-limited file shows a friendly popup instead of a raw error page
+    const preflight = async (url) => {
+        try {
+            const r = await fetch(url, { headers: { Range: 'bytes=0-0' }, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+            if (r.ok || r.status === 206) { try { r.body && r.body.cancel(); } catch (e) { /* ignore */ } return { ok: true }; }
+            const j = await r.json().catch(() => null);
+            return { ok: false, error: (j && j.error) || `The download server answered ${r.status}`, quota: r.status === 429 };
+        } catch (e) { return { ok: false, error: 'Could not reach the download server. Check your connection and try again.' }; }
+    };
+    const resolveUrl = async (kind) => {
+        if (info.protected) { const r = await getLink(id, kind, via); return r.ok ? { ok: true, url: r.url } : { ok: false, error: r.error }; }
+        return { ok: true, url: publicPath(id, info.name, via) };
+    };
+    const go = async (mode, tries = 0) => {
+        if (mode === 'turbo' && !(info.ranges && info.size > 0)) return;
+        setBusy(true); setMsg(''); setNote({ kind: 'wait', text: 'Preparing your download…' });
+        const r = await resolveUrl(mode === 'turbo' ? 'turbo' : 'nav');
+        const chk = r.ok ? await preflight(r.url) : r;
         setBusy(false);
-        if (!r.ok) { setMsg(r.error); return; }
-        window.location.assign(r.url); // attachment response: the page stays, the browser downloads (and can resume)
+        if (!chk.ok) {
+            setNote({ kind: 'busy', text: chk.error, quota: chk.quota, retry: () => go(mode), mode });
+            return;
+        }
+        setNote(null);
+        if (mode === 'turbo') {
+            if (ctl.current) ctl.current.cancel();
+            setHist([]);
+            ctl.current = createTurbo({ id, info, url: r.url, connections: conn, onUpdate });
+            ctl.current.start();
+        } else {
+            window.location.assign(r.url); // attachment response: the page stays, the browser downloads (and can resume)
+        }
     };
-    const turbo = async () => {
-        setMsg('');
-        let r = { ok: true, url: publicPath(id, info.name, via) };
-        if (info.protected) { setBusy(true); r = await getLink(id, 'turbo', via); setBusy(false); }
-        if (!r.ok) { setMsg(r.error); return; }
-        if (ctl.current) ctl.current.cancel();
-        setHist([]);
-        ctl.current = createTurbo({ id, info, url: r.url, connections: conn, onUpdate });
-        ctl.current.start();
-    };
+    const instant = (e) => { if (e) e.preventDefault(); go('instant'); };
+    const turbo = () => go('turbo');
 
     return (
         <section className="fd" aria-label="Fast download">
@@ -120,7 +140,7 @@ export default function FastDownload({ id }) {
                             {I.bolt}<span><b>{busy ? 'Preparing…' : 'Instant download'}</b><small>Starts now · browser can resume</small></span>
                         </button>
                     ) : (
-                        <a className="fd-b fd-main" href={publicPath(id, info.name, via)} download={info.name} rel="noopener">
+                        <a className="fd-b fd-main" href={publicPath(id, info.name, via)} download={info.name} rel="noopener" onClick={instant}>
                             {I.bolt}<span><b>Instant download</b><small>Starts now · browser can resume</small></span>
                         </a>
                     )}
@@ -170,6 +190,37 @@ export default function FastDownload({ id }) {
                 </div>
             )}
 
+            {note && createPortal(
+                <div className="fd-pop" role="dialog" aria-modal="true" aria-label="Download status" onClick={() => note.kind === 'busy' && setNote(null)}>
+                    <div className="fd-pop-c" onClick={(e) => e.stopPropagation()}>
+                        {note.kind === 'wait' ? (
+                            <>
+                                <div className="fd-spin" />
+                                <h4>Preparing your download</h4>
+                                <p>Checking the fastest server for this file…</p>
+                            </>
+                        ) : (
+                            <>
+                                <div className="fd-warn">{I.bolt}</div>
+                                <h4>{note.quota ? 'This file is busy right now' : 'Download could not start'}</h4>
+                                <p>{note.quota ? 'Google Drive limits how many people can download one file per day, and this file reached that limit. The limit resets automatically, usually within 24 hours.' : note.text}</p>
+                                <ul>
+                                    {info.account && via !== 'b' && <li>Try <b>Server B</b>, it does not use the public limit.</li>}
+                                    <li>Use another server from the <b>All servers</b> list.</li>
+                                    <li>Or press <b>Try again</b> in a little while.</li>
+                                </ul>
+                                <div className="fd-pop-b">
+                                    {info.account && via !== 'b' && <button type="button" className="fd-b fd-main" onClick={() => { setVia('b'); setNote(null); }}><span><b>Switch to Server B</b></span></button>}
+                                    <button type="button" className="fd-b" onClick={() => note.retry()}><span><b>Try again</b></span></button>
+                                    <button type="button" className="fd-b" onClick={() => setNote(null)}><span><b>Close</b></span></button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>,
+                document.querySelector('.dl-root') || document.body
+            )}
+
             <div className="fd-chips">
                 <span>{I.resume} Resumable</span><span>{I.multi} Multi-connection</span><span>{I.shield} {info.protected ? 'Private link · expires' : 'Hidden source'}</span>
             </div>
@@ -199,6 +250,18 @@ const CSS = `
 .fd-seg { display: inline-flex; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; overflow: hidden; }
 .fd-seg button { border: 0; background: transparent; color: #b6c0d0; padding: 5px 11px; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 .fd-seg button.on { background: rgba(var(--ac-rgb),.85); color: #fff; }
+.fd-pop { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(4,6,10,.72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: fd-fade .2s ease; }
+@keyframes fd-fade { from { opacity: 0; } }
+.fd-pop-c { width: 100%; max-width: 380px; padding: 22px 20px; border-radius: 18px; text-align: center; background: linear-gradient(180deg, #151c2a, #0c1119); border: 1px solid rgba(var(--ac-rgb),.4); box-shadow: 0 30px 70px rgba(0,0,0,.65); animation: fd-pop .3s cubic-bezier(.2,1.3,.4,1); }
+.fd-pop-c h4 { margin: 10px 0 6px; font-size: 16px; font-weight: 800; color: #fff; }
+.fd-pop-c p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: #a3aec2; }
+.fd-pop-c ul { margin: 0 0 14px; padding: 10px 12px 10px 28px; text-align: left; font-size: 12px; color: #b6c0d0; background: rgba(255,255,255,.04); border-radius: 11px; line-height: 1.6; }
+.fd-pop-b { display: flex; flex-direction: column; gap: 8px; } .fd-pop-b .fd-b { justify-content: center; text-align: center; }
+.fd-spin { width: 38px; height: 38px; margin: 4px auto 0; border-radius: 50%; border: 3px solid rgba(255,255,255,.12); border-top-color: var(--ac-hi, #ff8a8f); animation: fd-rot .8s linear infinite; }
+@keyframes fd-rot { to { transform: rotate(360deg); } }
+.fd-warn { width: 44px; height: 44px; margin: 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fbbf24; background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.35); }
+.fd-warn svg { width: 20px; height: 20px; }
+@media (prefers-reduced-motion: reduce) { .fd-spin { animation-duration: 2s; } .fd-pop, .fd-pop-c { animation: none; } }
 .fd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .fd-chips span { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; color: #b6c0d0; padding: 4px 9px; border-radius: 99px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
 .fd-chips svg { color: var(--ac-hi, #ff8a8f); }
