@@ -153,14 +153,6 @@ export default function FastDownload({ id }) {
                         )}
                     </div>
 
-                    {info.account && (
-                        <div className="fx-seg" role="radiogroup" aria-label="Server">
-                            {SERVERS.map((x) => (
-                                <button key={x.k || 'auto'} type="button" role="radio" aria-checked={via === x.k} className={via === x.k ? 'on' : ''} onClick={() => setVia(x.k)}>{x.n}</button>
-                            ))}
-                        </div>
-                    )}
-
                     <button type="button" className="fx-more" aria-expanded={opt} onClick={() => setOpt((o) => !o)}>
                         <span>Resumable · Multi-connection · Hidden source</span>
                         <i className={opt ? 'up' : ''}>{I.chev}</i>
@@ -168,6 +160,16 @@ export default function FastDownload({ id }) {
 
                     {opt && (
                         <div className="fx-opts">
+                            {info.account && (
+                                <div className="fx-o">
+                                    <small>Server</small>
+                                    <div className="fx-seg" role="radiogroup" aria-label="Server">
+                                        {SERVERS.map((x) => (
+                                            <button key={x.k || 'auto'} type="button" role="radio" aria-checked={via === x.k} className={via === x.k ? 'on' : ''} onClick={() => setVia(x.k)}>{x.n}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {canTurbo && (
                                 <div className="fx-o">
                                     <small>Turbo connections</small>
@@ -252,7 +254,7 @@ export default function FastDownload({ id }) {
 }
 
 const CSS = `
-.fx { position: relative; overflow: hidden; margin: 0 0 10px; padding: 12px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px;
+.fx { position: relative; overflow: hidden; margin: 14px 0 0; padding: 12px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px;
   border: 1px solid rgba(var(--ac-rgb),.32); background: radial-gradient(420px 140px at 0% 0%, rgba(var(--ac-rgb),.16), transparent 65%), linear-gradient(180deg, rgba(20,26,40,.94), rgba(10,14,22,.96)); box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05); }
 .fx-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .fx-badge { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
@@ -265,12 +267,12 @@ const CSS = `
 .fx-live.warn { color: #fbbf24; }
 @keyframes fx-ping { 0% { box-shadow: 0 0 0 0 currentColor; } 70% { box-shadow: 0 0 0 6px transparent; } }
 .fx-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
-.fx-cta { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 46px; padding: 0 18px; border-radius: 13px; color: #fff; font-size: 15px; font-weight: 800; text-decoration: none; cursor: pointer; background: linear-gradient(135deg, rgba(var(--ac-rgb),1), rgba(var(--ac-rgb),.72)); box-shadow: 0 6px 18px rgba(var(--ac-rgb),.35), inset 0 1px 0 rgba(255,255,255,.22); transition: transform .15s, filter .2s; -webkit-tap-highlight-color: transparent; }
+.fx-cta { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 42px; padding: 0 16px; border-radius: 12px; color: #fff; font-size: 14px; font-weight: 800; text-decoration: none; cursor: pointer; background: linear-gradient(180deg, rgba(var(--ac-rgb),.88), rgba(var(--ac-rgb),.62)); box-shadow: 0 4px 14px rgba(var(--ac-rgb),.22), inset 0 1px 0 rgba(255,255,255,.16); transition: transform .15s, filter .2s; -webkit-tap-highlight-color: transparent; }
 .fx-cta:hover { filter: brightness(1.07); transform: translateY(-1px); } .fx-cta:active { transform: scale(.985); }
-.fx-cta svg { width: 18px; height: 18px; }
+.fx-cta svg { width: 16px; height: 16px; }
 .fx-shine { position: absolute; top: 0; bottom: 0; width: 46px; left: -70px; transform: skewX(-20deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent); animation: fx-sh 3.8s ease-in-out infinite; pointer-events: none; }
 @keyframes fx-sh { 0%, 55% { left: -70px; } 100% { left: 115%; } }
-.fx-turbo { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 46px; padding: 0 16px; border-radius: 13px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: #fff; font: inherit; font-size: 13.5px; font-weight: 800; cursor: pointer; transition: background .2s, border-color .2s; -webkit-tap-highlight-color: transparent; }
+.fx-turbo { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; transition: background .2s, border-color .2s; -webkit-tap-highlight-color: transparent; }
 .fx-turbo:hover:not(:disabled) { background: rgba(255,255,255,.1); border-color: rgba(var(--ac-rgb),.55); }
 .fx-turbo:disabled { opacity: .4; cursor: not-allowed; } .fx-turbo svg { width: 16px; height: 16px; color: var(--ac-hi, #ff8a8f); }
 .fx-seg { display: flex; padding: 3px; gap: 3px; border-radius: 11px; background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.07); }
@@ -306,7 +308,7 @@ const CSS = `
 @keyframes fd-pop { from { transform: scale(.94); opacity: 0; } }
 @media (max-width: 420px) {
   .fx { padding: 10px; border-radius: 14px; }
-  .fx-cta { font-size: 14.5px; padding: 0 12px; } .fx-turbo { padding: 0 13px; }
+  .fx-cta { padding: 0 12px; min-height: 46px; } .fx-turbo { min-height: 46px; } .fx-turbo { padding: 0 13px; }
   .fx-spd b { font-size: 20px; }
 }
 .fd-skel { height: 96px; border-radius: 16px; margin: 0 0 10px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); animation: fd-p 1.2s ease-in-out infinite; }

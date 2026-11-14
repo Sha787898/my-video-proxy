@@ -59,6 +59,8 @@ const Svg = {
     check: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>,
     cross: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>,
     lockS: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></svg>,
+    copy: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5" /><path d="M5 15V6a2 2 0 012-2h9" /></svg>,
+    chev: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>,
     gear: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" /></svg>,
     warn: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 6v8M12 18h.01" /></svg>,
 };
@@ -291,6 +293,20 @@ const CSS = `
 .dl-noanim .dl-card::after, .dl-noanim .dl-main::after { animation: none !important; }
 .dl-noanim .dl-card, .dl-noanim .dl-row, .dl-noanim .dl-modal, .dl-noanim .dl-back, .dl-noanim .dl-shield, .dl-noanim .dl-go, .dl-noanim .dl-watch, .dl-noanim .dl-main, .dl-noanim .dl-ic { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) { .dl-card::after, .dl-main::after, .dl-card, .dl-row, .dl-modal, .dl-back, .dl-shield, .dl-go { animation: none; } }
+/* calmer bottom actions */
+.dl-colA .dl-main { justify-content: flex-start; gap: 12px; min-height: 52px; margin-top: 12px; padding: 0 12px; border-radius: 14px; background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)); border: 1px solid var(--line); box-shadow: none; text-align: left; font-weight: 600; letter-spacing: 0; }
+.dl-colA .dl-main::after { display: none; }
+.dl-colA .dl-main:hover { filter: none; transform: translateY(-1px); border-color: rgba(var(--ac-rgb),.5); background: linear-gradient(180deg, rgba(var(--ac-rgb),.14), rgba(255,255,255,.03)); }
+.dl-main-i { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--ac-hi, #ff8a8f); background: rgba(var(--ac-rgb),.14); border: 1px solid rgba(var(--ac-rgb),.28); }
+.dl-main-i svg { width: 15px; height: 15px; }
+.dl-main-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.dl-main-t b { font-size: 13px; font-weight: 700; color: #f1f4fa; }
+.dl-main-t small { font-size: 11px; font-weight: 500; opacity: 1; color: #8e9bb0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-main-go { color: #6f7c92; display: flex; transition: transform .2s, color .2s; } .dl-colA .dl-main:hover .dl-main-go { transform: translateX(3px); color: var(--ac-hi, #ff8a8f); }
+.dl-colA .dl-acts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 10px; }
+.dl-colA .dl-acts button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; border-radius: 12px; background: rgba(255,255,255,.035); color: #c9d1de; font-size: 12.5px; font-weight: 700; -webkit-tap-highlight-color: transparent; }
+.dl-colA .dl-acts button svg { color: var(--ac-hi, #ff8a8f); flex-shrink: 0; }
+.dl-colA .dl-acts button:hover { transform: translateY(-1px); color: #fff; }
 `;
 
 function FileDownloadContent({ params }) {
@@ -459,13 +475,15 @@ function FileDownloadContent({ params }) {
 
                         {best && (
                             <button type="button" className="dl-main" onClick={() => setSel(best)}>
-                                {Svg.down} Download <small>via {best.name}</small>
+                                <span className="dl-main-i">{Svg.down}</span>
+                                <span className="dl-main-t"><b>More ways to download</b><small>via {best.name}</small></span>
+                                <span className="dl-main-go" aria-hidden="true">{Svg.chev}</span>
                             </button>
                         )}
 
                         <div className="dl-acts">
-                            <button type="button" onClick={copyPage}>{copied ? 'Link copied' : 'Copy page link'}</button>
-                            {hasPlayer && !watch && <button type="button" onClick={() => setWatch(true)}>Play here</button>}
+                            <button type="button" onClick={copyPage}>{Svg.copy}{copied ? 'Link copied' : 'Copy page link'}</button>
+                            {hasPlayer && !watch && <button type="button" onClick={() => setWatch(true)}>{Svg.play}Play here</button>}
                         </div>
                         </div>
 
