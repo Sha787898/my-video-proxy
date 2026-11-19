@@ -14,7 +14,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // Display-only grouping used for the type badge on each card
 const NODE_TYPE = {
     vidmoly: 'stream', abyss: 'stream', voe: 'stream', streamhg: 'stream', earnvids: 'stream', turboviplay: 'stream',
-    dropload: 'stream', ruby: 'stream', byse: 'stream', vidara: 'stream', streamp2p: 'stream', player4me: 'stream',
+    dropload: 'stream', ruby: 'stream', byse: 'stream', vidara: 'stream', vidshared: 'stream', streamp2p: 'stream', player4me: 'stream',
     upnshare: 'stream', rpmshare: 'stream', streamtape: 'stream',
     gcloud: 'download', pixeldrain: 'download', vikingfile: 'download', gofile: 'download', sendnow: 'download',
     mixdrop: 'download', buzzheavier: 'download', mega: 'download', filepress: 'download',
@@ -39,6 +39,7 @@ const DEFAULT_NODES = [
     { id: 'buzzheavier', name: 'BuzzHeavier', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
     { id: 'mega', name: 'MEGA', limit: '20 GB', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
     { id: 'vidara', name: 'Vidara', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
+    { id: 'vidshared', name: 'VidShared', limit: 'Unlimited', status: 'ONLINE', active: true, key: '', customDomain: '', playerLink: true },
     { id: 'filepress', name: 'Filepress', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'streamp2p', name: 'StreamP2P', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'player4me', name: 'Player4Me', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
@@ -285,7 +286,7 @@ export default function ManageSitesPage() {
                                             onClick={() => handleOpenModal(node, 'domain')}
                                             className="ms-btn ms-btn-sm ms-btn-ghost ms-btn-block justify-between"
                                         >
-                                            <span className="flex items-center gap-2"><IconGlobe size={15} /> {node.customDomain ? 'Edit custom domain' : 'Set custom domain'}</span>
+                                            <span className="flex items-center gap-2"><IconGlobe size={15} /> {node.playerLink ? (node.customDomain ? 'Edit player link' : 'Set player link') : (node.customDomain ? 'Edit custom domain' : 'Set custom domain')}</span>
                                             <IconPencil size={14} />
                                         </button>
                                     </div>
@@ -302,7 +303,7 @@ export default function ManageSitesPage() {
                         <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
                             <div className="min-w-0">
                                 <h3 className="text-sm font-bold text-white">
-                                    {activeModal.type === 'key' ? 'Set API key' : activeModal.type === 'email' ? `Set ${activeModal.node.extraLabel}` : 'Set custom domain'}
+                                    {activeModal.type === 'key' ? 'Set API key' : activeModal.type === 'email' ? `Set ${activeModal.node.extraLabel}` : activeModal.node.playerLink ? 'Set player link' : 'Set custom domain'}
                                 </h3>
                                 <p className="text-xs text-blue-400 mt-0.5 truncate">{activeModal.node.name}</p>
                             </div>
@@ -313,14 +314,14 @@ export default function ManageSitesPage() {
 
                         <div>
                             <label className="ms-label" htmlFor="node-input">
-                                {activeModal.type === 'key' ? 'API key / token' : activeModal.type === 'email' ? activeModal.node.extraLabel : 'Custom proxy / mirror domain'}
+                                {activeModal.type === 'key' ? 'API key / token' : activeModal.type === 'email' ? activeModal.node.extraLabel : activeModal.node.playerLink ? 'Player link (use {code} where the Play ID goes)' : 'Custom proxy / mirror domain'}
                             </label>
                             <div className="relative">
                                 <input
                                     id="node-input"
                                     type={activeModal.type === 'key' && !showSecret ? 'password' : 'text'}
                                     autoComplete="off"
-                                    placeholder={activeModal.type === 'key' ? 'Paste API key here...' : activeModal.type === 'email' ? (activeModal.node.extraField === 'login' ? 'Account login / username' : 'you@example.com') : 'https://cdn.yourdomain.com'}
+                                    placeholder={activeModal.type === 'key' ? 'Paste API key here...' : activeModal.type === 'email' ? (activeModal.node.extraField === 'login' ? 'Account login / username' : 'you@example.com') : activeModal.node.playerLink ? 'https://your-vidshared-player/e/{code}' : 'https://cdn.yourdomain.com'}
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                     className={`ms-input ${activeModal.type === 'key' ? 'pr-12' : ''}`}

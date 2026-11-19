@@ -43,6 +43,8 @@ async function runJob(supabase, session, file) {
         if (!res.ok) throw new Error(data.error || `Server answered ${res.status}`);
         if (data.errors && data.errors.length && !(data.files || []).length) throw new Error(data.errors[0].error);
         const done = (data.files || [])[0];
+        // VidShared mirror (needs VIDSHARED_API_KEY; the route answers "skipped" when it is not set). Runs after the main upload so it never overwrites it.
+        try { await fetch('/api/vidshared', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ fileId: id }) }); } catch (e) { /* optional */ }
         if (done && done.status === 'Active') { lsDel(`ms_q_${id}`); mascotSay('cheer', `${String(file.title || file.original_url || 'A file').slice(0, 40)} is on all servers! ✅`, { force: true }); }
         else lsSet(`ms_q_${id}`, { n: queueState(id).n, at: Date.now(), err: done && done.failed && done.failed[0] ? done.failed[0].reason : '' });
     } catch (e) {
