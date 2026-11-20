@@ -73,7 +73,7 @@ export async function POST(request) {
         };
 
         // already there: just refresh its state
-        if (cur) {
+        if (cur && !body.force) {
             const r = await vs('/files/' + encodeURIComponent(cur.code), key);
             const st = r.ok ? r.data.core_state : null;
             if (st === 'ready' || st === 'ready_tiktok') return NextResponse.json({ ok: true, state: 'ready', code: cur.code });

@@ -18,6 +18,29 @@ export const DEFAULT_ACTIVE = {
     upnshare: false, rpmshare: false, streamtape: false,
 };
 
+// manage-sites server id -> the key name the upload Worker expects (also used by the Check & repair tool: add a new server HERE and in SERVERS)
+export const KEY_MAP = {
+    voe: 'voe_key',
+    sendnow: 'sendnow_key',
+    streamhg: 'streamhg_key',
+    earnvids: 'earnvids_key',
+    vidmoly: 'vidmoly_key',
+    turboviplay: 'turboviplay_key',
+    dropload: 'dropload_key',
+    ruby: 'ruby_key',
+    byse: 'byse_key',
+    abyss: 'abyss_key',
+    gcloud: 'gcloud_key',
+    mixdrop: 'mixdrop_key',
+    vidara: 'vidara_key',
+    filepress: 'filepress_key',
+    streamp2p: 'p2p_key',
+    player4me: 'p4me_key',
+    upnshare: 'upnshare_key',
+    rpmshare: 'rpmshare_key',
+    streamtape: 'streamtape_key',
+};
+
 // PDLink-এর শেয়ার লিংক: https://pdlk.site/g/<share_id>
 export const PDLINK_SHARE_BASE = 'https://pdlk.site/g/';
 

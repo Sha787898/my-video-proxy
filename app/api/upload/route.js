@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { embedBase } from '../../utils/embedOrigin';
 import { createClient } from '@supabase/supabase-js';
-import { SERVERS, PDLINK_SERVERS, buildMirror, resolveMirrors, domainsFromSettings } from '../../utils/mirrors';
+import { SERVERS, PDLINK_SERVERS, KEY_MAP, buildMirror, resolveMirrors, domainsFromSettings } from '../../utils/mirrors';
 import { parseProfiles, PROFILES_KEY } from '../../utils/profiles';
 import { parseQuality } from '../../utils/quality';
 
@@ -16,28 +16,6 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 //   SITE_SECRET  = (একটা লম্বা random লেখা; Worker-এও একই SITE_SECRET দিন)
 const WORKER_URL = process.env.WORKER_URL || 'https://multiserver-worker.shabidalhasan.workers.dev';
 const SITE_SECRET = process.env.SITE_SECRET;
-// manage-sites এর server id  ->  Worker-এর key এর নাম
-const KEY_MAP = {
-    voe: 'voe_key',
-    sendnow: 'sendnow_key',
-    streamhg: 'streamhg_key',
-    earnvids: 'earnvids_key',
-    vidmoly: 'vidmoly_key',
-    turboviplay: 'turboviplay_key',
-    dropload: 'dropload_key',
-    ruby: 'ruby_key',
-    byse: 'byse_key',
-    abyss: 'abyss_key',
-    gcloud: 'gcloud_key',
-    mixdrop: 'mixdrop_key',
-    vidara: 'vidara_key',
-    filepress: 'filepress_key',
-    streamp2p: 'p2p_key',
-    player4me: 'p4me_key',
-    upnshare: 'upnshare_key',
-    rpmshare: 'rpmshare_key',
-    streamtape: 'streamtape_key',
-};
 
 // Worker-এর result-এ কিছু সার্ভারের নাম আলাদা
 const RESULT_KEY = {
@@ -157,6 +135,10 @@ export async function POST(request) {
         // phase: 'main' = every server except the slow/limited ones, 'serial' = only those (one file at a time, from the queue); default 'all'
         const SERIAL_SERVERS = ['vidara'];
         const phase = body.phase === 'main' || body.phase === 'serial' ? body.phase : 'all';
+        // repair tool: upload ONLY these servers (the rest are not touched, so nothing is uploaded twice); `force` = retry even if a link exists
+        const onlyList = Array.isArray(body.only) ? body.only.map((x) => String(x)) : null;
+        const forceList = Array.isArray(body.force) ? body.force.map((x) => String(x)) : [];
+        if (onlyList) activeServers = activeServers.filter((id) => onlyList.includes(id));
         if (phase === 'main') activeServers = activeServers.filter((id) => !SERIAL_SERVERS.includes(id));
         if (phase === 'serial') activeServers = activeServers.filter((id) => SERIAL_SERVERS.includes(id));
         if (phase !== 'all' && activeServers.length === 0) {
@@ -187,7 +169,7 @@ export async function POST(request) {
                     if (prev0 && Array.isArray(prev0.mirrors)) have = prev0.mirrors.filter((m) => m && m.code).map((m) => m.id);
                 } catch (e) { /* ignore */ }
             }
-            const linkConfig = { ...config, have, ...(DL_BASE && single ? { fast: { base: DL_BASE, id: wantId } } : {}) };
+            const linkConfig = { ...config, have, force: forceList, ...(DL_BASE && single ? { fast: { base: DL_BASE, id: wantId } } : {}) };
             let workerRes;
             try {
                 workerRes = await fetch(WORKER_URL, {
