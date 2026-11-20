@@ -23,7 +23,7 @@ function loadHls() {
 export default function DirectPlayer({ id, name, mode, base }) {
     useEffect(() => {
         let dead = false;
-        const tellParent = () => { try { window.parent.postMessage({ msPlayer: 'fail', mode }, '*'); } catch (e) { /* ignore */ } };
+        const tellParent = () => { try { window.parent.postMessage({ msPlayer: 'fail', mode, why: 'load' }, '*'); } catch (e) { /* ignore */ } };
         (async () => {
             if (mode === 'hls' && !(await loadHls())) { tellParent(); return; }
             if (dead) return;
@@ -42,29 +42,36 @@ export default function DirectPlayer({ id, name, mode, base }) {
         <div style={{ position: 'fixed', inset: 0, background: '#000', ['--accent-color']: '#ef4444', ['--accent-rgb']: '239,68,68', fontFamily: 'system-ui, sans-serif' }}>
             <style dangerouslySetInnerHTML={{ __html: DIRECT_CSS }} />
             <div className="dp" id="directPlayer" data-id={id}>
-                <video playsInline preload="metadata" crossOrigin="anonymous"></video>
+                <video playsInline preload="metadata"></video>
+                <div className="dp-top"></div>
                 <div className="dp-load"></div>
-                <button className="dp-big" aria-label="Play">&#9654;</button>
+                <button className="dp-big" aria-label="Play"></button>
                 <div className="dp-flash l"></div><div className="dp-flash r"></div>
                 <div className="dp-toast"></div>
                 <div className="dp-stats"></div>
+                <div className="dp-note"></div>
+                <div className="dp-err">
+                    <p>Could not play</p>
+                    <small>Switching to the next server...</small>
+                    <div className="row"><button data-a="retry">Retry</button><button className="alt" data-a="next">Next server</button></div>
+                </div>
                 <div className="dp-menu"></div>
                 <div className="dp-shade"></div>
                 <div className="dp-bar">
                     <div className="dp-seek"><div className="dp-track"><div className="dp-buf"></div><div className="dp-fill"></div><div className="dp-knob"></div></div><div className="dp-tip"><div className="dp-th"></div><span>0:00</span></div></div>
                     <div className="dp-row">
-                        <button className="dp-b dp-pp" aria-label="Play/Pause">&#9654;</button>
-                        <button className="dp-b dp-back" aria-label="Back 10s">&#8634;</button>
-                        <button className="dp-b dp-fwd" aria-label="Forward 10s">&#8635;</button>
-                        <span className="dp-vwrap" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                            <button className="dp-b dp-mute" aria-label="Mute">&#128266;</button>
-                            <input className="dp-vol" type="range" min="0" max="1" step="0.05" defaultValue="1" />
+                        <button className="dp-b dp-pp" aria-label="Play or pause"></button>
+                        <button className="dp-b dp-back" aria-label="Back 10 seconds"></button>
+                        <button className="dp-b dp-fwd" aria-label="Forward 10 seconds"></button>
+                        <span className="dp-vwrap">
+                            <button className="dp-b dp-mute" aria-label="Mute"></button>
+                            <input className="dp-vol" type="range" min="0" max="1" step="0.05" defaultValue="1" aria-label="Volume" />
                         </span>
                         <span className="dp-time"><span className="dp-cur">0:00</span> / <span className="dp-dur">0:00</span></span>
                         <span className="dp-sp"></span>
-                        <button className="dp-b dp-cog" aria-label="Settings">&#9881;</button>
-                        <button className="dp-b dp-pip" aria-label="Picture in picture">&#10064;</button>
-                        <button className="dp-b dp-fs" aria-label="Fullscreen">&#9974;</button>
+                        <button className="dp-b dp-cog" aria-label="Settings"></button>
+                        <button className="dp-b dp-pip" aria-label="Picture in picture"></button>
+                        <button className="dp-b dp-fs" aria-label="Fullscreen"></button>
                     </div>
                 </div>
             </div>

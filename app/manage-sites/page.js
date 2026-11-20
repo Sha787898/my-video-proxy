@@ -39,7 +39,7 @@ const DEFAULT_NODES = [
     { id: 'buzzheavier', name: 'BuzzHeavier', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
     { id: 'mega', name: 'MEGA', limit: '20 GB', status: 'ONLINE', active: false, key: '', customDomain: '', pdlink: true },
     { id: 'vidara', name: 'Vidara', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
-    { id: 'vidshared', name: 'VidShared', limit: 'Unlimited', status: 'ONLINE', active: true, key: '', customDomain: '', playerLink: true },
+    { id: 'vidshared', name: 'VidShared', limit: 'Unlimited', status: 'ONLINE', active: true, key: '', customDomain: '', playerLink: true, dlDomain: '' },
     { id: 'filepress', name: 'Filepress', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'streamp2p', name: 'StreamP2P', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
     { id: 'player4me', name: 'Player4Me', limit: 'Unlimited', status: 'ONLINE', active: false, key: '', customDomain: '' },
@@ -81,11 +81,13 @@ export default function ManageSitesPage() {
                     const foundKey = settingsData.find(s => s.key === `${node.id}_api_key`);
                     const foundDomain = settingsData.find(s => s.key === `${node.id}_domain`);
                     const foundActive = settingsData.find(s => s.key === `${node.id}_active`);
+                    const foundDl = settingsData.find(s => s.key === `${node.id}_dl_domain`);
                     const foundEmail = settingsData.find(s => s.key === `${node.id}_${node.extraField || 'email'}`);
                     return {
                         ...node,
                         key: foundKey ? foundKey.value : node.key,
                         customDomain: foundDomain ? foundDomain.value : node.customDomain,
+                        dlDomain: foundDl ? foundDl.value : node.dlDomain,
                         // সেভ করা থাকলে সেটাই, না থাকলে ডিফল্ট
                         active: foundActive ? foundActive.value === 'true' : node.active,
                         email: foundEmail ? foundEmail.value : node.email
@@ -131,14 +133,14 @@ export default function ManageSitesPage() {
     const handleOpenModal = (node, type) => {
         setActiveModal({ type, node });
         setShowSecret(false);
-        setInputValue(type === 'key' ? node.key || '' : type === 'email' ? node.email || '' : node.customDomain || '');
+        setInputValue(type === 'key' ? node.key || '' : type === 'email' ? node.email || '' : type === 'dldomain' ? node.dlDomain || '' : node.customDomain || '');
     };
 
     const handleSaveModal = async () => {
         if (!activeModal || !user) return;
         const { node, type } = activeModal;
 
-        const targetSettingKey = type === 'key' ? `${node.id}_api_key` : type === 'email' ? `${node.id}_${node.extraField || 'email'}` : `${node.id}_domain`;
+        const targetSettingKey = type === 'key' ? `${node.id}_api_key` : type === 'email' ? `${node.id}_${node.extraField || 'email'}` : type === 'dldomain' ? `${node.id}_dl_domain` : `${node.id}_domain`;
 
         // Supabase-e upsert (Insert or Update) korar logic
         const { error } = await supabase
@@ -158,13 +160,14 @@ export default function ManageSitesPage() {
             if (n.id === node.id) {
                 if (type === 'key') return { ...n, key: inputValue };
                 if (type === 'email') return { ...n, email: inputValue };
+                if (type === 'dldomain') return { ...n, dlDomain: inputValue };
                 return { ...n, customDomain: inputValue };
             }
             return n;
         });
 
         setNodes(updatedNodes);
-        setSaveStatus(`Successfully updated ${type === 'key' ? 'API Key' : type === 'email' ? node.extraLabel : 'Custom Domain'} for ${node.name}`);
+        setSaveStatus(`Successfully updated ${type === 'key' ? 'API Key' : type === 'email' ? node.extraLabel : type === 'dldomain' ? 'Download link' : node.playerLink ? 'Player link' : 'Custom Domain'} for ${node.name}`);
         setTimeout(() => setSaveStatus(''), 3000);
         setActiveModal(null);
     };
@@ -289,6 +292,17 @@ export default function ManageSitesPage() {
                                             <span className="flex items-center gap-2"><IconGlobe size={15} /> {node.playerLink ? (node.customDomain ? 'Edit player link' : 'Set player link') : (node.customDomain ? 'Edit custom domain' : 'Set custom domain')}</span>
                                             <IconPencil size={14} />
                                         </button>
+
+                                        {node.playerLink && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleOpenModal(node, 'dldomain')}
+                                                className="ms-btn ms-btn-sm ms-btn-ghost ms-btn-block justify-between"
+                                            >
+                                                <span className="flex items-center gap-2 min-w-0"><IconLink size={15} className="shrink-0" /> <span className="truncate">{node.dlDomain ? 'Edit download link' : 'Set download link (multi-quality)'}</span></span>
+                                                <IconPencil size={14} className="shrink-0" />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             );
@@ -303,7 +317,7 @@ export default function ManageSitesPage() {
                         <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
                             <div className="min-w-0">
                                 <h3 className="text-sm font-bold text-white">
-                                    {activeModal.type === 'key' ? 'Set API key' : activeModal.type === 'email' ? `Set ${activeModal.node.extraLabel}` : activeModal.node.playerLink ? 'Set player link' : 'Set custom domain'}
+                                    {activeModal.type === 'key' ? 'Set API key' : activeModal.type === 'email' ? `Set ${activeModal.node.extraLabel}` : activeModal.type === 'dldomain' ? 'Set download link' : activeModal.node.playerLink ? 'Set player link' : 'Set custom domain'}
                                 </h3>
                                 <p className="text-xs text-blue-400 mt-0.5 truncate">{activeModal.node.name}</p>
                             </div>
@@ -314,14 +328,14 @@ export default function ManageSitesPage() {
 
                         <div>
                             <label className="ms-label" htmlFor="node-input">
-                                {activeModal.type === 'key' ? 'API key / token' : activeModal.type === 'email' ? activeModal.node.extraLabel : activeModal.node.playerLink ? 'Player link (base, or with {code} where the Play ID goes)' : 'Custom proxy / mirror domain'}
+                                {activeModal.type === 'key' ? 'API key / token' : activeModal.type === 'email' ? activeModal.node.extraLabel : activeModal.type === 'dldomain' ? 'Download page link (base, or with {code} where the Play ID goes)' : activeModal.node.playerLink ? 'Player link (base, or with {code} where the Play ID goes)' : 'Custom proxy / mirror domain'}
                             </label>
                             <div className="relative">
                                 <input
                                     id="node-input"
                                     type={activeModal.type === 'key' && !showSecret ? 'password' : 'text'}
                                     autoComplete="off"
-                                    placeholder={activeModal.type === 'key' ? 'Paste API key here...' : activeModal.type === 'email' ? (activeModal.node.extraField === 'login' ? 'Account login / username' : 'you@example.com') : activeModal.node.playerLink ? 'https://your-player.com/e   (or with {code})' : 'https://cdn.yourdomain.com'}
+                                    placeholder={activeModal.type === 'key' ? 'Paste API key here...' : activeModal.type === 'email' ? (activeModal.node.extraField === 'login' ? 'Account login / username' : 'you@example.com') : activeModal.type === 'dldomain' ? 'https://your-site.com/d   (or with {code})' : activeModal.node.playerLink ? 'https://your-player.com/e   (or with {code})' : 'https://cdn.yourdomain.com'}
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                     className={`ms-input ${activeModal.type === 'key' ? 'pr-12' : ''}`}

@@ -127,7 +127,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId, conf
         const onMsg = (e) => {
             if (!e.data || e.data.msPlayer !== 'fail') return;
             if (!frameRef.current || e.source !== frameRef.current.contentWindow) return;
-            autoAdvance('could not play this file');
+            autoAdvance(e.data.why === 'audio' ? 'has no sound in this browser' : 'could not play this file');
         };
         window.addEventListener('message', onMsg);
         return () => window.removeEventListener('message', onMsg);

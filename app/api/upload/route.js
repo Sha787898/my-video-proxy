@@ -154,6 +154,15 @@ export async function POST(request) {
         const stLogin = get('streamtape_login');
         if (stLogin) keys.streamtape_login = stLogin;
 
+        // phase: 'main' = every server except the slow/limited ones, 'serial' = only those (one file at a time, from the queue); default 'all'
+        const SERIAL_SERVERS = ['vidara'];
+        const phase = body.phase === 'main' || body.phase === 'serial' ? body.phase : 'all';
+        if (phase === 'main') activeServers = activeServers.filter((id) => !SERIAL_SERVERS.includes(id));
+        if (phase === 'serial') activeServers = activeServers.filter((id) => SERIAL_SERVERS.includes(id));
+        if (phase !== 'all' && activeServers.length === 0) {
+            return NextResponse.json({ success: true, skipped: true, files: [], errors: [] });
+        }
+
         if (activeServers.length === 0) {
             return NextResponse.json({ error: 'কোনো সার্ভার চালু নেই। Manage Sites থেকে অন্তত একটা সার্ভার ON করুন।' }, { status: 400 });
         }

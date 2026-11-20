@@ -121,5 +121,16 @@ export function resolveMirror(m, domains = {}) {
 }
 
 export function resolveMirrors(list, domains = {}) {
-    return (Array.isArray(list) ? list : []).map((m) => resolveMirror(m, domains));
+    const out = [];
+    for (const m of Array.isArray(list) ? list : []) {
+        out.push(resolveMirror(m, domains));
+        // VidShared also gives a multi-quality download: shown as its own download link once "Set download link" is filled in Manage Sites
+        if (m && m.id === 'vidshared' && m.code && domains.vidshared_dl_domain) {
+            const dl = normDomain(domains.vidshared_dl_domain);
+            const code = encodeURIComponent(String(m.code).trim());
+            const url = dl.includes('{code}') ? dl.replace('{code}', code) : `${dl}/${code}`;
+            out.push({ id: 'vidshared_dl', name: 'VidShared (multi-quality download)', type: 'download', code: m.code, url, embed: null });
+        }
+    }
+    return out;
 }
