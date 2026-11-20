@@ -314,14 +314,14 @@ export default function ManageSitesPage() {
 
                         <div>
                             <label className="ms-label" htmlFor="node-input">
-                                {activeModal.type === 'key' ? 'API key / token' : activeModal.type === 'email' ? activeModal.node.extraLabel : activeModal.node.playerLink ? 'Player link (use {code} where the Play ID goes)' : 'Custom proxy / mirror domain'}
+                                {activeModal.type === 'key' ? 'API key / token' : activeModal.type === 'email' ? activeModal.node.extraLabel : activeModal.node.playerLink ? 'Player link (base, or with {code} where the Play ID goes)' : 'Custom proxy / mirror domain'}
                             </label>
                             <div className="relative">
                                 <input
                                     id="node-input"
                                     type={activeModal.type === 'key' && !showSecret ? 'password' : 'text'}
                                     autoComplete="off"
-                                    placeholder={activeModal.type === 'key' ? 'Paste API key here...' : activeModal.type === 'email' ? (activeModal.node.extraField === 'login' ? 'Account login / username' : 'you@example.com') : activeModal.node.playerLink ? 'https://your-vidshared-player/e/{code}' : 'https://cdn.yourdomain.com'}
+                                    placeholder={activeModal.type === 'key' ? 'Paste API key here...' : activeModal.type === 'email' ? (activeModal.node.extraField === 'login' ? 'Account login / username' : 'you@example.com') : activeModal.node.playerLink ? 'https://your-player.com/e   (or with {code})' : 'https://cdn.yourdomain.com'}
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                     className={`ms-input ${activeModal.type === 'key' ? 'pr-12' : ''}`}

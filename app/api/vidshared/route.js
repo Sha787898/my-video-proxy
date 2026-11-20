@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 // VidShared mirror: VidShared downloads the video itself from a link we give it (POST /files/fetch), so nothing passes through Vercel.
 //   1st choice: your fast Worker link  (DL_BASE/d/<file id>/<name>   - Server B, no Drive quota)
 //   backup    : the direct Google Drive link
-// Settings (Manage Sites > VidShared): API key + player link. Optional Vercel env fallback: VIDSHARED_API_KEY
+// Settings (Manage Sites > VidShared): API key (+ player link, used when the page is shown). Optional Vercel env fallback: VIDSHARED_API_KEY
 export const maxDuration = 60;
 
 const API = 'https://api.vidshared.com/v1';
@@ -55,26 +55,28 @@ export async function POST(request) {
         const fileId = typeof body.fileId === 'string' && /^[a-z0-9]{6,12}$/.test(body.fileId) ? body.fileId : null;
         if (!fileId) return NextResponse.json({ error: 'fileId missing' }, { status: 400 });
 
-        const { data: rows } = await supabase.from('settings').select('key, value').eq('user_id', u.user.id).in('key', ['vidshared_api_key', 'vidshared_domain', 'vidshared_active']);
+        const { data: rows } = await supabase.from('settings').select('key, value').eq('user_id', u.user.id).in('key', ['vidshared_api_key', 'vidshared_active']);
         const get = (k) => ((rows || []).find((r) => r.key === k) || {}).value || '';
         const key = get('vidshared_api_key') || process.env.VIDSHARED_API_KEY || '';
         if (!key) return NextResponse.json({ skipped: true, reason: 'No VidShared API key (Manage Sites > VidShared > Add API key)' });
         if (get('vidshared_active') === 'false') return NextResponse.json({ skipped: true, reason: 'VidShared is switched off' });
-        const playerTpl = get('vidshared_domain') || process.env.NEXT_PUBLIC_VIDSHARED_PLAYER || '';
-        const playerUrl = (code) => !playerTpl ? '' : playerTpl.includes('{code}') ? playerTpl.replace('{code}', encodeURIComponent(code)) : playerTpl.replace(/\/+$/, '') + '/' + encodeURIComponent(code);
 
-        const { data: file } = await supabase.from('files').select('id, name, original_url, vidshared').eq('id', fileId).eq('user_id', u.user.id).maybeSingle();
+        const { data: file } = await supabase.from('files').select('id, name, original_url, mirrors').eq('id', fileId).eq('user_id', u.user.id).maybeSingle();
         if (!file) return NextResponse.json({ error: 'File not found' }, { status: 404 });
-        // files.vidshared = "<play code>|<player url>"   (sql/9-vidshared.sql)
-        const [curCode] = String(file.vidshared || '').split('|');
-        const cur = curCode ? { code: curCode } : null;
-        const save = (code) => supabase.from('files').update({ vidshared: code + '|' + playerUrl(code) }).eq('id', file.id);
+        const mirrors = Array.isArray(file.mirrors) ? file.mirrors.filter(Boolean) : [];
+        const cur = mirrors.find((m) => m.id === 'vidshared' && m.code);
+        // the VidShared Play ID is kept like every other server's code (the player link is added when the page is shown)
+        const save = async (code) => {
+            const next = mirrors.filter((m) => m.id !== 'vidshared');
+            next.push({ id: 'vidshared', name: 'VidShared', type: 'stream', code });
+            return supabase.from('files').update({ mirrors: next }).eq('id', file.id);
+        };
 
         // already there: just refresh its state
-        if (cur && cur.code) {
+        if (cur) {
             const r = await vs('/files/' + encodeURIComponent(cur.code), key);
             const st = r.ok ? r.data.core_state : null;
-            if (st === 'ready' || st === 'ready_tiktok') { await save(cur.code); return NextResponse.json({ ok: true, state: 'ready', code: cur.code }); }
+            if (st === 'ready' || st === 'ready_tiktok') return NextResponse.json({ ok: true, state: 'ready', code: cur.code });
             if (st === 'pending') return NextResponse.json({ ok: true, state: 'pending', code: cur.code });
             // failed / gone -> make a fresh copy below
         }
@@ -97,7 +99,7 @@ export async function POST(request) {
 
         if (result && result.code && result.state !== 'failed') {
             const { error: se } = await save(result.code);
-            if (se) return NextResponse.json({ ok: false, error: 'Could not save: ' + se.message + ' (run sql/9-vidshared.sql in Supabase)' }, { status: 500 });
+            if (se) return NextResponse.json({ ok: false, error: 'Could not save: ' + se.message }, { status: 500 });
             return NextResponse.json({ ok: true, state: result.state, code: result.code, via: usedVia });
         }
         return NextResponse.json({ ok: false, state: 'failed', error: (result && result.error) || 'VidShared failed' }, { status: 502 });

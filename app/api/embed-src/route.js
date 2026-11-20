@@ -29,6 +29,9 @@ export async function POST(request) {
     const { data: file, error } = await supabase.rpc('public_file', { p_id: id });
     if (error || !file) return reply(404, { error: 'Not found' });
 
+    // our own player pages (same origin as the player)
+    if (key === 'direct' || key === 'hls') return reply(200, { url: `/embed/${encodeURIComponent(id)}/direct?m=${key}` });
+
     const m = resolveMirrors(file.mirrors, file.domains).find((x) => x.id === key && x.embed);
     if (!m) return reply(404, { error: 'Not found' });
     return reply(200, { url: m.embed });

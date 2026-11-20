@@ -4,6 +4,18 @@ import { resolveMirrors } from '../../utils/mirrors';
 import { parseConfig } from '../../utils/playerConfig';
 import EmbedPlayer from './EmbedPlayer';
 
+// Our own fast servers (need the Worker address in Vercel: NEXT_PUBLIC_DL_BASE)
+const DL_BASE = (process.env.NEXT_PUBLIC_DL_BASE || process.env.NEXT_PUBLIC_DL_WORKER || '').replace(/\/+$/, '');
+
+// is there an HLS package for this file? (made by the transcode job, stored in R2 as <file id>/master.m3u8)
+async function hasHls(id) {
+    if (!DL_BASE) return false;
+    try {
+        const r = await fetch(`${DL_BASE}/hls/${encodeURIComponent(id)}/master.m3u8`, { method: 'HEAD', signal: AbortSignal.timeout(2500), next: { revalidate: 300 } });
+        return r.ok;
+    } catch (e) { return false; }
+}
+
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -37,6 +49,12 @@ async function EmbedContent({ params }) {
     const servers = resolveMirrors(file.mirrors, file.domains)
         .filter((m) => m.embed)
         .map((m) => ({ key: m.id, name: m.name })); // no host URLs in the page source: the player asks /api/embed-src for the active one
+
+    if (DL_BASE) {
+        // adaptive stream first (when it exists), then the Drive file straight from the Worker; the normal servers stay as the backup
+        if (await hasHls(file.id)) servers.unshift({ key: 'hls', name: 'HLS (Adaptive)' });
+        servers.splice(servers.length && servers[0].key === 'hls' ? 1 : 0, 0, { key: 'direct', name: 'Direct (Fast)' });
+    }
 
     if (servers.length === 0) {
         return <Message title="No player server" lines={[`File: ${file.name}`, 'This file has no streaming-server links (mirrors are empty or download-only).']} />;

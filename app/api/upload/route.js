@@ -166,7 +166,19 @@ export async function POST(request) {
         const config = { servers: activeServers, keys };
 
         // ---------- 4) প্রতিটি লিংক Worker-এ (সমান্তরালে) ----------
+        const DL_BASE = (process.env.NEXT_PUBLIC_DL_BASE || process.env.NEXT_PUBLIC_DL_WORKER || '').replace(/\/+$/, '');
         const processLink = async (link) => {
+            // for the fast Worker link (Vidara etc. download from it: path ends with the file name, so the title comes through)
+            // and for "which servers do we already hold a code for" (so a re-run only retries what is missing)
+            const single = linkArray.length === 1 && wantId;
+            let have = [];
+            if (single) {
+                try {
+                    const { data: prev0 } = await supabase.from('files').select('mirrors').eq('id', wantId).maybeSingle();
+                    if (prev0 && Array.isArray(prev0.mirrors)) have = prev0.mirrors.filter((m) => m && m.code).map((m) => m.id);
+                } catch (e) { /* ignore */ }
+            }
+            const linkConfig = { ...config, have, ...(DL_BASE && single ? { fast: { base: DL_BASE, id: wantId } } : {}) };
             let workerRes;
             try {
                 workerRes = await fetch(WORKER_URL, {
@@ -175,7 +187,7 @@ export async function POST(request) {
                         'Content-Type': 'application/json',
                         'X-Site-Secret': SITE_SECRET,
                     },
-                    body: JSON.stringify({ driveUrl: link, uid: userId, config }),
+                    body: JSON.stringify({ driveUrl: link, uid: userId, config: linkConfig }),
                     signal: AbortSignal.timeout(55000),
                 });
             } catch (e) {

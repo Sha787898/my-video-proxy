@@ -44,6 +44,8 @@ export const SERVERS = {
     mega:        { name: 'MEGA',         type: 'download', host: '',                           view: '{c}' },
     gcloud:      { name: 'Google Cloud', type: 'download', host: '',                           view: '{c}' },
     vidara:      { name: 'Vidara',       type: 'stream',   host: 'https://vidara.so',          view: '/v/{c}', embed: '/e/{c}' },      // ✅ view (docs), ⚠️ embed
+    // VidShared: the player link is set in Manage Sites (VidShared > Set player link), e.g. https://your-player.com/e  (or with {code} in it)
+    vidshared:   { name: 'VidShared',   type: 'stream',   host: '',                           view: '/{c}',   embed: '/{c}' },
     filepress:   { name: 'Filepress',    type: 'download', host: 'https://filebee.xyz',        view: '/file/{c}' },                        // ⚠️
 
     // type 'task' = রিমোট-আপলোড শুরু হয়েছে, Worker শুধু task id পায়; চূড়ান্ত ভিডিও লিংক হোস্টের স্ট্যাটাস API দিয়ে পরে আনতে হয়
@@ -97,6 +99,10 @@ export function resolveMirror(m, domains = {}) {
     if (!cfg) return { ...m, url: m.url || code, embed: m.embed || null };
 
     const custom = normDomain(domains[`${m.id}_domain`]);
+    if (m.id === 'vidshared' && custom.includes('{code}')) {
+        const u = custom.replace('{code}', encodeURIComponent(code));
+        return { ...m, url: u, embed: u };
+    }
     const host = custom || cfg.host || '';
     const embedHost = custom || cfg.embedHost || cfg.host || '';
     const fill = (tpl) => tpl.replace('{c}', code);
@@ -105,10 +111,12 @@ export function resolveMirror(m, domains = {}) {
         return { ...m, name: `${cfg.name} (⏳ task ${code})`, url: host, embed: null };
     }
 
+    const viewPath = fill(cfg.view);
     return {
         ...m,
-        url: isUrl(code) ? code : `${host}${fill(cfg.view)}`,
-        embed: cfg.type === 'stream' && cfg.embed && !isUrl(code) ? `${embedHost}${fill(cfg.embed)}` : null,
+        // a server with no host yet (VidShared before its player link is set) gives no link instead of a broken "/code"
+        url: isUrl(code) ? code : (!host && viewPath.startsWith('/') ? '' : `${host}${viewPath}`),
+        embed: cfg.type === 'stream' && cfg.embed && !isUrl(code) && embedHost ? `${embedHost}${fill(cfg.embed)}` : null,
     };
 }
 

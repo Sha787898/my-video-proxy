@@ -1,0 +1,42 @@
+name: Make HLS (adaptive streaming)
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_id:
+        description: 'File id from your site (the id in /file/<id>)'
+        required: true
+      max_height:
+        description: 'Highest quality to make (1080, 720, 480)'
+        default: '1080'
+      preset:
+        description: 'ffmpeg preset (ultrafast = quick, veryfast = smaller files)'
+        default: 'veryfast'
+
+jobs:
+  hls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      FILE_ID: ${{ inputs.file_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Download the source through your Worker (Server B)
+        run: |
+          set -e
+          curl -fL --retry 8 --retry-delay 5 --retry-all-errors -C - \
+            -H "x-admin-key: ${{ secrets.ADMIN_KEY }}" \
+            "${{ secrets.DL_BASE }}/d/${FILE_ID}/source.bin?via=b" -o source.bin
+          ls -lh source.bin
+      - name: Transcode
+        run: node transcode/make-hls.mjs source.bin out --max-height "${{ inputs.max_height }}" --preset "${{ inputs.preset }}"
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          aws s3 sync out "s3://${{ secrets.R2_BUCKET }}/${FILE_ID}" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" --only-show-errors

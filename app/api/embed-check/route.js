@@ -28,6 +28,7 @@ export async function POST(request) {
     const key = String(body?.key || '').slice(0, 40);
     if (!id || !key) return reply(400, { error: 'Bad request' });
 
+    if (key === 'direct' || key === 'hls') return reply(200, { ok: true, unknown: true }); // our own player reports its own failures
     const { data: file, error } = await supabase.rpc('public_file', { p_id: id });
     if (error || !file) return reply(404, { error: 'Not found' });
     const m = resolveMirrors(file.mirrors, file.domains).find((x) => x.id === key && x.embed);

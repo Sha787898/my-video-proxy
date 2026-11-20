@@ -92,7 +92,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId, conf
     const tried = useRef(new Set());
     const current = servers[active] || servers[0];
     // protection level per server: strict (no pop-ups, no redirects) | relaxed (pop-ups allowed, page redirects still blocked) | off
-    const level = prefs.block ? ((prefs.sb || {})[current.key] || (current.key === 'vidara' ? 'off' : 'strict')) : 'off';
+    const level = prefs.block ? ((prefs.sb || {})[current.key] || (['vidara', 'direct', 'hls'].includes(current.key) ? 'off' : 'strict')) : 'off';
     const sandboxOn = level !== 'off';
     const guardOn = prefs.guard; // only when the user switches it on: it also asks on a normal reload
     const curUrl = urls[current.key] || current.url || '';
@@ -121,6 +121,17 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId, conf
     }, [say]);
 
     useEffect(() => { trackView(fileId, 'embed'); }, [fileId]);
+
+    // our own player (Direct / HLS) says when a video cannot play (codec, Drive busy): move on to the next server
+    useEffect(() => {
+        const onMsg = (e) => {
+            if (!e.data || e.data.msPlayer !== 'fail') return;
+            if (!frameRef.current || e.source !== frameRef.current.contentWindow) return;
+            autoAdvance('could not play this file');
+        };
+        window.addEventListener('message', onMsg);
+        return () => window.removeEventListener('message', onMsg);
+    }, [autoAdvance]);
 
     // ---------- saved preferences + auto-join from ?room=CODE ----------
     useEffect(() => {
