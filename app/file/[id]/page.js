@@ -12,6 +12,7 @@ import FastDownload from '../../components/FastDownload';
 import { MASCOTS } from '../../utils/mascots';
 import { parseQuality } from '../../utils/quality';
 import { parseFormat, formatAdded, timeAgo } from '../../utils/fileInfo';
+import { getInfo, fmtBytes } from '../../utils/turboDownload';
 
 // This page only reads public data: no login session is stored or used.
 const supabase = createClient(
@@ -62,8 +63,80 @@ const Svg = {
     copy: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5" /><path d="M5 15V6a2 2 0 012-2h9" /></svg>,
     chev: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>,
     gear: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" /></svg>,
+    info: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.5h.01" /></svg>,
+    clock: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
     warn: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 6v8M12 18h.01" /></svg>,
 };
+
+
+// ---------- the Metadata popup (opened from the small "Metadata" button next to the file name) ----------
+function MetaModal({ file, id, rows, onClose }) {
+    const [live, setLive] = useState(undefined); // undefined = loading, null = not available
+    const [flash, setFlash] = useState('');
+    useEffect(() => {
+        let dead = false;
+        getInfo(id).then((i) => { if (!dead) setLive(i); });
+        return () => { dead = true; };
+    }, [id]);
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+    const copy = async (label, text) => {
+        try { await navigator.clipboard.writeText(String(text)); setFlash(label); setTimeout(() => setFlash(''), 1400); } catch (e) { /* ignore */ }
+    };
+    const delivery = [];
+    if (live) {
+        if (live.size) delivery.push(['Exact size', `${Number(live.size).toLocaleString()} bytes (${fmtBytes(live.size)})`]);
+        if (live.mime) delivery.push(['MIME type', live.mime]);
+        delivery.push(['Resume / multi-connection', live.ranges ? 'Supported' : 'Not supported']);
+        delivery.push(['Fast server', live.warn ? 'Busy right now' : 'Ready']);
+    }
+    const groups = rows.filter((g) => g.items.length);
+    return (
+        <div className="dl-back" onClick={onClose} role="dialog" aria-modal="true" aria-label="File metadata">
+            <div className="dl-meta" onClick={(e) => e.stopPropagation()}>
+                <div className="dl-meta-h">
+                    <span className="dl-meta-ic">{Svg.info}</span>
+                    <div className="dl-meta-t"><b>Metadata</b><small title={file.name}>{file.name}</small></div>
+                    <button type="button" className="dl-meta-x" aria-label="Close" onClick={onClose}>{Svg.cross}</button>
+                </div>
+                <div className="dl-meta-b">
+                    {groups.map((g) => (
+                        <section key={g.title}>
+                            <h3>{g.title}</h3>
+                            <div className="dl-meta-g">
+                                {g.items.map(([k, v]) => (
+                                    <button type="button" key={k} className="dl-meta-c" onClick={() => copy(k, v)} title="Tap to copy">
+                                        <span>{k}</span><b>{v}</b>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    ))}
+                    {(live === undefined || delivery.length > 0) && (
+                        <section>
+                            <h3>Delivery{live === undefined ? ' · checking…' : ''}</h3>
+                            <div className="dl-meta-g">
+                                {delivery.map(([k, v]) => (
+                                    <button type="button" key={k} className="dl-meta-c" onClick={() => copy(k, v)} title="Tap to copy"><span>{k}</span><b>{v}</b></button>
+                                ))}
+                                {live === undefined && <div className="dl-meta-c dl-skel" style={{ minHeight: 48 }} />}
+                            </div>
+                        </section>
+                    )}
+                </div>
+                <div className="dl-meta-f">
+                    <button type="button" onClick={() => copy('File name', file.name)}>{Svg.copy}File name</button>
+                    <button type="button" onClick={() => copy('Page link', window.location.href)}>{Svg.copy}Page link</button>
+                    <button type="button" onClick={() => copy('ID', id)}>{Svg.copy}ID</button>
+                </div>
+                <div className={`dl-meta-toast ${flash ? 'on' : ''}`}>{flash ? `${flash} copied` : ''}</div>
+            </div>
+        </div>
+    );
+}
 
 // ---------- the secure download popup ----------
 function SecureModal({ mirror, onClose }) {
@@ -307,6 +380,34 @@ const CSS = `
 .dl-colA .dl-acts button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; border-radius: 12px; background: rgba(255,255,255,.035); color: #c9d1de; font-size: 12.5px; font-weight: 700; -webkit-tap-highlight-color: transparent; }
 .dl-colA .dl-acts button svg { color: var(--ac-hi, #ff8a8f); flex-shrink: 0; }
 .dl-colA .dl-acts button:hover { transform: translateY(-1px); color: #fff; }
+/* ---- header chips: date + Metadata button ---- */
+.dl-chip.d { display: inline-flex; align-items: center; gap: 5px; color: #b8c4d8; }
+.dl-chip.d svg { opacity: .8; }
+.dl-chip.i { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit; color: var(--ac-tint); border-color: rgba(var(--ac-rgb),.4); background: rgba(var(--ac-rgb),.12); transition: background .2s, transform .2s; }
+.dl-chip.i:hover { background: rgba(var(--ac-rgb),.24); transform: translateY(-1px); }
+/* ---- Metadata popup ---- */
+.dl-meta { position: relative; width: min(560px, 100%); max-height: 100%; display: flex; flex-direction: column; border-radius: 20px; background: linear-gradient(180deg, rgba(18,26,40,.98), rgba(9,13,21,.99)); border: 1px solid var(--line); border-top-color: rgba(var(--ac-rgb),.55); box-shadow: 0 30px 80px rgba(0,0,0,.7); animation: dl-pop .28s cubic-bezier(.2,.9,.3,1) both; overflow: hidden; }
+.dl-meta-h { display: flex; align-items: center; gap: 11px; padding: 14px 14px 12px 16px; border-bottom: 1px solid var(--line); }
+.dl-meta-ic { width: 34px; height: 34px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--ac-hi, #ff8a8f); background: rgba(var(--ac-rgb),.14); border: 1px solid rgba(var(--ac-rgb),.3); }
+.dl-meta-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.dl-meta-t b { font-size: 14px; color: #fff; }
+.dl-meta-t small { font-size: 11px; color: #8e9bb0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-meta-x { width: 32px; height: 32px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: #c9d1de; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.dl-meta-x:hover { background: rgba(255,255,255,.1); }
+.dl-meta-b { padding: 4px 16px 6px; overflow-y: auto; text-align: left; }
+.dl-meta-b h3 { margin: 14px 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #8e9bb0; }
+.dl-meta-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.dl-meta-c { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 9px 11px; border-radius: 11px; border: 1px solid var(--line); background: rgba(255,255,255,.03); min-width: 0; cursor: pointer; font-family: inherit; color: inherit; transition: border-color .2s, background .2s; }
+.dl-meta-c:hover { border-color: rgba(var(--ac-rgb),.45); background: rgba(var(--ac-rgb),.07); }
+.dl-meta-c span { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #67748a; }
+.dl-meta-c b { font-size: 12.5px; font-weight: 600; color: #f1f1f3; overflow-wrap: anywhere; }
+.dl-meta-f { display: flex; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid var(--line); margin-top: 8px; }
+.dl-meta-f button { flex: 1; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 11px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: #c9d1de; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.dl-meta-f button:hover { background: rgba(255,255,255,.09); color: #fff; border-color: rgba(var(--ac-rgb),.45); }
+.dl-meta-f button svg { color: var(--ac-hi, #ff8a8f); }
+.dl-meta-toast { position: absolute; left: 50%; bottom: 62px; transform: translate(-50%, 8px); padding: 6px 13px; border-radius: 999px; background: rgba(34,197,94,.16); border: 1px solid rgba(34,197,94,.4); color: #86efac; font-size: 11.5px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+.dl-meta-toast.on { opacity: 1; transform: translate(-50%, 0); }
+@media (max-width: 480px) { .dl-meta-g { grid-template-columns: 1fr; } .dl-meta { border-radius: 18px; } }
 `;
 
 function FileDownloadContent({ params }) {
@@ -320,6 +421,7 @@ function FileDownloadContent({ params }) {
     const [ov, setOv] = useState({});
     const [cfgOpen, setCfgOpen] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [metaOpen, setMetaOpen] = useState(false);
     useEffect(() => { setOv(readOverrides()); }, []);
     useEffect(() => { if (id && id !== 'default') trackView(id, 'page'); }, [id]);
     const cfgObj = parseConfig(file && file.config);
@@ -347,10 +449,12 @@ function FileDownloadContent({ params }) {
     }, [id]);
 
     const mirrors = resolveMirrors(file?.mirrors, file?.domains).filter((m) => m.url);
-    const best = mirrors.find((m) => m.type === 'download') || mirrors.find((m) => m.type === 'stream');
+    // VidShared plays inside the player already, so only its download link is listed (no second "stream" row)
+    const listed = mirrors.filter((m) => m.id !== 'vidshared');
+    const best = listed.find((m) => m.type === 'download') || listed.find((m) => m.type === 'stream');
     const hasPlayer = mirrors.some((m) => m.embed);
     const q = parseQuality(file?.name);
-    const streamN = mirrors.filter((m) => m.type === 'stream').length;
+    const streamN = listed.filter((m) => m.type === 'stream').length;
     const copyPage = async () => {
         try { await navigator.clipboard.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch (e) { /* ignore */ }
     };
@@ -358,12 +462,22 @@ function FileDownloadContent({ params }) {
     const addedRaw = file ? (file.created_at || file.date) : '';
     const addedTxt = addedRaw ? formatAdded(addedRaw) : '';
     const agoTxt = addedRaw && /T|:/.test(String(addedRaw)) ? timeAgo(addedRaw) : '';
-    const spec = [
-        ['File format', fmt.label ? `${fmt.label}${fmt.long ? ` (${fmt.long})` : ''}` : ''], ['Type', fmt.kind && fmt.mime ? `${fmt.kind} · ${fmt.mime}` : (fmt.mime || fmt.kind)],
-        ['Added on', addedTxt ? `${addedTxt}${agoTxt ? ` · ${agoTxt}` : ''}` : ''],
-        ['Resolution', q.res], ['Video codec', q.codec], ['HDR', q.hdr], ['Bit depth', q.bit], ['Source', q.source],
-        ['File size', file?.size], ['Servers', mirrors.length ? `${mirrors.length} (${streamN} stream · ${mirrors.length - streamN} download)` : ''],
-    ].filter(([, v]) => v);
+    // just the date for the small chip (the full date + time + "x hours ago" is in the Metadata popup)
+    const shortDate = (() => {
+        if (!addedRaw) return '';
+        const raw = String(addedRaw).trim();
+        const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00`) : new Date(raw);
+        return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    })();
+    const keep = (arr) => arr.filter(([, v]) => v);
+    const metaRows = [
+        { title: 'File', items: keep([
+            ['File name', file?.name], ['File format', fmt.label ? `${fmt.label}${fmt.long ? ` (${fmt.long})` : ''}` : ''], ['Type', fmt.kind && fmt.mime ? `${fmt.kind} · ${fmt.mime}` : (fmt.mime || fmt.kind)],
+            ['File size', file?.size], ['Added on', addedTxt ? `${addedTxt}${agoTxt ? ` · ${agoTxt}` : ''}` : ''], ['File ID', id],
+        ]) },
+        { title: 'Video', items: keep([['Resolution', q.res], ['Video codec', q.codec], ['HDR', q.hdr], ['Bit depth', q.bit], ['Source', q.source]]) },
+        { title: 'Servers', items: keep([['Available', listed.length ? `${listed.length} (${streamN} stream · ${listed.length - streamN} download)` : '']]) },
+    ];
 
     return (
         <div className={`dl-root ${prefs.anim === false ? 'dl-noanim' : ''}`} style={file ? vars : undefined}>
@@ -450,6 +564,8 @@ function FileDownloadContent({ params }) {
                                         {q.source && <span className="dl-chip s">{q.source}</span>}
                                     </>) : (file.quality && file.quality !== '1080p WEB-DL' && <span className="dl-chip g">{file.quality}</span>)}
                                     <span className="dl-chip">ID {id}</span>
+                                    {shortDate && <span className="dl-chip d" title={`Added ${addedTxt}${agoTxt ? ` · ${agoTxt}` : ''}`}>{Svg.clock}{shortDate}</span>}
+                                    <button type="button" className="dl-chip i" onClick={() => setMetaOpen(true)} aria-haspopup="dialog">{Svg.info}Metadata</button>
                                 </div>
                             </div>
                         </header>
@@ -488,19 +604,11 @@ function FileDownloadContent({ params }) {
                         </div>
 
                         <aside className="dl-colB">
-                        {spec.length > 0 && (
+                        {listed.length > 0 ? (
                             <>
-                                <h2 className="dl-h2 dl-h2-first">File details</h2>
-                                <dl className="dl-spec">
-                                    {spec.map(([k, v]) => (<div key={k}><dt>{k}</dt><dd>{v}</dd></div>))}
-                                </dl>
-                            </>
-                        )}
-                        {mirrors.length > 0 ? (
-                            <>
-                                <h2 className="dl-h2">All servers</h2>
+                                <h2 className="dl-h2 dl-h2-first">All servers</h2>
                                 <ul className="dl-list">
-                                    {mirrors.map((m, i) => (
+                                    {listed.map((m, i) => (
                                         <li key={m.id}>
                                             <button type="button" className="dl-row" style={{ '--i': i }} onClick={() => setSel(m)}>
                                                 <span className="n">{m.name}</span>
@@ -527,6 +635,7 @@ function FileDownloadContent({ params }) {
             </main>
 
             {sel && <SecureModal mirror={sel} onClose={() => setSel(null)} />}
+            {metaOpen && file && <MetaModal file={file} id={id} rows={metaRows} onClose={() => setMetaOpen(false)} />}
             {file && <Mascot config={file.config ?? null} page="download" />}
         </div>
     );
