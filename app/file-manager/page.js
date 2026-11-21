@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
     IconFolder, IconUpload, IconSearch, IconFilm, IconChevronDown, IconChevronLeft, IconChevronRight, IconLink, IconCode,
-    IconPencil, IconWrench, IconTrash, IconCopy, IconExternal, IconAlert, IconInfo, IconActivity, IconInbox, IconCheck, IconX, IconPlay,
+    IconPencil, IconWrench, IconTrash, IconCopy, IconExternal, IconAlert, IconInfo, IconActivity, IconInbox, IconCheck, IconX, IconPlay, IconSliders,
 } from '../components/Icons';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
@@ -34,6 +34,26 @@ const hostOf = (url) => {
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
 };
 
+// ---- sorting helpers ----
+// When did the file arrive? created_at when the table has it (sql/7-file-info.sql), otherwise the upload date.
+const addedAt = (f) => { const t = Date.parse(f.created_at || ''); if (!Number.isNaN(t)) return t; const d = Date.parse(f.date || ''); return Number.isNaN(d) ? 0 : d; };
+const fmtWhen = (f) => {
+    const t = Date.parse(f.created_at || '');
+    if (Number.isNaN(t)) return f.date || '';
+    const d = new Date(t);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const UNIT = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+const sizeOf = (f) => { const m = String(f.size || '').trim().match(/^([\d.,]+)\s*([KMGT]?B)$/i); return m ? parseFloat(m[1].replace(/,/g, '')) * (UNIT[m[2].toUpperCase()] || 1) : -1; };
+const SORTS = [
+    ['new', 'Newest first'], ['old', 'Oldest first'], ['name', 'Name A-Z'], ['nameDesc', 'Name Z-A'],
+    ['sizeDesc', 'Size: largest'], ['sizeAsc', 'Size: smallest'], ['issues', 'Needs repair first'],
+];
+const VIEW_KEY = 'ms_fm_view_v1';
+const VIEW_DEFAULT = { dense: false, size: true, date: true, quality: true, dots: true, folder: true, id: false, sort: 'new', pageSize: 24 };
+const loadView = () => { try { return { ...VIEW_DEFAULT, ...(JSON.parse(localStorage.getItem(VIEW_KEY) || 'null') || {}) }; } catch (e) { return VIEW_DEFAULT; } };
+
 export default function FileManagerPage() {
     const router = useRouter();
     const [user, setUser] = useState(null);
@@ -53,8 +73,16 @@ export default function FileManagerPage() {
     const [searchInput, setSearchInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
-    const [pageSize, setPageSize] = useState(24);
-    const [sortBy, setSortBy] = useState('new');
+    const [view, setView] = useState(VIEW_DEFAULT);
+    const [profileFilter, setProfileFilter] = useState('all');
+    const [missFilter, setMissFilter] = useState('all'); // 'all' | server id that the file does not have
+    const [viewOpen, setViewOpen] = useState(false);
+    const lastPick = useRef(null);
+    const { pageSize, sort: sortBy } = view;
+    const setPageSize = (n) => setView((v) => ({ ...v, pageSize: n }));
+    const setSortBy = (k) => setView((v) => ({ ...v, sort: k }));
+    useEffect(() => { setView(loadView()); }, []);
+    useEffect(() => { try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch (e) { /* ignore */ } }, [view]);
     const searchRef = useRef(null);
     const [page, setPage] = useState(1);
 
@@ -149,13 +177,39 @@ export default function FileManagerPage() {
             if (folder === 'none' && fm.map[f.id]) return false;
             if (folder && folder !== 'none' && fm.map[f.id] !== folder) return false;
             if (statusFilter !== 'All' && statusOf(f) !== statusFilter) return false;
+            if (profileFilter !== 'all' && (f.profile || 'default') !== profileFilter) return false;
+            if (missFilter !== 'all' && !missingOf(f).includes(missFilter)) return false;
             return true;
         });
-        if (sortBy === 'old') return [...list].reverse();
-        if (sortBy === 'name') return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }));
-        return list;
+        const nm = (a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+        const arr = [...list];
+        // every sort ends with "newest first", so equal files never jump around
+        const byNew = (a, b) => addedAt(b) - addedAt(a);
+        if (sortBy === 'old') arr.sort((a, b) => addedAt(a) - addedAt(b));
+        else if (sortBy === 'name') arr.sort((a, b) => nm(a, b) || byNew(a, b));
+        else if (sortBy === 'nameDesc') arr.sort((a, b) => nm(b, a) || byNew(a, b));
+        else if (sortBy === 'sizeDesc') arr.sort((a, b) => sizeOf(b) - sizeOf(a) || byNew(a, b));
+        else if (sortBy === 'sizeAsc') arr.sort((a, b) => sizeOf(a) - sizeOf(b) || byNew(a, b));
+        else if (sortBy === 'issues') arr.sort((a, b) => missingOf(b).length - missingOf(a).length || byNew(a, b));
+        else arr.sort(byNew);
+        return arr;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [files, searchQuery, statusFilter, activeIds, profiles, sortBy, folder, fm]);
+    }, [files, searchQuery, statusFilter, activeIds, profiles, sortBy, folder, fm, profileFilter, missFilter]);
+
+    // typing in the search box filters straight away (small delay), no need to press Search
+    useEffect(() => {
+        const t = setTimeout(() => { setSearchQuery(searchInput); setPage(1); }, 180);
+        return () => clearTimeout(t);
+    }, [searchInput]);
+
+    // files still being uploaded: refresh the list every few seconds so they update by themselves
+    const hasProcessing = files.some((f) => f.status === 'Processing');
+    useEffect(() => {
+        if (!hasProcessing || !user) return undefined;
+        const t = setInterval(() => { if (!document.hidden) loadAll(user.id); }, 8000);
+        return () => clearInterval(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hasProcessing, user]);
 
     // Esc: close the menu, then clear the selection
     useEffect(() => {
@@ -202,12 +256,22 @@ export default function FileManagerPage() {
         }
     };
 
-    const toggleSelect = (id) => {
+    // click = pick one; Shift+click = pick everything between this one and the last one you picked
+    const toggleSelect = (id, shift) => {
+        const last = lastPick.current; // read now: the updater below runs later
+        const ids = visible.map((x) => x.id);
         setSelected((prev) => {
             const n = new Set(prev);
-            n.has(id) ? n.delete(id) : n.add(id);
+            const a = last ? ids.indexOf(last) : -1;
+            const b = ids.indexOf(id);
+            if (shift && a >= 0 && b >= 0) {
+                const [lo, hi] = a < b ? [a, b] : [b, a];
+                const on = !prev.has(id);
+                for (let i = lo; i <= hi; i++) { if (on) n.add(ids[i]); else n.delete(ids[i]); }
+            } else if (n.has(id)) n.delete(id); else n.add(id);
             return n;
         });
+        lastPick.current = id;
     };
 
     const toggleSelectAll = () => {
@@ -390,6 +454,23 @@ export default function FileManagerPage() {
 .fm-menu { position: absolute; bottom: calc(100% + 6px); right: 0; min-width: 190px; max-height: 50vh; overflow: auto; padding: 4px; border-radius: 12px; background: #0e1626; border: 1px solid rgba(255,255,255,.14); box-shadow: 0 16px 40px rgba(0,0,0,.6); display: flex; flex-direction: column; z-index: 30; }
 .fm-menu button { text-align: left; padding: 7px 10px; border-radius: 8px; border: 0; background: transparent; color: #d5dbe6; font-size: 12.5px; cursor: pointer; font-family: inherit; }
 .fm-menu button:hover { background: rgba(255,255,255,.09); color: #fff; }
+.fm-row.dense { padding: 5px 10px; gap: 4px; border-radius: 10px; }
+.fm-row.dense .fm-ico { width: 26px; height: 26px; border-radius: 8px; }
+.fm-row.dense .fm-ico svg { width: 14px; height: 14px; }
+.fm-row.dense .fm-ico i { display: none; }
+.fm-row.dense .fm-top .ms-check { margin-top: 5px; }
+.fm-row.dense .fm-name { font-size: 12.5px; -webkit-line-clamp: 1; }
+.fm-row.dense .fm-meta { margin-top: 2px; font-size: 10.5px; }
+.fm-row.dense .fm-ib { width: 26px; height: 26px; }
+.fm-row.dense .fm-acts { padding-left: 36px; }
+.fm-view { min-width: 230px; padding: 10px; gap: 4px; right: 0; }
+.fm-view p { margin: 6px 4px 2px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #67748a; }
+.fm-view label { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; font-size: 12.5px; color: #d5dbe6; cursor: pointer; }
+.fm-view label:hover { background: rgba(255,255,255,.07); }
+.fm-seg { display: flex; gap: 4px; }
+.fm-seg button { flex: 1; text-align: center !important; border: 1px solid rgba(255,255,255,.1) !important; }
+.fm-seg button.on { background: rgba(59,130,246,.22) !important; color: #fff !important; border-color: rgba(96,165,250,.5) !important; }
+.fm-reset { margin-top: 6px; color: #fca5a5 !important; }
 @media (max-width: 560px) { .fm-bar { padding: 6px; } .fm-bar-n { width: 100%; padding-left: 6px; } .fm-bb { padding: 0 9px; } }
             `}</style>
 
@@ -459,27 +540,41 @@ export default function FileManagerPage() {
                             </div>
                             <button type="submit" className="ms-btn ms-btn-primary">Search</button>
                         </form>
-                        <div className="grid grid-cols-2 gap-2 sm:flex">
-                            <select
-                                value={pageSize}
-                                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                                className="ms-input sm:w-40"
-                                aria-label="Items per page"
-                            >
-                                {[12, 24, 50, 100].map((n) => (
-                                    <option key={n} value={n}>{n} per page</option>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }} className="ms-input !w-auto" aria-label="Sort files">
+                                {SORTS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                            </select>
+                            <select value={profileFilter} onChange={(e) => { setProfileFilter(e.target.value); setPage(1); }} className="ms-input !w-auto" aria-label="Filter by profile">
+                                <option value="all">All profiles</option>
+                                <option value="default">Default</option>
+                                {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                            <select value={missFilter} onChange={(e) => { setMissFilter(e.target.value); setPage(1); }} className="ms-input !w-auto" aria-label="Filter by missing server">
+                                <option value="all">Any server state</option>
+                                {[...new Set([...activeIds, ...profiles.flatMap((p) => p.servers)])].filter((id) => !PDLINK_SERVERS.includes(id) || id === activeIds.find((x) => PDLINK_SERVERS.includes(x))).map((id) => (
+                                    <option key={id} value={id}>Missing on {id === 'vidshared' ? 'VidShared' : (SERVERS[id] ? SERVERS[id].name : id)}</option>
                                 ))}
                             </select>
-                            <select
-                                value={sortBy}
-                                onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-                                className="ms-input col-span-2 sm:col-span-1 sm:w-44"
-                                aria-label="Sort files"
-                            >
-                                <option value="new">Newest first</option>
-                                <option value="old">Oldest first</option>
-                                <option value="name">Name A-Z</option>
+                            <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="ms-input !w-auto" aria-label="Items per page">
+                                {[12, 24, 50, 100, 200].map((n) => <option key={n} value={n}>{n} per page</option>)}
                             </select>
+                            <div className="fm-pop sm:ml-auto">
+                                <button type="button" className="fm-bb" aria-haspopup="dialog" aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}><IconSliders size={14} /> View</button>
+                                {viewOpen && (
+                                    <div className="fm-menu fm-view" role="dialog" aria-label="View options" style={{ top: 'calc(100% + 6px)', bottom: 'auto' }}>
+                                        <p>Layout</p>
+                                        <div className="fm-seg">
+                                            <button type="button" className={!view.dense ? 'on' : ''} onClick={() => setView((v) => ({ ...v, dense: false }))}>Comfortable</button>
+                                            <button type="button" className={view.dense ? 'on' : ''} onClick={() => setView((v) => ({ ...v, dense: true }))}>Compact list</button>
+                                        </div>
+                                        <p>Show on each file</p>
+                                        {[['quality', 'Quality badge'], ['size', 'Size'], ['date', 'Date'], ['dots', 'Server dots'], ['folder', 'Folder'], ['id', 'File ID']].map(([k, label]) => (
+                                            <label key={k}><input type="checkbox" className="ms-check !w-4 !h-4" checked={!!view[k]} onChange={() => setView((v) => ({ ...v, [k]: !v[k] }))} /> {label}</label>
+                                        ))}
+                                        <button type="button" className="fm-reset" onClick={() => setView(VIEW_DEFAULT)}>Reset view</button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -521,10 +616,10 @@ export default function FileManagerPage() {
                                 const dots = dotsOf(file);
                                 const isOpen = expanded.has(file.id);
                                 return (
-                                    <div key={file.id} className={`fm-row ${selected.has(file.id) ? 'is-sel' : ''}`}>
+                                    <div key={file.id} className={`fm-row ${view.dense ? 'dense' : ''} ${selected.has(file.id) ? 'is-sel' : ''}`}>
                                         <div className="fm-top">
-                                            <input type="checkbox" className="ms-check" checked={selected.has(file.id)} onChange={() => toggleSelect(file.id)} aria-label={`Select ${file.name}`} />
-                                            <span className="fm-ico"><IconFilm size={17} />{file.quality ? <i>{String(file.quality).split(/[ ,/]/)[0].slice(0, 6)}</i> : null}</span>
+                                            <input type="checkbox" className="ms-check" checked={selected.has(file.id)} onClick={(e) => toggleSelect(file.id, e.shiftKey)} onChange={() => {}} aria-label={`Select ${file.name}`} />
+                                            <span className="fm-ico"><IconFilm size={17} />{view.quality && file.quality ? <i>{String(file.quality).split(/[ ,/]/)[0].slice(0, 6)}</i> : null}</span>
                                             <div className="fm-body">
                                                 {editingFileId === file.id ? (
                                                     <div className="flex flex-col sm:flex-row gap-2">
@@ -547,13 +642,14 @@ export default function FileManagerPage() {
                                                 )}
                                                 <div className="fm-meta">
                                                     <span className={`fm-st ${st}`} title={missing.length ? `Missing: ${missing.join(', ')}` : ''}>{st}</span>
-                                                    {file.size && <span>{file.size}</span>}
-                                                    {file.date && <span>{file.date}</span>}
-                                                    <span className="fm-dots" title={dots.map((d) => `${d.name}: ${d.ok ? 'ok' : 'missing'}`).join('\n')} aria-label={`${dots.filter((d) => d.ok).length} of ${dots.length} servers`}>
+                                                    {view.size && file.size && <span>{file.size}</span>}
+                                                    {view.date && (file.created_at || file.date) && <span title={file.created_at || ''}>{fmtWhen(file)}</span>}
+                                                    {view.dots && <span className="fm-dots" title={dots.map((d) => `${d.name}: ${d.ok ? 'ok' : 'missing'}`).join('\n')} aria-label={`${dots.filter((d) => d.ok).length} of ${dots.length} servers`}>
                                                         {dots.slice(0, 16).map((d, i) => <i key={i} className={d.ok ? 'ok' : 'no'} />)}
                                                         <b>{dots.filter((d) => d.ok).length}/{dots.length}</b>
-                                                    </span>
-                                                    {fm.map[file.id] && <span className="fm-fold"><IconFolder size={11} /> {fm.folders.find((x) => x.id === fm.map[file.id])?.name}</span>}
+                                                    </span>}
+                                                    {view.id && <span className="ms-code">{file.id}</span>}
+                                                    {view.folder && fm.map[file.id] && <span className="fm-fold"><IconFolder size={11} /> {fm.folders.find((x) => x.id === fm.map[file.id])?.name}</span>}
                                                 </div>
                                             </div>
                                         </div>

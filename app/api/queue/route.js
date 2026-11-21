@@ -91,6 +91,7 @@ export async function POST(request) {
                 id, name, size: 'Pending', quality: parseQuality(name).label || '', date: new Date().toISOString().split('T')[0], status: 'Processing',
                 download_link: null, url: `${siteOrigin}/file/${id}`, embed_url: `${embedBase(siteOrigin)}/embed/${id}`,
                 original_url: it.link, user_id: userId, profile, mirrors: [],
+                created_at: new Date(Date.now() + idx).toISOString(), // one batch gets one timestamp otherwise: +1 ms each keeps the order you added them in
             });
             files.push({ id, name, size: 'Pending', status: 'Processing', existed: false, original_url: it.link, mirrors: 0, profile });
         });
