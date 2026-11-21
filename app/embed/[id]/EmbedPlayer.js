@@ -136,7 +136,7 @@ export default function EmbedPlayer({ servers, title, downloadHref, fileId, conf
     // ---------- saved preferences + auto-join from ?room=CODE ----------
     useEffect(() => {
         try {
-            const saved = localStorage.getItem(LS_SERVER);
+            const saved = config && config.defaultPlayer ? '' : localStorage.getItem(LS_SERVER); // the owner's default player wins
             const idx = servers.findIndex((s) => s.key === saved);
             if (idx > 0) setActive(idx);
             setOv(readOverrides());

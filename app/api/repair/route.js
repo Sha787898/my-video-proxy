@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { parseProfiles } from '../../utils/profiles';
 import { SERVERS, DEFAULT_ACTIVE, PDLINK_SERVERS, KEY_MAP, resolveMirrors, domainsFromSettings } from '../../utils/mirrors';
 
 // "Check & repair": looks at ONE file of the logged-in owner and says, server by server, whether its copy is really there.
@@ -85,7 +86,8 @@ export async function POST(request) {
         const fileId = typeof body.fileId === 'string' && /^[a-z0-9]{6,12}$/.test(body.fileId) ? body.fileId : null;
         if (!fileId) return NextResponse.json({ error: 'Bad request' }, { status: 400 });
 
-        const { data: file } = await supabase.from('files').select('id, name, original_url, mirrors').eq('id', fileId).eq('user_id', u.user.id).maybeSingle();
+        let { data: file, error: fe } = await supabase.from('files').select('id, name, original_url, mirrors, profile').eq('id', fileId).eq('user_id', u.user.id).maybeSingle();
+        if (fe) ({ data: file } = await supabase.from('files').select('id, name, original_url, mirrors').eq('id', fileId).eq('user_id', u.user.id).maybeSingle()); // older table without the profile column
         if (!file) return NextResponse.json({ error: 'File not found' }, { status: 404 });
 
         const { data: rows } = await supabase.from('settings').select('key, value').eq('user_id', u.user.id);
@@ -94,13 +96,18 @@ export async function POST(request) {
         const mirrors = (Array.isArray(file.mirrors) ? file.mirrors : []).filter((m) => m && m.id);
         const resolved = resolveMirrors(mirrors, domains);
 
+        // a file uploaded with a profile is only expected on that profile's servers
+        const profId = file.profile && file.profile !== 'default' ? String(file.profile) : '';
+        const prof = profId ? parseProfiles(get1('upload_profiles')).find((p) => p.id === profId) : null;
         // which servers are switched on (same rule as the upload)
-        const isOn = (id) => { const sv = get1(`${id}_active`); return sv === '' ? !!DEFAULT_ACTIVE[id] : sv === 'true'; };
+        const isOn = (id) => { if (prof) return prof.servers.includes(id); const sv = get1(`${id}_active`); return sv === '' ? !!DEFAULT_ACTIVE[id] : sv === 'true'; };
         const hasKey = (id) => !KEY_MAP[id] || !!get1(`${id}_api_key`) || PDLINK_SERVERS.includes(id);
         const vsKey = get1('vidshared_api_key') || process.env.VIDSHARED_API_KEY || '';
-        const vsOn = !!vsKey && get1('vidshared_active') !== 'false';
+        let vsOn = !!vsKey && get1('vidshared_active') !== 'false';
 
-        const wanted = Object.keys(DEFAULT_ACTIVE).filter(isOn);
+        // a file uploaded with a profile is only expected on that profile's servers
+        let wanted = Object.keys(DEFAULT_ACTIVE).filter(isOn);
+        if (prof) { wanted = prof.servers.filter((id) => id in DEFAULT_ACTIVE); vsOn = !!vsKey && prof.servers.includes('vidshared'); }
         const pdOn = wanted.filter((id) => PDLINK_SERVERS.includes(id));
         const single = wanted.filter((id) => !PDLINK_SERVERS.includes(id));
 
@@ -159,7 +166,7 @@ export async function POST(request) {
         out.sort((a, b) => (rank[a.state] ?? 5) - (rank[b.state] ?? 5));
         const counts = { ok: 0, dead: 0, missing: 0, pending: 0, nokey: 0 };
         out.forEach((r) => { counts[r.state] = (counts[r.state] || 0) + 1; });
-        return NextResponse.json({ ok: true, source, rows: out, counts });
+        return NextResponse.json({ ok: true, source, rows: out, counts, profile: prof ? prof.id : 'default' });
     } catch (e) {
         return NextResponse.json({ error: 'The check could not finish. Try again.' }, { status: 500 });
     }

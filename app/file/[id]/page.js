@@ -2,7 +2,7 @@
 
 import { use, Suspense, useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { resolveMirrors } from '../../utils/mirrors';
+import { resolveMirrors, sortByOrder } from '../../utils/mirrors';
 import { embedBase } from '../../utils/embedOrigin';
 import { parseConfig, resolvePrefs, readOverrides, saveOverrides, isLocked, themeVars, THEMES, BGS, BRANDS } from '../../utils/playerConfig';
 import { Bg3D, BrandMark } from '../../components/Bg3D';
@@ -151,6 +151,7 @@ function RepairModal({ id, onClose, onDone }) {
     const [msg, setMsg] = useState('');
     const [log, setLog] = useState([]);
     const sessRef = useRef(null);
+    const profRef = useRef('default');
     useEffect(() => {
         const k = (e) => { if (e.key === 'Escape' && phase !== 'fixing') onClose(); };
         window.addEventListener('keydown', k);
@@ -168,7 +169,7 @@ function RepairModal({ id, onClose, onDone }) {
             const res = await fetch('/api/repair', { method: 'POST', headers: headers(s), body: JSON.stringify({ fileId: id }) });
             const d = await res.json().catch(() => ({}));
             if (!res.ok || !d.rows) { setPhase('error'); setMsg(d.error || 'The check could not finish. Try again.'); return; }
-            setRows(d.rows); setSource(d.source); setPhase('ready');
+            setRows(d.rows); setSource(d.source); profRef.current = d.profile || 'default'; setPhase('ready');
         } catch (e) { setPhase('error'); setMsg('The check could not finish. Try again.'); }
     };
     useEffect(() => { runCheck(); /* eslint-disable-next-line */ }, []);
@@ -193,15 +194,15 @@ function RepairModal({ id, onClose, onDone }) {
             if (!link) { setPhase('error'); setMsg('This file has no Google Drive link saved.'); return; }
             if (only.length) {
                 say('Uploading the missing copies');
-                await post('/api/upload', { links: link, uploadType: 'gdrive', fileId: id, phase: 'main', only, force });
+                await post('/api/upload', { links: link, uploadType: 'gdrive', fileId: id, phase: 'main', profile: profRef.current, only, force });
             }
             if (todo.some((r) => r.id === 'vidara')) {
                 say('Uploading to Vidara');
-                await post('/api/upload', { links: link, uploadType: 'gdrive', fileId: id, phase: 'serial', only: ['vidara'], force: todo.find((r) => r.id === 'vidara').state === 'dead' ? ['vidara'] : [] });
+                await post('/api/upload', { links: link, uploadType: 'gdrive', fileId: id, phase: 'serial', profile: profRef.current, only: ['vidara'], force: todo.find((r) => r.id === 'vidara').state === 'dead' ? ['vidara'] : [] });
             }
             if (todo.some((r) => r.id === 'vidshared')) {
                 say('Preparing VidShared');
-                await post('/api/vidshared', { fileId: id, force: todo.find((r) => r.id === 'vidshared').state === 'dead' });
+                await post('/api/vidshared', { fileId: id, profile: profRef.current, force: todo.find((r) => r.id === 'vidshared').state === 'dead' });
             }
             say('Checking again');
             await new Promise((r) => setTimeout(r, 4000));
@@ -627,7 +628,7 @@ function FileDownloadContent({ params }) {
 
     const mirrors = resolveMirrors(file?.mirrors, file?.domains).filter((m) => m.url);
     // VidShared plays inside the player already, so only its download link is listed (no second "stream" row)
-    const listed = mirrors.filter((m) => m.id !== 'vidshared');
+    const listed = sortByOrder(mirrors.filter((m) => m.id !== 'vidshared'), cfgObj.order);
     const best = listed.find((m) => m.type === 'download') || listed.find((m) => m.type === 'stream');
     const hasPlayer = mirrors.some((m) => m.embed);
     const q = parseQuality(file?.name);

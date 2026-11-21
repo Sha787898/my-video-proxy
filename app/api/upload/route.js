@@ -114,11 +114,11 @@ export async function POST(request) {
             if (!prof) {
                 return NextResponse.json({ error: 'Upload profile not found. Open Manage Sites and check your profiles.' }, { status: 400 });
             }
-            const ids = prof.servers.filter((id) => id in DEFAULT_ACTIVE);
+            const ids = prof.servers.filter((id) => id in DEFAULT_ACTIVE || id === 'vidshared');
             if (ids.length === 0) {
                 return NextResponse.json({ error: `Profile "${prof.name}" has no servers. Pick servers for it in Manage Sites.` }, { status: 400 });
             }
-            activeServers = ids;
+            activeServers = ids.filter((id) => id in DEFAULT_ACTIVE); // VidShared has its own route (/api/vidshared)
             profileUsed = prof;
         }
 

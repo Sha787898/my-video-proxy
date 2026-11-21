@@ -46,10 +46,10 @@ function serDone(id, name) {
     if (Object.keys(cur).length) lsSet(serKey(id), cur); else lsDel(serKey(id));
 }
 
-async function vidaraTask(session, id, original) {
+async function vidaraTask(session, id, original, profile) {
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
-            const res = await fetch('/api/upload', { method: 'POST', headers: authHeaders(session), body: JSON.stringify({ links: original, uploadType: 'gdrive', phase: 'serial', fileId: id }) });
+            const res = await fetch('/api/upload', { method: 'POST', headers: authHeaders(session), body: JSON.stringify({ links: original, uploadType: 'gdrive', phase: 'serial', fileId: id, profile: profile || 'default' }) });
             let d = {};
             try { d = await res.json(); } catch (e) { /* not JSON */ }
             if (res.ok && d.skipped) return true;
@@ -61,10 +61,10 @@ async function vidaraTask(session, id, original) {
     return false;
 }
 
-async function vidsharedTask(session, id) {
+async function vidsharedTask(session, id, profile) {
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
-            const res = await fetch('/api/vidshared', { method: 'POST', headers: authHeaders(session), body: JSON.stringify({ fileId: id }) });
+            const res = await fetch('/api/vidshared', { method: 'POST', headers: authHeaders(session), body: JSON.stringify({ fileId: id, profile: profile || 'default' }) });
             let d = {};
             try { d = await res.json(); } catch (e) { /* not JSON */ }
             if (res.ok && (d.skipped || d.ok)) return true;
@@ -75,7 +75,7 @@ async function vidsharedTask(session, id) {
     return false;
 }
 
-function scheduleSerial(session, id, original, only) {
+function scheduleSerial(session, id, original, only, profile) {
     const want = only || { vidara: 1, vidshared: 1 };
     lsSet(serKey(id), { ...serGet(id), ...want });
     const go = (name, fn) => {
@@ -89,8 +89,8 @@ function scheduleSerial(session, id, original, only) {
             emit();
         });
     };
-    go('vidara', () => vidaraTask(session, id, original));
-    go('vidshared', () => vidsharedTask(session, id));
+    go('vidara', () => vidaraTask(session, id, original, profile));
+    go('vidshared', () => vidsharedTask(session, id, profile));
 }
 
 async function runJob(supabase, session, file) {
@@ -113,7 +113,7 @@ async function runJob(supabase, session, file) {
         if (data.errors && data.errors.length && !(data.files || []).length) throw new Error(data.errors[0].error);
         const done = (data.files || [])[0];
         // Vidara + VidShared continue in the background, one file at a time (the queue slot is free for the next file right away)
-        scheduleSerial(session, id, file.original_url);
+        scheduleSerial(session, id, file.original_url, undefined, file.profile);
         if (data.skipped) await supabase.from('files').update({ status: 'Active' }).eq('id', id); // only the one-at-a-time servers are on: nothing else to wait for
         if (data.skipped || (done && done.status === 'Active')) { lsDel(`ms_q_${id}`); mascotSay('cheer', `${String(file.title || file.original_url || 'A file').slice(0, 40)} is on all servers! ✅`, { force: true }); }
         else lsSet(`ms_q_${id}`, { n: queueState(id).n, at: Date.now(), err: done && done.failed && done.failed[0] ? done.failed[0].reason : '' });
@@ -138,9 +138,9 @@ async function resumeSerial(supabase, session) {
             const want = serGet(id);
             const names = Object.keys(want).filter((n) => !S.bg.has(`${n}:${id}`));
             if (!names.length) continue;
-            const { data } = await supabase.from('files').select('id, original_url').eq('id', id).eq('user_id', session.user.id).maybeSingle();
+            const { data } = await supabase.from('files').select('id, original_url, profile').eq('id', id).eq('user_id', session.user.id).maybeSingle();
             if (!data) { lsDel(k); continue; }
-            scheduleSerial(session, id, data.original_url, Object.fromEntries(names.map((n) => [n, 1])));
+            scheduleSerial(session, id, data.original_url, Object.fromEntries(names.map((n) => [n, 1])), data.profile);
         }
     } catch (e) { /* ignore */ }
 }

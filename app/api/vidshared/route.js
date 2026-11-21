@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { parseProfiles } from '../../utils/profiles';
 
 // VidShared mirror: VidShared downloads the video itself from a link we give it (POST /files/fetch), so nothing passes through Vercel.
 //   1st choice: your fast Worker link  (DL_BASE/d/<file id>/<name>   - Server B, no Drive quota)
@@ -55,11 +56,16 @@ export async function POST(request) {
         const fileId = typeof body.fileId === 'string' && /^[a-z0-9]{6,12}$/.test(body.fileId) ? body.fileId : null;
         if (!fileId) return NextResponse.json({ error: 'fileId missing' }, { status: 400 });
 
-        const { data: rows } = await supabase.from('settings').select('key, value').eq('user_id', u.user.id).in('key', ['vidshared_api_key', 'vidshared_active']);
+        const { data: rows } = await supabase.from('settings').select('key, value').eq('user_id', u.user.id).in('key', ['vidshared_api_key', 'vidshared_active', 'upload_profiles']);
         const get = (k) => ((rows || []).find((r) => r.key === k) || {}).value || '';
         const key = get('vidshared_api_key') || process.env.VIDSHARED_API_KEY || '';
         if (!key) return NextResponse.json({ skipped: true, reason: 'No VidShared API key (Manage Sites > VidShared > Add API key)' });
-        if (get('vidshared_active') === 'false') return NextResponse.json({ skipped: true, reason: 'VidShared is switched off' });
+        // an upload profile decides the servers: when it does not include VidShared, nothing is sent there
+        const profileId = typeof body.profile === 'string' ? body.profile.slice(0, 12) : '';
+        if (profileId && profileId !== 'default') {
+            const prof = parseProfiles(get('upload_profiles')).find((p) => p.id === profileId);
+            if (prof && !prof.servers.includes('vidshared')) return NextResponse.json({ skipped: true, reason: 'VidShared is not in this upload profile' });
+        } else if (get('vidshared_active') === 'false') return NextResponse.json({ skipped: true, reason: 'VidShared is switched off' });
 
         const { data: file } = await supabase.from('files').select('id, name, original_url, mirrors').eq('id', fileId).eq('user_id', u.user.id).maybeSingle();
         if (!file) return NextResponse.json({ error: 'File not found' }, { status: 404 });

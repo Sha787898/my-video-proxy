@@ -92,6 +92,21 @@ export function sanitize(obj) {
     return out;
 }
 
+// Server settings that live in the same JSON (public_file already hands it to the pages), next to defaults/locked:
+//   order         = the owner's own server order (list of server ids; the first one is shown first, number 01)
+//   defaultPlayer = server id that opens first in the player ('' = automatic)
+//   direct        = Direct (Fast) / HLS players on or off (default on)
+export function extrasOf(raw) {
+    let o = raw;
+    if (typeof raw === 'string') {
+        try { o = JSON.parse(raw); } catch (e) { o = null; }
+    }
+    const order = o && Array.isArray(o.order) ? [...new Set(o.order.filter((x) => typeof x === 'string' && /^[a-z0-9_]{2,24}$/.test(x)))].slice(0, 60) : [];
+    const defaultPlayer = o && typeof o.defaultPlayer === 'string' && /^[a-z0-9_]{2,24}$/.test(o.defaultPlayer) ? o.defaultPlayer : '';
+    const direct = !(o && o.direct === false);
+    return { order, defaultPlayer, direct };
+}
+
 // raw = JSON string or object from the database (anything else -> no admin config)
 export function parseConfig(raw) {
     let o = raw;
@@ -103,7 +118,7 @@ export function parseConfig(raw) {
     if (o && o.locked && typeof o.locked === 'object') {
         Object.keys(o.locked).forEach((k) => { if (o.locked[k] === true && (k in FACTORY) && k !== 'sb' && k !== 'customColor' && k !== 'autoSec' && k !== 'mascotChar' && k !== 'mascotTalk') locked[k] = true; });
     }
-    return { defaults, locked };
+    return { defaults, locked, ...extrasOf(o) };
 }
 
 // admin defaults, then the visitor's own choices on top (except locked settings)

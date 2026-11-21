@@ -157,3 +157,16 @@ export function resolveMirrors(list, domains = {}) {
     }
     return out;
 }
+// The owner's own server order (Manage Sites > Server order). Works on any list whose items have an `id`.
+// Listed ids come first, in that order; servers that are not in the list keep their old order after them.
+// VidShared's extra download row follows VidShared.
+export function sortByOrder(list, order) {
+    const arr = Array.isArray(list) ? list : [];
+    if (!Array.isArray(order) || !order.length) return arr;
+    const rank = (id) => {
+        const base = id === 'vidshared_dl' ? 'vidshared' : id;
+        const i = order.indexOf(base);
+        return i < 0 ? 1e6 : i;
+    };
+    return arr.map((m, i) => ({ m, i })).sort((a, b) => (rank(a.m.id) - rank(b.m.id)) || (a.i - b.i)).map((x) => x.m);
+}

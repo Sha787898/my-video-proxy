@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import Sidebar from '../components/Sidebar';
 import { IconPlay, IconActivity, IconCheck, IconLock, IconRefresh, IconInfo, IconAlert } from '../components/Icons';
 import {
-    THEMES, LOADERS, LOOKS, WAITS, BGS, BRANDS, FACTORY, SETTING_ROWS, parseConfig, resolvePrefs, themeVars,
+    THEMES, LOADERS, LOOKS, WAITS, BGS, BRANDS, FACTORY, SETTING_ROWS, parseConfig, extrasOf, resolvePrefs, themeVars,
 } from '../utils/playerConfig';
 import { MASCOTS } from '../utils/mascots';
 import { Bg3D, BrandMark } from '../components/Bg3D';
@@ -196,7 +196,9 @@ export default function PlayerSettingsPage() {
         if (!user || saving) return;
         setSaving(true);
         setMsg(null);
-        const payload = JSON.stringify({ defaults, locked });
+        // keep the server order / default player / Direct switch that Manage Sites saved in the same JSON
+        const { data: cur } = await supabase.from('settings').select('value').eq('user_id', user.id).eq('key', CONFIG_KEY).maybeSingle();
+        const payload = JSON.stringify({ defaults, locked, ...extrasOf(cur && cur.value) });
         const { error } = await supabase.from('settings').upsert({ user_id: user.id, key: CONFIG_KEY, value: payload }, { onConflict: 'user_id,key' });
         setSaving(false);
         if (error) { setMsg({ ok: false, text: `Could not save: ${error.message}` }); return; }

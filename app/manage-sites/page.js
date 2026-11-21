@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 import ProfilesEditor from '../components/ProfilesEditor';
+import { sortByOrder } from '../utils/mirrors';
+import { extrasOf } from '../utils/playerConfig';
 import { IconGear, IconUpload, IconKey, IconGlobe, IconMail, IconLink, IconCheckCircle, IconX, IconEye, IconEyeOff, IconServer, IconPlus, IconPencil } from '../components/Icons';
 import { createClient } from '@supabase/supabase-js';
 
@@ -19,6 +21,8 @@ const NODE_TYPE = {
     gcloud: 'download', pixeldrain: 'download', vikingfile: 'download', gofile: 'download', sendnow: 'download',
     mixdrop: 'download', buzzheavier: 'download', mega: 'download', filepress: 'download',
 };
+
+const CONFIG_KEY = 'player_config'; // the same JSON the player pages read (it also holds the server order, default player and Direct switch)
 
 const DEFAULT_NODES = [
     { id: 'vidmoly', name: 'Vidmoly.me', limit: 'Unlimited', status: 'ONLINE', active: true, key: '', customDomain: '' },
@@ -58,6 +62,7 @@ export default function ManageSitesPage() {
     const [inputValue, setInputValue] = useState('');
     const [saveStatus, setSaveStatus] = useState('');
     const [showSecret, setShowSecret] = useState(false);
+    const [extras, setExtras] = useState({ order: [], defaultPlayer: '', direct: true });
 
     useEffect(() => {
         async function checkAuthAndFetch() {
@@ -77,7 +82,10 @@ export default function ManageSitesPage() {
                 .eq('user_id', currentUser.id);
 
             if (!error && settingsData) {
-                setNodes(prevNodes => prevNodes.map(node => {
+                const cfgRow = settingsData.find(s => s.key === CONFIG_KEY);
+                const ex = extrasOf(cfgRow && cfgRow.value);
+                setExtras(ex);
+                setNodes(prevNodes => sortByOrder(prevNodes, ex.order).map(node => {
                     const foundKey = settingsData.find(s => s.key === `${node.id}_api_key`);
                     const foundDomain = settingsData.find(s => s.key === `${node.id}_domain`);
                     const foundActive = settingsData.find(s => s.key === `${node.id}_active`);
@@ -128,6 +136,36 @@ export default function ManageSitesPage() {
             setNodes(prev => prev.map(node => node.id === id ? { ...node, active: !nextActive } : node));
             alert('Failed to save: ' + error.message);
         }
+    };
+
+    // server order / default player / Direct switch: saved inside the player_config JSON (read first, so the player look settings are never overwritten)
+    const saveExtras = async (patch, nextNodes) => {
+        if (!user) return;
+        const next = { ...extras, ...patch };
+        setExtras(next);
+        if (nextNodes) next.order = nextNodes.map(n => n.id);
+        try {
+            const { data: cur } = await supabase.from('settings').select('value').eq('user_id', user.id).eq('key', CONFIG_KEY).maybeSingle();
+            let o = {};
+            try { o = JSON.parse((cur && cur.value) || '{}') || {}; } catch (e) { o = {}; }
+            const payload = JSON.stringify({ ...o, order: next.order, defaultPlayer: next.defaultPlayer, direct: next.direct });
+            const { error } = await supabase.from('settings').upsert({ user_id: user.id, key: CONFIG_KEY, value: payload }, { onConflict: 'user_id,key' });
+            if (error) throw error;
+            setSaveStatus('Saved. Player and download pages use it right away.');
+            setTimeout(() => setSaveStatus(''), 2500);
+        } catch (e) {
+            alert('Failed to save: ' + (e.message || 'try again'));
+        }
+    };
+
+    const moveNode = (id, dir) => {
+        const i = nodes.findIndex(n => n.id === id);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= nodes.length) return;
+        const next = [...nodes];
+        [next[i], next[j]] = [next[j], next[i]];
+        setNodes(next);
+        saveExtras({}, next);
     };
 
     const handleOpenModal = (node, type) => {
@@ -211,6 +249,47 @@ export default function ManageSitesPage() {
                         </div>
                     </section>
 
+                    <section className="ms-card p-4 sm:p-6 flex flex-col gap-4">
+                        <div className="min-w-0">
+                            <h2 className="ms-h2">Player &amp; server order</h2>
+                            <p className="text-sm ms-muted mt-1.5">
+                                The number on each server card (01, 02 ...) is its place in your list. Use the arrows on a card to move it. The embed player, the download page and the profiles all follow this order, and it is saved for you.
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label className="flex flex-col gap-1.5 text-xs ms-muted">
+                                Default player (opens first)
+                                <select
+                                    className="ms-input"
+                                    value={extras.defaultPlayer}
+                                    onChange={(e) => saveExtras({ defaultPlayer: e.target.value })}
+                                >
+                                    <option value="">Automatic (first server in your order)</option>
+                                    {extras.direct && <option value="direct">Direct (Fast)</option>}
+                                    {nodes.filter(n => (NODE_TYPE[n.id] || 'stream') === 'stream').map(n => (
+                                        <option key={n.id} value={n.id}>{n.name}</option>
+                                    ))}
+                                </select>
+                            </label>
+                            <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/30 px-3 py-2.5">
+                                <span className="min-w-0 text-xs">
+                                    <b className="block text-sm text-white">Direct (Fast) player</b>
+                                    <span className="ms-muted">Our own server player (also HLS when it exists). It hides itself when the Google Drive file is deleted.</span>
+                                </span>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={extras.direct}
+                                    aria-label="Direct (Fast) player on or off"
+                                    onClick={() => saveExtras({ direct: !extras.direct, ...(extras.direct && (extras.defaultPlayer === 'direct' || extras.defaultPlayer === 'hls') ? { defaultPlayer: '' } : {}) })}
+                                    className={`relative shrink-0 w-12 h-7 rounded-full border transition-colors cursor-pointer ${extras.direct ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-800 border-slate-700'}`}
+                                >
+                                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${extras.direct ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
                     <ProfilesEditor supabase={supabase} userId={user?.id} nodes={nodes} />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -222,9 +301,13 @@ export default function ManageSitesPage() {
                                     className={`ms-card p-4 flex flex-col gap-4 min-w-0 transition-colors ${node.active ? 'border-emerald-500/30' : 'opacity-80'}`}
                                 >
                                     <div className="flex items-start gap-3">
-                                        <span className="ms-code text-[11px] text-slate-500 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 shrink-0">
-                                            {String(index + 1).padStart(2, '0')}
-                                        </span>
+                                        <div className="flex flex-col items-center gap-1 shrink-0">
+                                            <button type="button" onClick={() => moveNode(node.id, -1)} disabled={index === 0} aria-label={`Move ${node.name} up`} className="w-6 h-5 text-[10px] leading-none rounded border border-slate-800 bg-slate-950 text-slate-400 hover:text-white disabled:opacity-25 cursor-pointer">▲</button>
+                                            <span className="ms-code text-[11px] text-slate-300 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1">
+                                                {String(index + 1).padStart(2, '0')}
+                                            </span>
+                                            <button type="button" onClick={() => moveNode(node.id, 1)} disabled={index === nodes.length - 1} aria-label={`Move ${node.name} down`} className="w-6 h-5 text-[10px] leading-none rounded border border-slate-800 bg-slate-950 text-slate-400 hover:text-white disabled:opacity-25 cursor-pointer">▼</button>
+                                        </div>
                                         <div className="min-w-0 flex-1">
                                             <h3 className="text-sm font-bold text-white truncate" title={node.name}>{node.name}</h3>
                                             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
