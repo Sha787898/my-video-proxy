@@ -8,7 +8,7 @@ import DashboardTraffic from '../components/DashboardTraffic';
 import { createClient } from '@supabase/supabase-js';
 import {
     IconDashboard, IconFolder, IconShieldCheck, IconActivity, IconLogout,
-    IconCloud, IconUpload, IconGlobe, IconLink, IconLaptop, IconChevronRight,
+    IconCloud, IconUpload, IconGlobe, IconLink, IconLaptop, IconChevronRight, IconRefresh, IconChart,
 } from '../components/Icons';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -69,6 +69,9 @@ export default function DashboardPage() {
     const [copied, setCopied] = useState('');
     const [origin, setOrigin] = useState('');
     const [nowMs, setNowMs] = useState(0); // set after mount: the build must not read the clock
+    const [tick, setTick] = useState(0);
+    const [updated, setUpdated] = useState(0);
+    const [spin, setSpin] = useState(false);
     const search = useRef(null);
 
     useEffect(() => {
@@ -98,10 +101,18 @@ export default function DashboardPage() {
             setHello(h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : h < 21 ? 'Good evening' : 'Good night');
             setOrigin(window.location.origin);
             setNowMs(Date.now());
+            setUpdated(Date.now());
             setLoading(false);
+            setSpin(false);
         })();
         return () => { dead = true; };
-    }, [router]);
+    }, [router, tick]);
+
+    // quiet auto refresh every 60 s while the tab is visible
+    useEffect(() => {
+        const t = setInterval(() => { if (!document.hidden) setTick((n) => n + 1); }, 60000);
+        return () => clearInterval(t);
+    }, []);
 
     // is the fast-download worker alive?
     useEffect(() => {
@@ -120,7 +131,7 @@ export default function DashboardPage() {
     }, []);
 
     const stats = useMemo(() => {
-        if (!nowMs) return { bytes: 0, processing: 0, series: Array(14).fill(0), week: 0, ready: 100 };
+        if (!nowMs) return { bytes: 0, processing: 0, failed: 0, series: Array(14).fill(0), week: 0, today: 0, ready: 100, heat: [], biggest: [], attention: [] };
         const bytes = files.reduce((a, f) => a + parseBytes(f.size), 0);
         const processing = files.filter((f) => /process|pending|queue/i.test(f.status || '')).length;
         const now = new Date(nowMs || 0);
@@ -129,8 +140,23 @@ export default function DashboardPage() {
         files.forEach((f) => { const raw = f.created_at || f.date; if (!raw) return; const d = new Date(raw); if (isNaN(d)) return; const k = dayKey(d); if (k in per) per[k] += 1; });
         const series = days.map((k) => per[k]);
         const week = series.slice(7).reduce((a, b) => a + b, 0);
-        const ready = files.length ? Math.round(((files.length - processing) / files.length) * 100) : 100;
-        return { bytes, processing, series, week, ready };
+        const failed = files.filter((f) => /fail|error|dead|broken/i.test(f.status || '')).length;
+        const ready = files.length ? Math.round(((files.length - processing - failed) / files.length) * 100) : 100;
+        const today = series[13];
+        // upload heat: 12 weeks, columns = weeks (Mon..Sun rows)
+        const t0 = new Date(now); t0.setHours(0, 0, 0, 0);
+        const dow = (t0.getDay() + 6) % 7;
+        const start = new Date(t0); start.setDate(start.getDate() - dow - 7 * 11);
+        const cnt = {};
+        files.forEach((f) => { const raw = f.created_at || f.date; if (!raw) return; const d = new Date(raw); if (isNaN(d)) return; const k = dayKey(d); cnt[k] = (cnt[k] || 0) + 1; });
+        const heat = [];
+        for (let w = 0; w < 12; w++) for (let r = 0; r < 7; r++) {
+            const d = new Date(start); d.setDate(d.getDate() + w * 7 + r);
+            heat.push({ k: dayKey(d), n: d > t0 ? -1 : (cnt[dayKey(d)] || 0), w, r });
+        }
+        const biggest = [...files].sort((a, b) => parseBytes(b.size) - parseBytes(a.size)).slice(0, 5);
+        const attention = files.filter((f) => /process|pending|queue|fail|error|dead|broken/i.test(f.status || '')).slice(0, 6);
+        return { bytes, processing, failed, series, week, today, ready, heat, biggest, attention };
     }, [files, nowMs]);
 
     const shown = useMemo(() => {
@@ -162,6 +188,7 @@ export default function DashboardPage() {
         );
     }
 
+    const heatMax = Math.max(1, ...stats.heat.map((h) => h.n));
     const hl = { on: ['Fast download online', '#34d399'], down: ['Worker unreachable', '#f87171'], off: ['Worker not set', '#f5b94a'], checking: ['Checking worker…', '#94a3b8'] }[health];
 
     return (
@@ -179,6 +206,10 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                         <span className="xd-health" style={{ '--c': hl[1] }}><i />{hl[0]}</span>
+                        <button type="button" onClick={() => { setSpin(true); setTick((n) => n + 1); }} className="ms-btn ms-btn-ghost ms-btn-sm" aria-label="Refresh dashboard" title={updated ? `Updated ${new Date(updated).toLocaleTimeString()}` : 'Refresh'}>
+                            <IconRefresh size={14} className={spin ? 'ms-spin' : ''} />
+                            <span className="hidden sm:inline">Refresh</span>
+                        </button>
                         <button onClick={async () => { await supabase.auth.signOut(); router.push('/'); }} className="ms-btn ms-btn-danger ms-btn-sm">
                             <IconLogout size={14} />
                             <span>Sign Out</span>
@@ -213,7 +244,64 @@ export default function DashboardPage() {
                         <div className="xd-tile ms-fade-up"><p>In processing</p><b>{stats.processing}</b><div className="xd-meter"><i className="amber" style={{ width: `${files.length ? (stats.processing / files.length) * 100 : 0}%` }} /></div><small>{stats.processing ? <Link href="/processing-files">View queue →</Link> : 'Nothing waiting'}</small></div>
                     </div>
 
-                    <DashboardTraffic supabase={supabase} userId={user?.id} />
+                    <div className="xd-two">
+                        <section className="xd-panel ms-fade-up">
+                            <div className="xd-panel-h"><h3>Today at a glance</h3><span className="xd-pill">{updated ? new Date(updated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span></div>
+                            <div className="xd-glance">
+                                <div><b>{stats.today}</b><span>uploaded today</span></div>
+                                <div><b>{stats.week}</b><span>this week</span></div>
+                                <div><b>{servers}</b><span>servers on</span></div>
+                                <div><b className={health === 'on' ? 'gr' : health === 'down' ? 'rd' : ''}>{health === 'on' ? 'OK' : health === 'down' ? 'Down' : health === 'off' ? 'Off' : '…'}</b><span>fast worker</span></div>
+                            </div>
+                            <div className="xd-cta2">
+                                <Link href="/analytics" className="xd-mini"><IconChart size={14} /> Analytics</Link>
+                                <Link href="/file-manager" className="xd-mini"><IconFolder size={14} /> Files</Link>
+                                <Link href="/manage-sites" className="xd-mini"><IconGlobe size={14} /> Servers</Link>
+                            </div>
+                        </section>
+                        <section className="xd-panel ms-fade-up">
+                            <div className="xd-panel-h"><h3>Needs attention</h3><span className={`xd-pill ${stats.attention.length ? 'warn' : ''}`}>{stats.processing + stats.failed}</span></div>
+                            {stats.attention.length === 0 ? (
+                                <p className="xd-ok">✓ All files look healthy. Nothing is waiting.</p>
+                            ) : (
+                                <ul className="xd-list">
+                                    {stats.attention.map((f) => (
+                                        <li key={f.id}>
+                                            <div className="xd-f"><b title={f.name}>{f.name || f.id}</b><span><em className="am">{f.status}</em></span></div>
+                                            <div className="xd-fa"><a href={`/file/${f.id}`} target="_blank" rel="noopener noreferrer">Open</a></div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                            {stats.attention.length > 0 && <p className="xd-hint">Open a file and use <b>Check &amp; repair</b> to fix missing links.</p>}
+                        </section>
+                    </div>
+
+                    <DashboardTraffic supabase={supabase} userId={user?.id} tick={tick} />
+
+                    <div className="xd-two">
+                        <section className="xd-panel ms-fade-up">
+                            <div className="xd-panel-h"><h3>Upload activity</h3><span className="xd-pill">12 weeks</span></div>
+                            <div className="xd-heat" role="img" aria-label="Uploads per day, last 12 weeks">
+                                {Array.from({ length: 12 }, (_, w) => (
+                                    <div key={w}>{stats.heat.filter((h) => h.w === w).map((h) => (
+                                        <i key={h.k} title={h.n < 0 ? '' : `${h.k} · ${h.n} file${h.n === 1 ? '' : 's'}`} style={{ background: h.n < 0 ? 'transparent' : h.n === 0 ? 'rgba(255,255,255,.06)' : `rgba(229,56,59,${(0.25 + 0.75 * (h.n / heatMax)).toFixed(2)})` }} />
+                                    ))}</div>
+                                ))}
+                            </div>
+                            <p className="xd-hint">Darker = more files added that day.</p>
+                        </section>
+                        <section className="xd-panel ms-fade-up">
+                            <div className="xd-panel-h"><h3>Largest files</h3><span className="xd-pill">{fmtBytes(stats.bytes)}</span></div>
+                            {stats.biggest.length === 0 ? <p className="xd-empty">No files yet.</p> : (
+                                <ul className="xd-list">
+                                    {stats.biggest.map((f) => (
+                                        <li key={f.id}><div className="xd-f"><b title={f.name}>{f.name || f.id}</b><span>{f.size || '—'}</span></div><div className="xd-fa"><a href={`/file/${f.id}`} target="_blank" rel="noopener noreferrer">Open</a></div></li>
+                                    ))}
+                                </ul>
+                            )}
+                        </section>
+                    </div>
 
                     <div className="xd-cols">
                         {/* Recent / search */}
@@ -286,6 +374,8 @@ export default function DashboardPage() {
 }
 
 const CSS = `
+.ms-app > div { min-width: 0; max-width: 100%; }
+.ms-main { min-width: 0; max-width: 100%; }
 .xd-health { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 800; color: var(--c); padding: 6px 11px; border-radius: 99px; border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); background: color-mix(in srgb, var(--c) 10%, transparent); white-space: nowrap; }
 .xd-health i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 0 var(--c); animation: xd-ping 1.8s infinite; }
 @keyframes xd-ping { 70% { box-shadow: 0 0 0 7px transparent; } }
@@ -349,5 +439,33 @@ const CSS = `
 .xd-act-i { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #ff8a8f; background: rgba(229,56,59,.12); border: 1px solid rgba(229,56,59,.3); flex-shrink: 0; transition: transform .2s; }
 .xd-act:hover .xd-act-i { transform: rotate(-6deg) scale(1.08); }
 .xd-act-c { color: #5b667a; transition: transform .2s, color .2s; } .xd-act:hover .xd-act-c { transform: translateX(3px); color: #ff8a8f; }
+
+.xd-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 900px) { .xd-two { grid-template-columns: 1fr; } }
+.xd-glance { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 480px) { .xd-glance { grid-template-columns: repeat(2, 1fr); } }
+.xd-glance div { padding: 10px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.xd-glance b { font-size: 20px; color: #fff; } .xd-glance b.gr { color: #34d399; } .xd-glance b.rd { color: #f87171; }
+.xd-glance span { font-size: 10.5px; color: #7f8ba0; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.xd-cta2 { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.xd-mini { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 14px; border-radius: 11px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: #e0e5ee; font-size: 12.5px; font-weight: 700; text-decoration: none; }
+.xd-mini:hover { background: rgba(229,56,59,.16); border-color: rgba(255,107,115,.45); }
+.xd-pill.warn { color: #fbbf24; background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.35); }
+.xd-ok { margin: 6px 0; padding: 12px; border-radius: 12px; background: rgba(52,211,153,.07); border: 1px solid rgba(52,211,153,.2); color: #8fe0c0; font-size: 12.5px; }
+.xd-hint { margin: 10px 0 0; font-size: 11.5px; color: #7f8ba0; }
+.xd-heat { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; }
+.xd-heat div { display: grid; grid-template-rows: repeat(7, 1fr); gap: 4px; }
+.xd-heat i { aspect-ratio: 1; border-radius: 4px; display: block; min-width: 0; }
+@media (max-width: 640px) {
+  .xd-btn, .xd-fa button, .xd-fa a { min-height: 40px; display: inline-flex; align-items: center; }
+  .xd-cta .xd-btn { flex: 1 1 calc(50% - 9px); justify-content: center; }
+  .xd-hero h2 { font-size: 21px; }
+  .xd-panel { padding: 13px; }
+  .xd-tile b { font-size: 22px; }
+  .xd-list li { padding: 9px; }
+  .xd-fa { width: 100%; } .xd-fa button, .xd-fa a { flex: 1; justify-content: center; }
+  .xd-act { padding: 12px; min-height: 60px; }
+}
+.xd-list, .xd-panel, .xd-tile { overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .xd-health i, .xd-tile, .xd-act, .xd-btn { animation: none; transition: none; } }
 `;
