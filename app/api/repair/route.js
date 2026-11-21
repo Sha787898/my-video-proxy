@@ -97,7 +97,8 @@ export async function POST(request) {
         const resolved = resolveMirrors(mirrors, domains);
 
         // a file uploaded with a profile is only expected on that profile's servers
-        const profId = file.profile && file.profile !== 'default' ? String(file.profile) : '';
+        const wantProf = typeof body.profile === 'string' && body.profile !== 'file' ? body.profile.slice(0, 12) : file.profile; // 'file' = the profile the file was uploaded with
+        const profId = wantProf && wantProf !== 'default' ? String(wantProf) : '';
         const prof = profId ? parseProfiles(get1('upload_profiles')).find((p) => p.id === profId) : null;
         // which servers are switched on (same rule as the upload)
         const isOn = (id) => { if (prof) return prof.servers.includes(id); const sv = get1(`${id}_active`); return sv === '' ? !!DEFAULT_ACTIVE[id] : sv === 'true'; };

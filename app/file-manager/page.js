@@ -7,13 +7,14 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
     IconFolder, IconUpload, IconSearch, IconFilm, IconChevronDown, IconChevronLeft, IconChevronRight, IconLink, IconCode,
-    IconPencil, IconWrench, IconTrash, IconCopy, IconExternal, IconAlert, IconInfo, IconActivity, IconInbox, IconCheck, IconX, IconRefresh, IconPlay,
+    IconPencil, IconWrench, IconTrash, IconCopy, IconExternal, IconAlert, IconInfo, IconActivity, IconInbox, IconCheck, IconX, IconPlay,
 } from '../components/Icons';
 import Sidebar from '../components/Sidebar';
 import { createClient } from '@supabase/supabase-js';
 import { parseProfiles, PROFILES_KEY } from '../utils/profiles';
-import { buildCopy, copyToClipboard, COPY_KINDS } from '../utils/copyFormat';
-import { resolveMirrors, domainsFromSettings, PDLINK_SERVERS, DEFAULT_ACTIVE } from '../utils/mirrors';
+import { buildCopy, copyToClipboard, COPY_KINDS, COPY_MORE } from '../utils/copyFormat';
+import RepairCenter from '../components/RepairCenter';
+import { resolveMirrors, domainsFromSettings, PDLINK_SERVERS, DEFAULT_ACTIVE, SERVERS } from '../utils/mirrors';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -42,7 +43,8 @@ export default function FileManagerPage() {
     const [domains, setDomains] = useState({});
     const [activeIds, setActiveIds] = useState([]);
     const [profiles, setProfiles] = useState([]);
-    const [repairAsk, setRepairAsk] = useState(null); // { list, profile }
+    const [repairList, setRepairList] = useState(null); // files shown in Check & repair
+    const [menu, setMenu] = useState(null); // 'copy' | 'move' | null (selection bar)
     // folders: { folders:[{id,name}], map:{ fileId: folderId } } saved in settings (no SQL needed)
     const [fm, setFm] = useState({ folders: [], map: {} });
     const [folder, setFolder] = useState(null); // null = all files, 'none' = not in a folder, or a folder id
@@ -61,7 +63,6 @@ export default function FileManagerPage() {
     const [editingFileId, setEditingFileId] = useState(null);
     const [newFileName, setNewFileName] = useState('');
 
-    const [busy, setBusy] = useState(false);
     const [notice, setNotice] = useState('');
 
     useEffect(() => {
@@ -127,6 +128,20 @@ export default function FileManagerPage() {
         return missingOf(f).length > 0 ? 'Partial' : 'Completed';
     };
 
+    const dotsOf = (f) => {
+        const ms = Array.isArray(f.mirrors) ? f.mirrors : [];
+        const present = new Set(ms.filter((m) => m && m.code).map((m) => m.id));
+        const prof = profiles.find((p) => p.id === f.profile);
+        const expected = prof ? prof.servers : activeIds;
+        const out = [];
+        let pd = false;
+        expected.forEach((id) => {
+            if (PDLINK_SERVERS.includes(id)) { if (!pd) { pd = true; out.push({ name: 'PDLink', ok: present.has('pdlink') }); } return; }
+            out.push({ name: id === 'vidshared' ? 'VidShared' : (SERVERS[id] ? SERVERS[id].name : id), ok: present.has(id) });
+        });
+        return out;
+    };
+
     const filtered = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
         const list = files.filter((f) => {
@@ -141,6 +156,17 @@ export default function FileManagerPage() {
         return list;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [files, searchQuery, statusFilter, activeIds, profiles, sortBy, folder, fm]);
+
+    // Esc: close the menu, then clear the selection
+    useEffect(() => {
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            if (repairList) return;
+            if (menu) setMenu(null); else setSelected((s) => (s.size ? new Set() : s));
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [menu, repairList]);
 
     // "/" jumps to the search box
     useEffect(() => {
@@ -266,49 +292,11 @@ export default function FileManagerPage() {
         flash(folderId ? `Moved ${ids.length} file(s) to "${fm.folders.find((x) => x.id === folderId)?.name}"` : `${ids.length} file(s) removed from their folder`);
     };
     const profileName = (id) => (id === 'default' || !id ? 'Default' : (profiles.find((p) => p.id === id)?.name || 'Default'));
-    const askRepair = (list) => {
-        const first = list[0] && list[0].profile;
-        setRepairAsk({ list, profile: profiles.some((p) => p.id === first) ? first : 'default' });
-    };
     const copyKind = async (kind, list, label) => {
         if (!list.length) return;
-        const ok = await copyToClipboard(buildCopy(kind, list, (f) => ({ page: pageLink(f), embed: embedLink(f) })));
+        const ok = await copyToClipboard(buildCopy(kind, list, (f) => ({ page: pageLink(f), embed: embedLink(f), servers: mirrorsOf(f).filter((m) => m.url).map((m) => ({ name: m.name, url: m.url })) })));
         flash(ok ? `${label} copied` : 'Copy failed: the browser blocked the clipboard');
     };
-    const repairFiles = async (list, profile = 'default') => {
-        const withLink = list.filter((f) => f.original_url);
-        if (withLink.length === 0) {
-            flash('These files have no saved original Drive link, so they cannot be repaired.');
-            return;
-        }
-        setBusy(true);
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${session?.access_token}`,
-                },
-                body: JSON.stringify({ links: withLink.map((f) => f.original_url).join('\n'), profile }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Repair failed');
-
-            const stillFailed = (data.files || []).reduce((n, f) => n + (f.failed?.length || 0), 0);
-            flash(
-                `Repair finished: ${data.count} file(s) checked` +
-                (stillFailed ? `, ${stillFailed} server(s) still failing or pending (see the upload page for reasons)` : ', all servers OK') +
-                (data.errors?.length ? ` | Error: ${data.errors[0].error}` : '')
-            );
-            await loadAll(user.id);
-        } catch (e) {
-            flash('Repair error: ' + e.message);
-        } finally {
-            setBusy(false);
-        }
-    };
-
     const selectedFiles = files.filter((f) => selected.has(f.id));
 
     if (loadingAuth) {
@@ -322,11 +310,88 @@ export default function FileManagerPage() {
         );
     }
 
-    const partialCount = files.filter((f) => statusOf(f) === 'Partial').length;
+    const counts = { All: files.length, Completed: 0, Partial: 0, Processing: 0, Failed: 0 };
+    files.forEach((f) => { counts[statusOf(f)] += 1; });
+    const partialCount = counts.Partial;
 
     return (
         <div className="ms-app flex">
             <Sidebar />
+
+            <style>{`
+.fm-tabs { display: flex; gap: 4px; flex-wrap: wrap; padding: 3px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
+.fm-tab { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 9px; border: 0; background: transparent; color: #9aa6b8; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.fm-tab em { font-style: normal; font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: rgba(255,255,255,.07); color: #c9d1de; }
+.fm-tab:hover { color: #fff; }
+.fm-tab.on { background: rgba(59,130,246,.2); color: #fff; box-shadow: inset 0 0 0 1px rgba(96,165,250,.4); }
+.fm-tab.warn em { background: rgba(245,158,11,.2); color: #fcd34d; }
+.fm-tab.bad em { background: rgba(239,68,68,.2); color: #fca5a5; }
+.fm-link { background: none; border: 0; color: #60a5fa; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-family: inherit; padding: 0; }
+.fm-link.warn { color: #fcd34d; }
+.fm-link:hover { text-decoration: underline; }
+.fm-row { border-radius: 14px; border: 1px solid rgba(255,255,255,.08); background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; transition: border-color .15s, background .15s; }
+.fm-row:hover { border-color: rgba(255,255,255,.16); }
+.fm-row.is-sel { border-color: rgba(96,165,250,.55); background: rgba(59,130,246,.07); }
+.fm-top { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.fm-top .ms-check { margin-top: 9px; }
+.fm-ico { position: relative; width: 36px; height: 36px; flex-shrink: 0; border-radius: 11px; background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.25); color: #60a5fa; display: flex; align-items: center; justify-content: center; }
+.fm-ico i { position: absolute; right: -5px; bottom: -6px; font-style: normal; font-size: 8.5px; font-weight: 800; letter-spacing: .02em; padding: 1px 4px; border-radius: 5px; background: #0b1220; border: 1px solid rgba(255,255,255,.16); color: #c9d1de; }
+.fm-body { min-width: 0; flex: 1; }
+.fm-name { margin: 0; font-size: 13.5px; font-weight: 600; color: #fff; line-height: 1.35; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fm-meta { margin-top: 5px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 11px; color: #8e9bb0; }
+.fm-st { font-weight: 700; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; background: rgba(255,255,255,.07); color: #c9d1de; }
+.fm-st.Completed { background: rgba(34,197,94,.15); color: #86efac; }
+.fm-st.Partial { background: rgba(245,158,11,.16); color: #fcd34d; }
+.fm-st.Processing { background: rgba(59,130,246,.18); color: #93c5fd; }
+.fm-st.Failed { background: rgba(239,68,68,.16); color: #fca5a5; }
+.fm-dots { display: inline-flex; align-items: center; gap: 3px; }
+.fm-dots i { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+.fm-dots i.no { background: transparent; box-shadow: inset 0 0 0 1.5px #f59e0b; }
+.fm-dots b { margin-left: 4px; font-weight: 600; color: #aab4c5; font-size: 10.5px; }
+.fm-fold { display: inline-flex; align-items: center; gap: 4px; }
+.fm-acts { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 46px; }
+.fm-ib { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 9px; border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.03); color: #aab4c5; cursor: pointer; text-decoration: none; padding: 0; font-family: inherit; transition: background .15s, color .15s, border-color .15s; flex-shrink: 0; }
+.fm-ib:hover { background: rgba(255,255,255,.1); color: #fff; }
+.fm-ib:disabled { opacity: .35; cursor: not-allowed; }
+.fm-ib.sm { width: 26px; height: 26px; border-radius: 8px; }
+.fm-ib.warn { color: #fcd34d; border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.1); }
+.fm-ib.bad:hover { color: #fca5a5; border-color: rgba(239,68,68,.45); background: rgba(239,68,68,.12); }
+@media (min-width: 900px) {
+  .fm-row { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .fm-top { flex: 1; }
+  .fm-acts { padding-left: 0; flex-wrap: nowrap; }
+  .fm-more { flex-basis: 100%; }
+}
+.fm-more { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.07); width: 100%; }
+.fm-chip { height: 26px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: #c9d1de; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.fm-chip:hover { background: rgba(255,255,255,.1); color: #fff; }
+.fm-chip.static { cursor: default; background: transparent; }
+.fm-sel { height: 26px; padding: 0 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,.1); background: #0b1220; color: #c9d1de; font-size: 11.5px; font-family: inherit; }
+.fm-field { display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.09); background: rgba(0,0,0,.25); border-radius: 10px; padding: 3px 4px 3px 10px; min-width: 0; }
+.fm-field span { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #67748a; white-space: nowrap; }
+.fm-field input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: #e6e9ef; font-size: 12px; font-family: ui-monospace, monospace; height: 28px; }
+.fm-srv { display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 10px; padding: 5px 6px 5px 10px; }
+.fm-srv .n { margin: 0; font-size: 12.5px; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-srv .h { margin: 0; font-size: 10.5px; color: #7d8aa0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-kind { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(245,158,11,.14); color: #fcd34d; }
+.fm-kind.s { background: rgba(59,130,246,.16); color: #93c5fd; }
+.fm-bar { position: sticky; bottom: 12px; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 14px; border-radius: 14px; border: 1px solid rgba(96,165,250,.4); background: rgba(10,15,26,.92); backdrop-filter: blur(14px); box-shadow: 0 14px 40px rgba(0,0,0,.55); }
+.fm-bar-n { font-size: 12px; color: #aab4c5; }
+.fm-bar-n b { color: #fff; font-size: 13px; }
+.fm-bar-acts { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.fm-pop { position: relative; }
+.fm-bb { height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border-radius: 9px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05); color: #d5dbe6; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.fm-bb:hover { background: rgba(255,255,255,.12); color: #fff; }
+.fm-bb:disabled { opacity: .4; cursor: not-allowed; }
+.fm-bb.pri { background: rgba(59,130,246,.22); border-color: rgba(96,165,250,.5); color: #fff; }
+.fm-bb.bad { color: #fca5a5; border-color: rgba(239,68,68,.35); }
+.fm-bb.bad:hover { background: rgba(239,68,68,.16); }
+.fm-bb.ico { width: 30px; padding: 0; justify-content: center; }
+.fm-menu { position: absolute; bottom: calc(100% + 6px); right: 0; min-width: 190px; max-height: 50vh; overflow: auto; padding: 4px; border-radius: 12px; background: #0e1626; border: 1px solid rgba(255,255,255,.14); box-shadow: 0 16px 40px rgba(0,0,0,.6); display: flex; flex-direction: column; z-index: 30; }
+.fm-menu button { text-align: left; padding: 7px 10px; border-radius: 8px; border: 0; background: transparent; color: #d5dbe6; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+.fm-menu button:hover { background: rgba(255,255,255,.09); color: #fff; }
+@media (max-width: 560px) { .fm-bar { padding: 6px; } .fm-bar-n { width: 100%; padding-left: 6px; } .fm-bb { padding: 0 9px; } }
+            `}</style>
 
             <div className="flex-1 flex flex-col min-w-0">
                 <header className="ms-topbar">
@@ -396,18 +461,6 @@ export default function FileManagerPage() {
                         </form>
                         <div className="grid grid-cols-2 gap-2 sm:flex">
                             <select
-                                value={statusFilter}
-                                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-                                className="ms-input sm:w-44"
-                                aria-label="Filter by status"
-                            >
-                                <option>All</option>
-                                <option>Completed</option>
-                                <option>Partial</option>
-                                <option>Processing</option>
-                                <option>Failed</option>
-                            </select>
-                            <select
                                 value={pageSize}
                                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
                                 className="ms-input sm:w-40"
@@ -430,29 +483,31 @@ export default function FileManagerPage() {
                         </div>
                     </div>
 
-                    {/* Summary row */}
-                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-1 text-xs ms-muted">
-                        <label className="flex items-center gap-2.5 cursor-pointer select-none min-h-[32px]">
-                            <input type="checkbox" className="ms-check" checked={allVisibleSelected} onChange={toggleSelectAll} />
-                            <span>Select all on this page</span>
-                        </label>
-                        <div className="flex flex-wrap items-center gap-3">
-                            <span><b className="text-white">{filtered.length}</b> file{filtered.length === 1 ? '' : 's'}</span>
-                            {partialCount > 0 && statusFilter !== 'Partial' && (
-                                <button
-                                    type="button"
-                                    onClick={() => { setStatusFilter('Partial'); setPage(1); }}
-                                    className="ms-badge ms-badge-amber cursor-pointer"
-                                >
-                                    <IconAlert size={12} /> {partialCount} partial
+                    {/* Status tabs + selection helpers */}
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-0.5">
+                        <div className="fm-tabs" role="tablist" aria-label="Filter by status">
+                            {['All', 'Completed', 'Partial', 'Processing', 'Failed'].map((s) => (
+                                <button key={s} type="button" role="tab" aria-selected={statusFilter === s} onClick={() => { setStatusFilter(s); setPage(1); }} className={`fm-tab ${statusFilter === s ? 'on' : ''} ${s === 'Partial' && counts.Partial ? 'warn' : ''} ${s === 'Failed' && counts.Failed ? 'bad' : ''}`}>
+                                    {s}<em>{counts[s]}</em>
                                 </button>
+                            ))}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs ms-muted">
+                            <label className="flex items-center gap-2 cursor-pointer select-none min-h-[28px]">
+                                <input type="checkbox" className="ms-check !w-4 !h-4" checked={allVisibleSelected} onChange={toggleSelectAll} />
+                                <span>Select page</span>
+                            </label>
+                            {allVisibleSelected && filtered.length > visible.length && selected.size < filtered.length && (
+                                <button type="button" onClick={() => setSelected(new Set(filtered.map((f) => f.id)))} className="fm-link">Select all {filtered.length}</button>
                             )}
-                            <span>Page {currentPage} / {totalPages}</span>
+                            {partialCount > 0 && (
+                                <button type="button" onClick={() => setRepairList(files.filter((f) => statusOf(f) === 'Partial' && f.original_url))} className="fm-link warn"><IconWrench size={12} /> Check {partialCount} partial</button>
+                            )}
+                            <span className="tabular-nums">{filtered.length} file{filtered.length === 1 ? '' : 's'} · page {currentPage}/{totalPages}</span>
                         </div>
                     </div>
-
                     {/* List */}
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                         {visible.length === 0 ? (
                             <div className="ms-card py-16 px-4 text-center">
                                 <IconInbox size={34} className="mx-auto text-slate-600" />
@@ -463,24 +518,14 @@ export default function FileManagerPage() {
                                 const st = statusOf(file);
                                 const missing = missingOf(file);
                                 const ms = mirrorsOf(file);
+                                const dots = dotsOf(file);
                                 const isOpen = expanded.has(file.id);
                                 return (
-                                    <div
-                                        key={file.id}
-                                        className={`ms-card p-3 sm:p-4 transition-colors ${selected.has(file.id) ? '!border-blue-400/50' : ''}`}
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <input
-                                                type="checkbox"
-                                                className="ms-check mt-2.5"
-                                                checked={selected.has(file.id)}
-                                                onChange={() => toggleSelect(file.id)}
-                                                aria-label={`Select ${file.name}`}
-                                            />
-                                            <span className="w-10 h-10 shrink-0 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-400 flex items-center justify-center">
-                                                <IconFilm size={18} />
-                                            </span>
-                                            <div className="min-w-0 flex-1">
+                                    <div key={file.id} className={`fm-row ${selected.has(file.id) ? 'is-sel' : ''}`}>
+                                        <div className="fm-top">
+                                            <input type="checkbox" className="ms-check" checked={selected.has(file.id)} onChange={() => toggleSelect(file.id)} aria-label={`Select ${file.name}`} />
+                                            <span className="fm-ico"><IconFilm size={17} />{file.quality ? <i>{String(file.quality).split(/[ ,/]/)[0].slice(0, 6)}</i> : null}</span>
+                                            <div className="fm-body">
                                                 {editingFileId === file.id ? (
                                                     <div className="flex flex-col sm:flex-row gap-2">
                                                         <input
@@ -498,120 +543,87 @@ export default function FileManagerPage() {
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <h3 className="text-sm font-semibold text-white leading-snug break-words" title={file.name}>{file.name}</h3>
+                                                    <h3 className="fm-name" title={file.name}>{file.name}</h3>
                                                 )}
-                                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                                    <span className={`ms-badge ${STATUS_BADGE[st]}`} title={missing.length ? `Missing: ${missing.join(', ')}` : ''}>
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-current" /> {st}
+                                                <div className="fm-meta">
+                                                    <span className={`fm-st ${st}`} title={missing.length ? `Missing: ${missing.join(', ')}` : ''}>{st}</span>
+                                                    {file.size && <span>{file.size}</span>}
+                                                    {file.date && <span>{file.date}</span>}
+                                                    <span className="fm-dots" title={dots.map((d) => `${d.name}: ${d.ok ? 'ok' : 'missing'}`).join('\n')} aria-label={`${dots.filter((d) => d.ok).length} of ${dots.length} servers`}>
+                                                        {dots.slice(0, 16).map((d, i) => <i key={i} className={d.ok ? 'ok' : 'no'} />)}
+                                                        <b>{dots.filter((d) => d.ok).length}/{dots.length}</b>
                                                     </span>
-                                                    {file.size && <span className="ms-badge">{file.size}</span>}
-                                                    {file.date && <span className="ms-badge">{file.date}</span>}
-                                                    <span className="ms-badge">{ms.length} server{ms.length === 1 ? '' : 's'}</span>
-                                                    <span className="ms-badge ms-code">ID {file.id}</span>
+                                                    {fm.map[file.id] && <span className="fm-fold"><IconFolder size={11} /> {fm.folders.find((x) => x.id === fm.map[file.id])?.name}</span>}
                                                 </div>
                                             </div>
                                         </div>
-
-                                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                                            <button type="button" onClick={() => toggleExpand(file.id)} title="Server links" aria-expanded={isOpen} className="ms-btn ms-btn-ghost ms-btn-icon">
-                                                <IconChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                                            </button>
-                                            <button type="button" onClick={() => copyText(pageLink(file), 'Download page link copied')} title="Copy file (download page) link" className="ms-btn ms-btn-ghost ms-btn-icon">
-                                                <IconLink size={16} />
-                                            </button>
-                                            <button type="button" onClick={() => copyText(embedLink(file), 'Embed link copied')} title="Copy embed link" className="ms-btn ms-btn-ghost ms-btn-icon">
-                                                <IconPlay size={16} />
-                                            </button>
-                                            <button type="button" onClick={() => copyText(iframeCode(file), 'Embed code copied')} title="Copy embed iframe code" className="ms-btn ms-btn-ghost ms-btn-icon">
-                                                <IconCode size={16} />
-                                            </button>
-                                            <button type="button" onClick={() => { setEditingFileId(file.id); setNewFileName(file.name || ''); }} title="Rename" className="ms-btn ms-btn-ghost ms-btn-icon">
-                                                <IconPencil size={16} />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                disabled={busy}
-                                                onClick={() => askRepair([file])}
-                                                title={missing.length ? `Repair: ${missing.join(', ')}` : 'Re-check servers'}
-                                                className={`ms-btn ms-btn-icon ${missing.length ? 'ms-btn-primary' : 'ms-btn-ghost'}`}
-                                            >
-                                                <IconWrench size={16} />
-                                            </button>
-                                            <button type="button" onClick={() => deleteFiles([file.id])} title="Delete" className="ms-btn ms-btn-danger ms-btn-icon">
-                                                <IconTrash size={16} />
-                                            </button>
+                                        <div className="fm-acts">
+                                            <button type="button" onClick={() => toggleExpand(file.id)} title="Server links" aria-expanded={isOpen} className="fm-ib"><IconChevronDown size={15} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} /></button>
+                                            <button type="button" onClick={() => copyText(pageLink(file), 'Download page link copied')} title="Copy download page link" className="fm-ib"><IconLink size={15} /></button>
+                                            <button type="button" onClick={() => copyText(embedLink(file), 'Embed link copied')} title="Copy embed link" className="fm-ib"><IconPlay size={15} /></button>
+                                            <button type="button" onClick={() => copyText(iframeCode(file), 'Embed code copied')} title="Copy iframe code" className="fm-ib"><IconCode size={15} /></button>
+                                            <a href={pageLink(file)} target="_blank" rel="noopener noreferrer" title="Open download page" aria-label="Open download page" className="fm-ib"><IconExternal size={15} /></a>
+                                            <button type="button" onClick={() => { setEditingFileId(file.id); setNewFileName(file.name || ''); }} title="Rename" className="fm-ib"><IconPencil size={15} /></button>
+                                            <button type="button" disabled={!file.original_url} onClick={() => setRepairList([file])} title={missing.length ? `Check & repair (${missing.length} missing)` : 'Check & repair'} className={`fm-ib ${missing.length ? 'warn' : ''}`}><IconWrench size={15} /></button>
+                                            <button type="button" onClick={() => deleteFiles([file.id])} title="Delete" className="fm-ib bad"><IconTrash size={15} /></button>
                                         </div>
 
                                         {isOpen && (
-                                            <div className="mt-4 pt-4 border-t border-white/10 space-y-3 ms-fade-up">
-                                                <div className="flex flex-wrap items-center gap-2">
+                                            <div className="fm-more ms-fade-up">
+                                                <div className="flex flex-wrap items-center gap-1.5">
                                                     <span className="ms-label !mb-0">Copy</span>
                                                     {COPY_KINDS.map(([k, label]) => (
-                                                        <button key={k} type="button" onClick={() => copyKind(k, [file], label)} className={`ms-btn ms-btn-sm ${k === 'all' ? 'ms-btn-primary' : 'ms-btn-ghost'}`}>
-                                                            <IconCopy size={13} /> {label}
-                                                        </button>
+                                                        <button key={k} type="button" onClick={() => copyKind(k, [file], label)} className="fm-chip">{label}</button>
                                                     ))}
-                                                    <span className="ms-badge ml-auto">Profile: {profileName(file.profile)}</span>
-                                                    <select value={fm.map[file.id] || ''} onChange={(e) => moveFiles([file.id], e.target.value)} aria-label="Folder" className="ms-input !w-auto !min-h-[34px] !text-xs">
+                                                    <select value="" onChange={(e) => { const k = e.target.value; if (k) copyKind(k, [file], COPY_MORE.find((x) => x[0] === k)[1]); }} aria-label="More copy formats" className="fm-sel">
+                                                        <option value="">More...</option>
+                                                        {COPY_MORE.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                                                    </select>
+                                                    <span className="fm-chip static ml-auto">Profile: {profileName(file.profile)}</span>
+                                                    <select value={fm.map[file.id] || ''} onChange={(e) => moveFiles([file.id], e.target.value)} aria-label="Folder" className="fm-sel">
                                                         <option value="">No folder</option>
                                                         {fm.folders.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                                                     </select>
                                                 </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    <div>
-                                                        <span className="ms-label">Download page</span>
-                                                        <div className="flex gap-2">
-                                                            <input readOnly value={pageLink(file)} className="ms-input ms-code" onFocus={(e) => e.target.select()} />
-                                                            <button type="button" onClick={() => copyText(pageLink(file), 'Download page link copied')} className="ms-btn ms-btn-primary ms-btn-icon shrink-0" title="Copy">
-                                                                <IconCopy size={16} />
-                                                            </button>
-                                                        </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    <div className="fm-field">
+                                                        <span>Download page</span>
+                                                        <input readOnly value={pageLink(file)} onFocus={(e) => e.target.select()} />
+                                                        <button type="button" onClick={() => copyText(pageLink(file), 'Download page link copied')} title="Copy" className="fm-ib"><IconCopy size={14} /></button>
                                                     </div>
-                                                    <div>
-                                                        <span className="ms-label">Embed player</span>
-                                                        <div className="flex gap-2">
-                                                            <input readOnly value={embedLink(file)} className="ms-input ms-code" onFocus={(e) => e.target.select()} />
-                                                            <button type="button" onClick={() => copyText(iframeCode(file), 'Embed code copied')} className="ms-btn ms-btn-primary ms-btn-icon shrink-0" title="Copy iframe code">
-                                                                <IconCode size={16} />
-                                                            </button>
-                                                        </div>
+                                                    <div className="fm-field">
+                                                        <span>Embed player</span>
+                                                        <input readOnly value={embedLink(file)} onFocus={(e) => e.target.select()} />
+                                                        <button type="button" onClick={() => copyText(embedLink(file), 'Embed link copied')} title="Copy embed link" className="fm-ib"><IconCopy size={14} /></button>
                                                     </div>
                                                 </div>
 
                                                 {ms.length > 0 ? (
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
                                                         {ms.map((m) => (
-                                                            <div key={m.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                                                            <div key={m.id} className="fm-srv">
                                                                 <div className="min-w-0 flex-1">
-                                                                    <p className="text-[13px] font-semibold text-white truncate">{m.name}</p>
-                                                                    <p className="text-[11px] ms-muted truncate">{hostOf(m.url) || m.type}</p>
+                                                                    <p className="n">{m.name}</p>
+                                                                    <p className="h">{hostOf(m.url) || m.type}</p>
                                                                 </div>
-                                                                <span className={`ms-badge ${m.embed ? 'ms-badge-blue' : ''}`}>{m.embed ? 'Stream' : 'Download'}</span>
-                                                                <a href={m.url} target="_blank" rel="noopener noreferrer" title="Open" aria-label={`Open ${m.name}`} className="ms-btn ms-btn-ghost ms-btn-sm ms-btn-icon">
-                                                                    <IconExternal size={14} />
-                                                                </a>
-                                                                <button type="button" onClick={() => copyText(m.url, `${m.name} link copied`)} title="Copy link" className="ms-btn ms-btn-ghost ms-btn-sm ms-btn-icon">
-                                                                    <IconCopy size={14} />
-                                                                </button>
-                                                                {m.embed && (
-                                                                    <button type="button" onClick={() => copyText(m.embed, `${m.name} embed link copied`)} title="Copy host embed link" className="ms-btn ms-btn-ghost ms-btn-sm ms-btn-icon">
-                                                                        <IconCode size={14} />
-                                                                    </button>
-                                                                )}
+                                                                <span className={`fm-kind ${m.embed ? 's' : ''}`}>{m.embed ? 'Stream' : 'Download'}</span>
+                                                                {m.url && <a href={m.url} target="_blank" rel="noopener noreferrer" title="Open" aria-label={`Open ${m.name}`} className="fm-ib sm"><IconExternal size={13} /></a>}
+                                                                {m.url && <button type="button" onClick={() => copyText(m.url, `${m.name} link copied`)} title="Copy link" className="fm-ib sm"><IconCopy size={13} /></button>}
+                                                                {m.embed && <button type="button" onClick={() => copyText(m.embed, `${m.name} embed link copied`)} title="Copy host embed link" className="fm-ib sm"><IconCode size={13} /></button>}
                                                             </div>
                                                         ))}
                                                     </div>
                                                 ) : (
                                                     <div className="ms-alert ms-alert-amber">
                                                         <IconAlert size={16} className="mt-0.5 shrink-0" />
-                                                        <span>No server links are saved for this file yet. Press the repair button to try again.</span>
+                                                        <span>No server links are saved for this file yet. Use Check &amp; repair.</span>
                                                     </div>
                                                 )}
 
                                                 {missing.length > 0 && (
                                                     <div className="ms-alert ms-alert-amber">
                                                         <IconAlert size={16} className="mt-0.5 shrink-0" />
-                                                        <span className="min-w-0 break-words">Missing links: {missing.join(', ')}. Repair will retry only these servers.</span>
+                                                        <span className="min-w-0 break-words">Missing: {missing.join(', ')}. Check &amp; repair uploads only these.</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -621,7 +633,6 @@ export default function FileManagerPage() {
                             })
                         )}
                     </div>
-
                     {/* Pagination */}
                     {totalPages > 1 && (
                         <div className="flex items-center justify-center gap-3 pt-2">
@@ -635,27 +646,33 @@ export default function FileManagerPage() {
                         </div>
                     )}
 
-                    {/* Selection bar: stays at the bottom of the screen while files are selected */}
+                    {/* Selection bar: slim, stays at the bottom while files are selected */}
                     {selected.size > 0 && (
-                        <div className="sticky bottom-3 z-20 ms-card p-3 flex flex-wrap items-center justify-between gap-2 !border-blue-400/40 shadow-2xl shadow-black/50 backdrop-blur-xl">
-                            <span className="text-xs font-semibold text-white px-1">{selected.size} selected</span>
-                            <div className="flex flex-wrap gap-2">
-                                <select value="" onChange={(e) => { if (e.target.value !== '__') moveFiles(selectedFiles.map((f) => f.id), e.target.value === '__none' ? '' : e.target.value); }} aria-label="Move to folder" className="ms-input !w-auto !min-h-[34px] !text-xs">
-                                    <option value="">Move to…</option>
-                                    <option value="__none">No folder</option>
-                                    {fm.folders.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-                                </select>
-                                {COPY_KINDS.map(([k, label]) => (
-                                    <button key={k} type="button" onClick={() => copyKind(k, selectedFiles, label)} className="ms-btn ms-btn-ghost ms-btn-sm">
-                                        <IconCopy size={14} /> {label}
-                                    </button>
-                                ))}
-                                <button type="button" disabled={busy} onClick={() => askRepair(selectedFiles)} className="ms-btn ms-btn-primary ms-btn-sm">
-                                    {busy ? <IconRefresh size={14} className="ms-spin" /> : <IconWrench size={14} />} {busy ? 'Repairing' : 'Repair'}
-                                </button>
-                                <button type="button" onClick={() => deleteFiles(selectedFiles.map((f) => f.id))} className="ms-btn ms-btn-danger ms-btn-sm">
-                                    <IconTrash size={14} /> Delete
-                                </button>
+                        <div className="fm-bar" role="toolbar" aria-label="Selected files">
+                            <span className="fm-bar-n"><b>{selected.size}</b> selected</span>
+                            <div className="fm-bar-acts">
+                                <div className="fm-pop">
+                                    <button type="button" className="fm-bb" aria-haspopup="menu" aria-expanded={menu === 'copy'} onClick={() => setMenu(menu === 'copy' ? null : 'copy')}><IconCopy size={14} /> Copy <IconChevronDown size={12} /></button>
+                                    {menu === 'copy' && (
+                                        <div className="fm-menu" role="menu">
+                                            {[...COPY_KINDS, ...COPY_MORE].map(([k, label]) => (
+                                                <button key={k} type="button" role="menuitem" onClick={() => { setMenu(null); copyKind(k, selectedFiles, label); }}>{label}</button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="fm-pop">
+                                    <button type="button" className="fm-bb" aria-haspopup="menu" aria-expanded={menu === 'move'} onClick={() => setMenu(menu === 'move' ? null : 'move')}><IconFolder size={14} /> Move <IconChevronDown size={12} /></button>
+                                    {menu === 'move' && (
+                                        <div className="fm-menu" role="menu">
+                                            <button type="button" role="menuitem" onClick={() => { setMenu(null); moveFiles(selectedFiles.map((f) => f.id), ''); }}>No folder</button>
+                                            {fm.folders.map((x) => <button key={x.id} type="button" role="menuitem" onClick={() => { setMenu(null); moveFiles(selectedFiles.map((f) => f.id), x.id); }}>{x.name}</button>)}
+                                        </div>
+                                    )}
+                                </div>
+                                <button type="button" className="fm-bb pri" onClick={() => { setMenu(null); setRepairList(selectedFiles.filter((f) => f.original_url)); }} disabled={!selectedFiles.some((f) => f.original_url)}><IconWrench size={14} /> Check &amp; repair</button>
+                                <button type="button" className="fm-bb bad" onClick={() => deleteFiles(selectedFiles.map((f) => f.id))}><IconTrash size={14} /> Delete</button>
+                                <button type="button" className="fm-bb ico" onClick={() => { setSelected(new Set()); setMenu(null); }} title="Clear selection (Esc)" aria-label="Clear selection"><IconX size={14} /></button>
                             </div>
                         </div>
                     )}
@@ -675,34 +692,14 @@ export default function FileManagerPage() {
                 </div>
             )}
 
-            {repairAsk && (
-                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-3" role="dialog" aria-modal="true">
-                    <div className="ms-card w-full max-w-md p-5 space-y-4 ms-fade-up">
-                        <div>
-                            <h3 className="text-sm font-bold text-white">Repair with which profile?</h3>
-                            <p className="text-xs ms-muted mt-1">{repairAsk.list.length} file(s). Only the servers of the chosen profile are retried.</p>
-                        </div>
-                        <div className="space-y-2" role="radiogroup">
-                            {[{ id: 'default', name: 'Default', servers: activeIds }, ...profiles].map((p) => (
-                                <button
-                                    key={p.id}
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={repairAsk.profile === p.id}
-                                    onClick={() => setRepairAsk({ ...repairAsk, profile: p.id })}
-                                    className={`w-full text-left rounded-xl border px-3 py-2.5 transition ${repairAsk.profile === p.id ? 'border-blue-400/70 bg-blue-500/15' : 'border-white/10 bg-black/30 hover:bg-white/[0.05]'}`}
-                                >
-                                    <span className="block text-sm font-bold text-white">{p.name} <span className="font-normal ms-muted">· {p.servers.length} server(s)</span></span>
-                                    <span className="block text-[11px] ms-muted truncate">{p.servers.join(', ') || 'none'}</span>
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex gap-3">
-                            <button type="button" onClick={() => setRepairAsk(null)} className="ms-btn ms-btn-ghost flex-1">Cancel</button>
-                            <button type="button" onClick={() => { const a = repairAsk; setRepairAsk(null); repairFiles(a.list, a.profile); }} className="ms-btn ms-btn-primary flex-1"><IconWrench size={15} /> Repair</button>
-                        </div>
-                    </div>
-                </div>
+            {repairList && (
+                <RepairCenter
+                    files={repairList}
+                    supabase={supabase}
+                    profiles={profiles}
+                    onClose={() => setRepairList(null)}
+                    onDone={() => { if (user) loadAll(user.id); }}
+                />
             )}
         </div>
     );
