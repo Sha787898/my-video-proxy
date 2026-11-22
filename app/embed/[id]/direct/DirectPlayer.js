@@ -20,7 +20,7 @@ function loadHls() {
     });
 }
 
-export default function DirectPlayer({ id, name, mode, base }) {
+export default function DirectPlayer({ id, name, mode, base, vlc = true }) {
     useEffect(() => {
         let dead = false;
         const tellParent = () => { try { window.parent.postMessage({ msPlayer: 'fail', mode, why: 'load' }, '*'); } catch (e) { /* ignore */ } };
@@ -33,10 +33,11 @@ export default function DirectPlayer({ id, name, mode, base }) {
             const url = mode === 'hls'
                 ? `${base}/hls/${encodeURIComponent(id)}/master.m3u8`
                 : `${base}/d/${encodeURIComponent(id)}/${encodeURIComponent(name || 'video.mp4')}?inline=1`;
-            window.msDirect.load(url, tellParent);
+            window.msDirect.vlc = vlc !== false;
+            window.msDirect.load(url, tellParent, mode === 'hls' ? '' : `${base}/tracks/${encodeURIComponent(id)}`);
         })();
         return () => { dead = true; try { window.msDirect && window.msDirect.stop(); } catch (e) { /* ignore */ } };
-    }, [id, name, mode, base]);
+    }, [id, name, mode, base, vlc]);
 
     return (
         <div style={{ position: 'fixed', inset: 0, background: '#000', ['--accent-color']: '#ef4444', ['--accent-rgb']: '239,68,68', fontFamily: 'system-ui, sans-serif' }}>
@@ -47,6 +48,7 @@ export default function DirectPlayer({ id, name, mode, base }) {
                 <div className="dp-load"></div>
                 <button className="dp-big" aria-label="Play"></button>
                 <div className="dp-flash l"></div><div className="dp-flash r"></div>
+                <div className="dp-sub"></div>
                 <div className="dp-toast"></div>
                 <div className="dp-stats"></div>
                 <div className="dp-note"></div>

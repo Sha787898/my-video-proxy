@@ -96,6 +96,7 @@ export function sanitize(obj) {
 //   order         = the owner's own server order (list of server ids; the first one is shown first, number 01)
 //   defaultPlayer = server id that opens first in the player ('' = automatic)
 //   direct        = Direct (Fast) / HLS players on or off (default on)
+//   vlcPlayer / vlcPage = the "Open in VLC" button in the player menu / on the download page (default on)
 export function extrasOf(raw) {
     let o = raw;
     if (typeof raw === 'string') {
@@ -104,7 +105,9 @@ export function extrasOf(raw) {
     const order = o && Array.isArray(o.order) ? [...new Set(o.order.filter((x) => typeof x === 'string' && /^[a-z0-9_]{2,24}$/.test(x)))].slice(0, 60) : [];
     const defaultPlayer = o && typeof o.defaultPlayer === 'string' && /^[a-z0-9_]{2,24}$/.test(o.defaultPlayer) ? o.defaultPlayer : '';
     const direct = !(o && o.direct === false);
-    return { order, defaultPlayer, direct };
+    const vlcPlayer = !(o && o.vlcPlayer === false); // "Open in VLC" in the player menu (default on)
+    const vlcPage = !(o && o.vlcPage === false);     // "Play in VLC" button on the download page (default on)
+    return { order, defaultPlayer, direct, vlcPlayer, vlcPage };
 }
 
 // raw = JSON string or object from the database (anything else -> no admin config)

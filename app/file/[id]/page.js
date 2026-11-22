@@ -9,6 +9,7 @@ import { Bg3D, BrandMark } from '../../components/Bg3D';
 import { trackView } from '../../utils/trackView';
 import Mascot from '../../components/Mascot';
 import FastDownload from '../../components/FastDownload';
+import VlcButton from '../../components/VlcButton';
 import { MASCOTS } from '../../utils/mascots';
 import { parseQuality } from '../../utils/quality';
 import { parseFormat, formatAdded, timeAgo } from '../../utils/fileInfo';
@@ -259,6 +260,129 @@ function RepairModal({ id, onClose, onDone }) {
                     <button type="button" className="dl-rep-go" onClick={repair} disabled={phase === 'checking' || phase === 'fixing' || !todo.length || srcBad}>
                         {phase === 'fixing' ? 'Repairing...' : todo.length ? `Repair ${todo.length} ${todo.length === 1 ? 'server' : 'servers'}` : 'All good'}
                     </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ---------- Audio & subtitles (owner only): extra audio tracks and subtitle files the player can switch between ----------
+const TRK_KEY = (id) => `tracks:${id}`;
+function normSrc(v) {
+    v = String(v || '').trim();
+    if (!v) return '';
+    if (/drive\.google\.com|docs\.google\.com/i.test(v)) return v;
+    if (/^drive:/i.test(v)) return v;
+    if (/^[A-Za-z0-9_-]{25,}$/.test(v)) return `drive:${v}`;
+    if (/^https:\/\//i.test(v)) return v;
+    return '';
+}
+function TracksModal({ id, onClose }) {
+    const [phase, setPhase] = useState('loading'); // loading | ready | saving | error
+    const [audio, setAudio] = useState([]);
+    const [subs, setSubs] = useState([]);
+    const [kind, setKind] = useState('audio');
+    const [label, setLabel] = useState('');
+    const [lang, setLang] = useState('');
+    const [src, setSrc] = useState('');
+    const [msg, setMsg] = useState('');
+    const [ok, setOk] = useState('');
+    const uidRef = useRef('');
+    useEffect(() => {
+        const k = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', k);
+        return () => window.removeEventListener('keydown', k);
+    }, [onClose]);
+    useEffect(() => {
+        let dead = false;
+        (async () => {
+            try {
+                const c = ownerClient();
+                const { data } = await c.auth.getSession();
+                const uid = data && data.session && data.session.user.id;
+                if (!uid) { setPhase('error'); setMsg('Please log in to your dashboard first.'); return; }
+                uidRef.current = uid;
+                const { data: row } = await c.from('settings').select('value').eq('user_id', uid).eq('key', TRK_KEY(id)).maybeSingle();
+                let j = null; try { j = row && row.value ? JSON.parse(row.value) : null; } catch (e) { j = null; }
+                if (dead) return;
+                setAudio(Array.isArray(j && j.audio) ? j.audio : []); setSubs(Array.isArray(j && j.subs) ? j.subs : []);
+                setPhase('ready');
+            } catch (e) { if (!dead) { setPhase('error'); setMsg('Could not load. Try again.'); } }
+        })();
+        return () => { dead = true; };
+    }, [id]);
+
+    const add = () => {
+        setMsg(''); setOk('');
+        const l = label.trim(); const sr = normSrc(src);
+        if (!l) { setMsg('Give it a name, for example "Hindi" or "English subtitles".'); return; }
+        if (!sr) { setMsg('Paste a Google Drive link (or file ID), or a link that starts with https://'); return; }
+        const t = { label: l.slice(0, 40), lang: lang.trim().slice(0, 12), src: sr };
+        if (kind === 'audio') { if (audio.length >= 12) { setMsg('Up to 12 audio tracks.'); return; } setAudio([...audio, t]); } else { if (subs.length >= 12) { setMsg('Up to 12 subtitles.'); return; } setSubs([...subs, t]); }
+        setLabel(''); setLang(''); setSrc('');
+    };
+    const del = (k, i) => { if (k === 'audio') setAudio(audio.filter((_, n) => n !== i)); else setSubs(subs.filter((_, n) => n !== i)); setOk(''); };
+    const mv = (k, i, d) => {
+        const list = [...(k === 'audio' ? audio : subs)]; const j = i + d; if (j < 0 || j >= list.length) return;
+        [list[i], list[j]] = [list[j], list[i]]; if (k === 'audio') setAudio(list); else setSubs(list); setOk('');
+    };
+    const save = async () => {
+        setPhase('saving'); setMsg(''); setOk('');
+        try {
+            const value = JSON.stringify({ v: 1, audio, subs });
+            const { error } = await ownerClient().from('settings').upsert({ user_id: uidRef.current, key: TRK_KEY(id), value }, { onConflict: 'user_id,key' });
+            if (error) { setPhase('ready'); setMsg(error.message || 'Could not save.'); return; }
+            setPhase('ready'); setOk('Saved. The player picks it up within a minute.');
+        } catch (e) { setPhase('ready'); setMsg('Could not save. Try again.'); }
+    };
+    const Row = ({ k, t, i, n }) => (
+        <li className="dl-tr-row">
+            <span className="dl-tr-n"><b>{t.label}{t.lang ? ` (${t.lang})` : ''}</b><small>{/^drive:|drive\.google/i.test(t.src) ? 'Google Drive file' : 'Link'}</small></span>
+            <span className="dl-tr-a">
+                <button type="button" onClick={() => mv(k, i, -1)} disabled={i === 0} aria-label="Move up">▲</button>
+                <button type="button" onClick={() => mv(k, i, 1)} disabled={i === n - 1} aria-label="Move down">▼</button>
+                <button type="button" className="x" onClick={() => del(k, i)} aria-label="Remove">{Svg.cross}</button>
+            </span>
+        </li>
+    );
+    return (
+        <div className="dl-back" onClick={onClose} role="dialog" aria-modal="true" aria-label="Audio and subtitles">
+            <div className="dl-meta dl-rep" onClick={(e) => e.stopPropagation()}>
+                <div className="dl-meta-h">
+                    <span className="dl-meta-ic">{Svg.info}</span>
+                    <div className="dl-meta-t"><b>Audio &amp; subtitles</b><small>Extra tracks for the Direct player</small></div>
+                    <button type="button" className="dl-meta-x" onClick={onClose} aria-label="Close">{Svg.cross}</button>
+                </div>
+                <div className="dl-meta-b">
+                    {phase === 'loading' && <div className="dl-rep-wait"><i className="dl-rep-spin" />Loading...</div>}
+                    {phase === 'error' && <div className="dl-rep-note bad">{msg}</div>}
+                    {phase !== 'loading' && phase !== 'error' && (
+                        <>
+                            <p className="dl-tr-h">Audio tracks <small>({audio.length})</small></p>
+                            {audio.length ? <ul className="dl-tr-list">{audio.map((t, i) => <Row key={`a${i}`} k="audio" t={t} i={i} n={audio.length} />)}</ul> : <p className="dl-tr-e">None. The video&apos;s own audio plays.</p>}
+                            <p className="dl-tr-h">Subtitles <small>({subs.length})</small></p>
+                            {subs.length ? <ul className="dl-tr-list">{subs.map((t, i) => <Row key={`s${i}`} k="subs" t={t} i={i} n={subs.length} />)}</ul> : <p className="dl-tr-e">None yet.</p>}
+
+                            <p className="dl-tr-h">Add a track</p>
+                            <div className="dl-tr-form">
+                                <div className="dl-tr-seg" role="group" aria-label="Type">
+                                    <button type="button" className={kind === 'audio' ? 'on' : ''} onClick={() => setKind('audio')}>Audio</button>
+                                    <button type="button" className={kind === 'subs' ? 'on' : ''} onClick={() => setKind('subs')}>Subtitle</button>
+                                </div>
+                                <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === 'audio' ? 'Name, e.g. Hindi dub' : 'Name, e.g. English'} maxLength={40} aria-label="Name" />
+                                <input value={lang} onChange={(e) => setLang(e.target.value)} placeholder="Language code (optional) e.g. hi" maxLength={12} aria-label="Language" />
+                                <input value={src} onChange={(e) => setSrc(e.target.value)} placeholder={kind === 'audio' ? 'Google Drive link of the .m4a / .mp3 file' : 'Google Drive link of the .srt / .vtt file'} aria-label="Link" />
+                                <button type="button" className="dl-tr-add" onClick={add}>+ Add</button>
+                            </div>
+                            <p className="dl-tr-e">Make the files with <b>transcode/extract-tracks.mjs</b> (it pulls every audio and subtitle out of your video), upload them to Google Drive and paste the links. The Drive file must be shared with the Google account used by Server B, or set to &quot;Anyone with the link&quot;.</p>
+                            {msg && <div className="dl-rep-note bad">{msg}</div>}
+                            {ok && <div className="dl-rep-note ok"><span>{ok}</span></div>}
+                        </>
+                    )}
+                </div>
+                <div className="dl-meta-f">
+                    <button type="button" onClick={onClose}>Close</button>
+                    <button type="button" className="dl-rep-go" onClick={save} disabled={phase !== 'ready'}>{phase === 'saving' ? 'Saving...' : 'Save tracks'}</button>
                 </div>
             </div>
         </div>
@@ -567,6 +691,16 @@ const CSS = `
 .dl-rep-go { background: rgba(var(--ac-rgb),.2) !important; border-color: rgba(var(--ac-rgb),.5) !important; color: #fff !important; }
 .dl-meta-f button:disabled { opacity: .45; cursor: not-allowed; }
 .dl-rep-open { margin-top: 12px; width: 100%; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; border: 1px dashed rgba(var(--ac-rgb),.45); background: rgba(var(--ac-rgb),.06); color: #e6e9ef; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.dl-tr-h { margin: 14px 0 6px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #aab4c5; } .dl-tr-h small { opacity: .7; }
+.dl-tr-e { margin: 6px 0; font-size: 12px; color: #8e9bb0; line-height: 1.5; text-align: left; }
+.dl-tr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dl-tr-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 11px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); }
+.dl-tr-n { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; } .dl-tr-n b { font-size: 13px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .dl-tr-n small { font-size: 11px; color: #8e9bb0; }
+.dl-tr-a { display: flex; gap: 4px; } .dl-tr-a button { width: 34px; height: 34px; border-radius: 9px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: #d6dce8; cursor: pointer; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; } .dl-tr-a button:disabled { opacity: .35; cursor: default; } .dl-tr-a button.x:hover { background: rgba(239,68,68,.2); }
+.dl-tr-form { display: flex; flex-direction: column; gap: 8px; }
+.dl-tr-form input { height: 42px; padding: 0 12px; border-radius: 11px; border: 1px solid rgba(255,255,255,.12); background: rgba(8,12,20,.8); color: #fff; font: inherit; font-size: 13px; min-width: 0; }
+.dl-tr-seg { display: flex; gap: 4px; padding: 3px; border-radius: 11px; background: rgba(255,255,255,.05); } .dl-tr-seg button { flex: 1; height: 34px; border: 0; border-radius: 9px; background: transparent; color: #9aa6b8; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; } .dl-tr-seg button.on { background: rgba(var(--ac-rgb),.25); color: #fff; }
+.dl-tr-add { height: 42px; border-radius: 11px; border: 1px dashed rgba(var(--ac-rgb),.5); background: rgba(var(--ac-rgb),.08); color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
 .dl-rep-open:hover { background: rgba(var(--ac-rgb),.14); }
 .dl-rep-open svg { color: var(--ac-hi, #ff8a8f); }
 @media (max-width: 480px) { .dl-meta-g { grid-template-columns: 1fr; } .dl-meta { border-radius: 18px; } }
@@ -585,6 +719,7 @@ function FileDownloadContent({ params }) {
     const [copied, setCopied] = useState(false);
     const [metaOpen, setMetaOpen] = useState(false);
     const [repOpen, setRepOpen] = useState(false);
+    const [trkOpen, setTrkOpen] = useState(false);
     const [isOwner, setIsOwner] = useState(false);
     useEffect(() => {
         let dead = false;
@@ -766,6 +901,7 @@ function FileDownloadContent({ params }) {
                         ))}
 
                         <FastDownload id={id} />
+                        {cfgObj.vlcPage && file && <VlcButton id={id} name={file.name} />}
 
                         {best && (
                             <button type="button" className="dl-main" onClick={() => setSel(best)}>
@@ -802,6 +938,7 @@ function FileDownloadContent({ params }) {
                             <div className="dl-empty">No download servers are available for this file yet.</div>
                         )}
                         {isOwner && <button type="button" className="dl-rep-open" onClick={() => setRepOpen(true)}>{Svg.wrench}Check &amp; repair files</button>}
+                        {isOwner && <button type="button" className="dl-rep-open" onClick={() => setTrkOpen(true)}>{Svg.info}Audio &amp; subtitles</button>}
 
                         </aside>
                         </div>
@@ -815,6 +952,7 @@ function FileDownloadContent({ params }) {
 
             {sel && <SecureModal mirror={sel} onClose={() => setSel(null)} />}
             {repOpen && <RepairModal id={id} onClose={() => setRepOpen(false)} onDone={() => { try { window.dispatchEvent(new Event('ms-refresh')); } catch (e) { /* ignore */ } }} />}
+            {trkOpen && <TracksModal id={id} onClose={() => setTrkOpen(false)} />}
             {metaOpen && file && <MetaModal file={file} id={id} rows={metaRows} onClose={() => setMetaOpen(false)} />}
             {file && <Mascot config={file.config ?? null} page="download" />}
         </div>

@@ -39,6 +39,12 @@ export const DIRECT_CSS = String.raw`.dp { position:absolute; inset:0; backgroun
 .dp.wait .dp-load { display:block; }
 .dp-toast { position:absolute; top:14px; left:50%; transform:translateX(-50%); background:rgba(15,23,42,.94); border:1px solid rgba(255,255,255,.12); color:#e2e8f0; font-size:12px; font-weight:600; padding:7px 14px; border-radius:999px; z-index:8; opacity:0; transition:opacity .25s; pointer-events:none; max-width:90%; text-align:center; }
 .dp-toast.show { opacity:1; }
+.dp-sub { position:absolute; left:0; right:0; bottom:calc(5% + env(safe-area-inset-bottom)); z-index:2; text-align:center; pointer-events:none; padding:0 6%; transition:bottom .2s; }
+.dp.ui .dp-sub, .dp.paused .dp-sub { bottom:calc(86px + env(safe-area-inset-bottom)); }
+.dp-sub span { display:inline-block; max-width:100%; background:rgba(0,0,0,.72); color:#fff; font-size:clamp(14px,2.6vw,26px); line-height:1.35; font-weight:600; padding:3px 10px; border-radius:6px; white-space:pre-line; text-shadow:0 1px 2px #000; }
+.dp-sub:empty { display:none; }
+.dp-menu .dp-vlc { display:flex; align-items:center; gap:8px; } .dp-menu .dp-vlc svg { width:16px; height:16px; flex-shrink:0; }
+.dp-menu h4 small { text-transform:none; letter-spacing:0; font-weight:600; opacity:.7; }
 .dp-menu { position:absolute; right:12px; bottom:64px; background:rgba(10,15,29,.97); border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:6px; min-width:190px; max-height:70%; overflow:auto; z-index:7; display:none; box-shadow:0 16px 40px rgba(0,0,0,.8); }
 .dp-menu.open { display:block; }
 .dp-menu h4 { font-size:10px; text-transform:uppercase; color:#64748b; padding:8px 10px 4px; letter-spacing:.6px; margin:0; font-weight:700; }
@@ -89,6 +95,7 @@ export const DIRECT_JS = String.raw`(function () {
     mute: '<svg viewBox="0 0 24 24"><path d="M3 10v4h4l5 4V6L7 10H3zm13.6 2 2.4-2.4-1.4-1.4-2.4 2.4-2.4-2.4-1.4 1.4 2.4 2.4-2.4 2.4 1.4 1.4 2.4-2.4 2.4 2.4 1.4-1.4z"/></svg>',
     cog: '<svg viewBox="0 0 24 24"><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.2h-4l-.4 2.7c-.6.2-1.2.6-1.7 1l-2.5-1-2 3.5L6.6 11a7.7 7.7 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.8 1.7 1l.4 2.7h4l.4-2.7c.6-.2 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>',
     pip: '<svg viewBox="0 0 24 24"><path d="M19 7h-8v6h8V7zm2-4H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H3V5h18v14z"/></svg>',
+    vlc: '<svg viewBox="0 0 24 24"><path fill="#ff8800" d="M12 2.5c-.7 0-1.2.4-1.5 1.1L6.2 17.2h11.6L13.5 3.6c-.3-.7-.8-1.1-1.5-1.1z"/><path fill="#fff" d="M9.3 11.4h5.4l.9 2.9H8.4zM7.4 15.2h9.2l.8 2.4H6.6z"/><path fill="#ff8800" d="M4.5 18.4c0-.5.4-.9.9-.9h13.2c.5 0 .9.4.9.9v.9c0 1.1-.9 2-2 2H6.5c-1.1 0-2-.9-2-2z"/></svg>',
     fs: '<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>',
     fsx: '<svg viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>'
   };
@@ -101,11 +108,13 @@ export const DIRECT_JS = String.raw`(function () {
   var vol = $('.dp-vol');
   var key = 'ms_pos_' + ID;
   var hideT, toastT, drag = false, started = false, wantFallback = null, mediaTry = 0, hls = null, cues = [], base = '', isHls = false, audioChecked = false, lastSave = 0;
+  // extra audio (a second <audio> kept in sync with the video) and subtitles (drawn by us) made by the owner
+  var curUrl = '', side = { audio: [], subs: [] }, sa = null, saIdx = -1, dub = false, uMute = false, subIdx = -1, subCues = [], subOff = 0, subT = null, sideUrl = '';
 
   function fmt(t) { if (!isFinite(t)) return '0:00'; t = Math.max(0, Math.floor(t)); var h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (s < 10 ? '0' : '') + s; }
   function say(msg, ms) { toast.textContent = msg; toast.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { toast.classList.remove('show'); }, ms || 2200); }
   function ui() { box.classList.add('ui'); box.classList.remove('hide'); clearTimeout(hideT); if (!v.paused && !menu.classList.contains('open')) hideT = setTimeout(function () { box.classList.remove('ui'); box.classList.add('hide'); }, 3000); }
-  function toggle() { if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else v.pause(); }
+  function toggle() { if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); if (dub && sa) { try { saFollow(true); } catch (e) {} saPlay(); } } else v.pause(); }
   function skip(d) { if (!v.duration) return; v.currentTime = Math.min(Math.max(0, v.currentTime + d), v.duration); }
   function store(k, val) { try { localStorage.setItem(k, String(val)); } catch (e) {} }
   function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -127,14 +136,97 @@ export const DIRECT_JS = String.raw`(function () {
   }
   function destroyHls() { if (hls) { try { hls.destroy(); } catch (e) {} hls = null; } cues = []; th.style.display = 'none'; }
 
+  // ---------- extra audio + subtitles ----------
+  function muted() { return dub ? uMute : v.muted; }
+  function setMute(b) { if (dub) { uMute = !!b; if (sa) sa.muted = uMute; paintVol(); } else v.muted = !!b; }
+  function paintVol() { vol.value = muted() ? 0 : v.volume; $('.dp-mute').innerHTML = (muted() || v.volume === 0) ? ICON.mute : ICON.vol; }
+  function saPlay() { if (!dub || !sa) return; var p = sa.play(); if (p && p.catch) p.catch(function () { say('Tap play once more to start the dub audio', 2600); }); }
+  function saFollow(hard) {
+    if (!dub || !sa) return;
+    sa.playbackRate = v.playbackRate;
+    if (hard || Math.abs(sa.currentTime - v.currentTime) > 0.35) { try { sa.currentTime = v.currentTime; } catch (e) {} }
+  }
+  function pickAudio(i, quiet) {
+    if (i < 0 || !side.audio[i]) {
+      if (sa) { try { sa.pause(); } catch (e) {} sa.removeAttribute('src'); try { sa.load(); } catch (e) {} }
+      if (dub) { dub = false; v.muted = uMute; }
+      saIdx = -1; store('ms_pa', ''); if (!quiet) say('Audio: Original', 1500); paintVol(); return;
+    }
+    if (!sa) {
+      sa = new Audio(); sa.preload = 'auto';
+      sa.addEventListener('error', function () { if (dub) { say('That audio track could not be loaded, back to original', 3000); pickAudio(-1, true); drawMenu(); } });
+    }
+    if (!dub) uMute = v.muted;
+    dub = true; v.muted = true; saIdx = i;
+    sa.src = side.audio[i].url; sa.muted = uMute; sa.volume = v.volume;
+    try { sa.currentTime = v.currentTime; } catch (e) {}
+    if (!v.paused) saPlay();
+    store('ms_pa', side.audio[i].label); if (!quiet) say('Audio: ' + side.audio[i].label, 1500); paintVol();
+  }
+  v.addEventListener('play', function () { if (dub) { saFollow(true); saPlay(); } });
+  v.addEventListener('pause', function () { if (sa && dub) sa.pause(); });
+  v.addEventListener('seeked', function () { if (dub) { saFollow(true); if (!v.paused) saPlay(); } });
+  v.addEventListener('waiting', function () { if (dub && sa) sa.pause(); });
+  v.addEventListener('playing', function () { if (dub) { saFollow(true); saPlay(); } });
+  v.addEventListener('ratechange', function () { if (dub && sa) sa.playbackRate = v.playbackRate; });
+  v.addEventListener('timeupdate', function () { if (dub && !v.paused) saFollow(false); });
+
+  function parseSub(txt) {
+    var out = [], blocks = String(txt || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').split(/\n{2,}/);
+    var re = /((?:\d+:)?\d{1,2}:\d{2}[.,]\d{1,3})\s*-->\s*((?:\d+:)?\d{1,2}:\d{2}[.,]\d{1,3})[^\n]*\n([\s\S]+)/;
+    var sec = function (t) { var p = t.replace(',', '.').split(':'), n = 0; for (var i = 0; i < p.length; i++) n = n * 60 + parseFloat(p[i]); return n; };
+    blocks.forEach(function (b) {
+      var m = re.exec(b); if (!m) return;
+      var t = m[3].replace(/\{[^}]*\}/g, '').replace(/<\/?(?:c|v|lang|ruby|rt)[^>]*>/gi, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      t = t.replace(/&lt;(\/?)(i|b|u)&gt;/gi, '<$1$2>').replace(/&amp;(nbsp|lrm|rlm);/g, ' ');
+      out.push({ a: sec(m[1]), b: sec(m[2]), t: t.trim() });
+    });
+    out.sort(function (x, y) { return x.a - y.a; });
+    return out;
+  }
+  var subBox = $('.dp-sub'), lastSub = -2;
+  function paintSub() {
+    if (subIdx < 0 || !subBox) return;
+    var t = v.currentTime - subOff, cur = -1, i, lo = 0, hi = subCues.length - 1;
+    while (lo <= hi) { var mid = (lo + hi) >> 1; if (subCues[mid].a <= t) { cur = mid; lo = mid + 1; } else hi = mid - 1; }
+    // overlapping cues: look a few back
+    var lines = [];
+    for (i = cur; i >= 0 && i > cur - 4; i--) if (subCues[i].a <= t && t < subCues[i].b) lines.unshift(subCues[i].t);
+    var key = lines.join('|');
+    if (key === lastSub) return; lastSub = key;
+    subBox.innerHTML = lines.length ? '<span>' + lines.join('<br>') + '</span>' : '';
+  }
+  function pickSub(i, quiet) {
+    clearInterval(subT); lastSub = -2;
+    if (i < 0 || !side.subs[i]) { subIdx = -1; subCues = []; if (subBox) subBox.innerHTML = ''; store('ms_ps', 'off'); if (!quiet) say('Subtitles off', 1500); return; }
+    var want = i; subIdx = i; subCues = [];
+    fetch(side.subs[i].url).then(function (r) { if (!r.ok) throw 0; return r.text(); }).then(function (t) {
+      if (subIdx !== want) return;
+      subCues = parseSub(t); subT = setInterval(paintSub, 150); paintSub();
+      if (!subCues.length) say('This subtitle file is empty', 2500);
+    }).catch(function () { if (subIdx === want) { say('Could not load that subtitle', 2500); subIdx = -1; drawMenu(); } });
+    store('ms_ps', side.subs[i].label); if (!quiet) say('Subtitles: ' + side.subs[i].label, 1500);
+  }
+  function loadSide(url) {
+    side = { audio: [], subs: [] }; if (sideUrl === url) return; sideUrl = url;
+    fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || sideUrl !== url) return;
+      side = { audio: j.audio || [], subs: j.subs || [] };
+      var pa = load('ms_pa'), ps = load('ms_ps'), i;
+      if (pa) for (i = 0; i < side.audio.length; i++) if (side.audio[i].label === pa) { pickAudio(i, true); break; }
+      if (ps && ps !== 'off') for (i = 0; i < side.subs.length; i++) if (side.subs[i].label === ps) { pickSub(i, true); break; }
+      drawMenu();
+    }).catch(function () {});
+  }
+
   // ---------- load / stop ----------
   window.msDirect = {
-    load: function (url, onFail) {
-      destroyHls();
+    load: function (url, onFail, tracksUrl) {
+      destroyHls(); pickAudio(-1, true); pickSub(-1, true); side = { audio: [], subs: [] }; sideUrl = '';
       wantFallback = onFail; started = false; mediaTry = 0; audioChecked = false;
       box.classList.remove('err'); note.classList.remove('show');
       box.classList.add('on', 'wait', 'paused');
-      isHls = /\.m3u8(\?|$)/.test(url);
+      curUrl = url; isHls = /\.m3u8(\?|$)/.test(url);
       if (isHls) v.crossOrigin = 'anonymous'; else v.removeAttribute('crossorigin');
       var sp = parseFloat(load('ms_rate')); if (sp > 0) v.playbackRate = sp;
       var vv = parseFloat(load('ms_vol')); if (vv >= 0 && vv <= 1) v.volume = vv;
@@ -152,9 +244,10 @@ export const DIRECT_JS = String.raw`(function () {
         hls.loadSource(url); hls.attachMedia(v);
         fetch(base + 'thumbs/thumbs.vtt').then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { if (t) cues = parseVtt(t, base + 'thumbs/'); }).catch(function () {});
       } else { v.src = url; v.load(); }
+      if (!isHls && tracksUrl) loadSide(tracksUrl);
       drawMenu();
     },
-    stop: function () { destroyHls(); box.classList.remove('on'); try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
+    stop: function () { destroyHls(); pickAudio(-1, true); pickSub(-1, true); box.classList.remove('on'); try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
   };
 
   // ---------- media events ----------
@@ -171,7 +264,7 @@ export const DIRECT_JS = String.raw`(function () {
   v.addEventListener('seeking', function () { box.classList.add('wait'); });
   v.addEventListener('seeked', function () { box.classList.remove('wait'); });
   v.addEventListener('error', function () { fail(started ? 'Playback stopped' : 'This file could not be loaded'); });
-  v.addEventListener('volumechange', function () { vol.value = v.muted ? 0 : v.volume; $('.dp-mute').innerHTML = (v.muted || v.volume === 0) ? ICON.mute : ICON.vol; store('ms_vol', v.volume); });
+  v.addEventListener('volumechange', function () { if (dub) { if (!v.muted) v.muted = true; if (sa) sa.volume = v.volume; } paintVol(); store('ms_vol', v.volume); });
   v.addEventListener('ratechange', function () { store('ms_rate', v.playbackRate); });
   v.addEventListener('progress', function () { try { var b = v.buffered; if (b.length && v.duration) buf.style.width = (b.end(b.length - 1) / v.duration * 100) + '%'; } catch (e) {} });
   v.addEventListener('timeupdate', function () {
@@ -186,7 +279,7 @@ export const DIRECT_JS = String.raw`(function () {
 
   // The picture plays but there is no sound: the audio track is a format browsers cannot decode (AC3 / EAC3 / DTS / TrueHD)
   function checkAudio() {
-    if (v.muted || v.volume === 0) return;
+    if (muted() || v.volume === 0 || dub) return;
     var silent = false;
     if (typeof v.webkitAudioDecodedByteCount === 'number') silent = v.webkitAudioDecodedByteCount === 0;
     else if (typeof v.mozHasAudio === 'boolean') silent = v.mozHasAudio === false;
@@ -220,8 +313,8 @@ export const DIRECT_JS = String.raw`(function () {
   // ---------- buttons ----------
   $('.dp-pp').onclick = toggle; $('.dp-big').onclick = toggle;
   $('.dp-back').onclick = function () { skip(-10); }; $('.dp-fwd').onclick = function () { skip(10); };
-  $('.dp-mute').onclick = function () { v.muted = !v.muted; };
-  vol.oninput = function () { v.volume = parseFloat(vol.value); v.muted = v.volume === 0; };
+  $('.dp-mute').onclick = function () { setMute(!muted()); };
+  vol.oninput = function () { v.volume = parseFloat(vol.value); setMute(v.volume === 0); };
   function fsToggle() {
     var d = document;
     if (d.fullscreenElement || d.webkitFullscreenElement) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); return; }
@@ -250,6 +343,9 @@ export const DIRECT_JS = String.raw`(function () {
     if (hls && hls.audioTracks && hls.audioTracks.length > 1) {
       h += '<h4>Audio</h4>';
       hls.audioTracks.forEach(function (t, n) { h += '<button data-au="' + n + '" class="' + (hls.audioTrack === n ? 'on' : '') + '"><span>' + esc(t.name) + '</span></button>'; });
+    } else if (!isHls && side.audio.length) {
+      h += '<h4>Audio</h4><button data-sa="-1" class="' + (saIdx < 0 ? 'on' : '') + '"><span>Original</span></button>';
+      side.audio.forEach(function (t, n) { h += '<button data-sa="' + n + '" class="' + (saIdx === n ? 'on' : '') + '"><span>' + esc(t.label) + '</span></button>'; });
     } else if (!isHls && v.audioTracks && v.audioTracks.length > 1) {
       h += '<h4>Audio</h4>';
       for (i = 0; i < v.audioTracks.length; i++) h += '<button data-na="' + i + '" class="' + (v.audioTracks[i].enabled ? 'on' : '') + '"><span>' + esc(v.audioTracks[i].label || v.audioTracks[i].language || ('Track ' + (i + 1))) + '</span></button>';
@@ -258,9 +354,15 @@ export const DIRECT_JS = String.raw`(function () {
       h += '<h4>Subtitles</h4><button data-su="-1" class="' + (hls.subtitleTrack === -1 ? 'on' : '') + '"><span>Off</span></button>';
       hls.subtitleTracks.forEach(function (t, n) { h += '<button data-su="' + n + '" class="' + (hls.subtitleTrack === n ? 'on' : '') + '"><span>' + esc(t.name) + '</span></button>'; });
     }
+    if (!isHls && side.subs.length) {
+      h += '<h4>Subtitles</h4><button data-ss="-1" class="' + (subIdx < 0 ? 'on' : '') + '"><span>Off</span></button>';
+      side.subs.forEach(function (t, n) { h += '<button data-ss="' + n + '" class="' + (subIdx === n ? 'on' : '') + '"><span>' + esc(t.label) + '</span></button>'; });
+      if (subIdx >= 0) h += '<button data-sd="-0.5"><span>Subtitles earlier</span></button><button data-sd="0.5"><span>Subtitles later <small>(' + (subOff > 0 ? '+' : '') + subOff.toFixed(1) + 's)</small></span></button>';
+    }
     h += '<h4>Speed</h4>';
     speeds.forEach(function (s) { h += '<button data-s="' + s + '" class="' + (v.playbackRate === s ? 'on' : '') + '"><span>' + (s === 1 ? 'Normal' : s + 'x') + '</span></button>'; });
     h += '<h4>View</h4><button data-a="fit"><span>' + (box.classList.contains('fill') ? 'Fit to screen' : 'Fill screen') + '</span></button>';
+    if (!isHls && curUrl && window.msDirect.vlc !== false) h += '<button data-a="vlc"><span class="dp-vlc">' + ICON.vlc + 'Open in VLC <small>(all audio + subtitles)</small></span></button>';
     h += '<button data-a="stats"><span>Stats for nerds</span></button><button data-a="dl"><span>Download page</span></button>';
     menu.innerHTML = h;
   }
@@ -270,12 +372,27 @@ export const DIRECT_JS = String.raw`(function () {
     if (d.au !== undefined && hls) { hls.audioTrack = +d.au; say('Audio: ' + hls.audioTracks[+d.au].name, 1500); keep = true; }
     if (d.na !== undefined) { for (var i = 0; i < v.audioTracks.length; i++) v.audioTracks[i].enabled = i === +d.na; keep = true; }
     if (d.su !== undefined && hls) { hls.subtitleTrack = +d.su; say(+d.su < 0 ? 'Subtitles off' : 'Subtitles: ' + hls.subtitleTracks[+d.su].name, 1500); keep = true; }
+    if (d.sa !== undefined) { pickAudio(+d.sa); keep = true; }
+    if (d.ss !== undefined) { pickSub(+d.ss); keep = true; }
+    if (d.sd !== undefined) { subOff += parseFloat(d.sd); lastSub = -2; paintSub(); say('Subtitle delay ' + (subOff > 0 ? '+' : '') + subOff.toFixed(1) + 's', 1200); keep = true; }
     if (d.s) { v.playbackRate = parseFloat(d.s); say('Speed ' + d.s + 'x', 1200); }
     if (d.a === 'fit') box.classList.toggle('fill');
+    if (d.a === 'vlc') openVlc();
     if (d.a === 'stats') stats.classList.toggle('show');
     if (d.a === 'dl') window.open(location.origin + '/file/' + ID, '_blank');
     drawMenu(); if (!keep) menu.classList.remove('open');
   });
+  // hand the same link to VLC (it shows every audio track and subtitle of the file)
+  function openVlc() {
+    var u = curUrl.replace(/[?&]inline=1/, ''), ua = navigator.userAgent || '', nm = (decodeURIComponent((u.split('?')[0].split('/').pop()) || 'video') || 'video').replace(/\.[a-z0-9]{1,4}$/i, '');
+    v.pause();
+    if (/Android/i.test(ua)) { location.href = 'intent:' + u.replace(/^https?:\/\//, '//') + '#Intent;scheme=' + (u.indexOf('https') === 0 ? 'https' : 'http') + ';package=org.videolan.vlc;type=video/*;end'; say('Opening VLC...', 2500); return; }
+    if (/iPhone|iPad|iPod/i.test(ua)) { location.href = 'vlc-x-callback://x-callback-url/stream?url=' + encodeURIComponent(u); say('Opening VLC...', 2500); return; }
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['#EXTM3U\n#EXTINF:-1,' + nm + '\n' + u + '\n'], { type: 'audio/x-mpegurl' }));
+    a.download = nm.slice(0, 60) + '.m3u'; document.body.appendChild(a); a.click(); a.remove();
+    say('Open the downloaded .m3u file with VLC', 4000);
+  }
   function paintStats() {
     var q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}, b = 0;
     try { var r = v.buffered; if (r.length) b = r.end(r.length - 1) - v.currentTime; } catch (e) {}
@@ -306,9 +423,9 @@ export const DIRECT_JS = String.raw`(function () {
     if (k === ' ' || k === 'k') { e.preventDefault(); toggle(); }
     else if (k === 'ArrowRight') { skip(5); flash('r', '+5s'); } else if (k === 'ArrowLeft') { skip(-5); flash('l', '-5s'); }
     else if (k === 'j') { skip(-10); flash('l', '-10s'); } else if (k === 'l') { skip(10); flash('r', '+10s'); }
-    else if (k === 'ArrowUp') { e.preventDefault(); v.muted = false; v.volume = Math.min(1, v.volume + 0.1); say('Volume ' + Math.round(v.volume * 100) + '%', 900); }
+    else if (k === 'ArrowUp') { e.preventDefault(); setMute(false); v.volume = Math.min(1, v.volume + 0.1); say('Volume ' + Math.round(v.volume * 100) + '%', 900); }
     else if (k === 'ArrowDown') { e.preventDefault(); v.volume = Math.max(0, v.volume - 0.1); say('Volume ' + Math.round(v.volume * 100) + '%', 900); }
-    else if (k === 'm') v.muted = !v.muted; else if (k === 'f') fsToggle(); else if (k === 'i') stats.classList.toggle('show');
+    else if (k === 'm') setMute(!muted()); else if (k === 'f') fsToggle(); else if (k === 'i') stats.classList.toggle('show');
     else if (k === '>') { v.playbackRate = Math.min(2, v.playbackRate + 0.25); say(v.playbackRate + 'x', 900); }
     else if (k === '<') { v.playbackRate = Math.max(0.25, v.playbackRate - 0.25); say(v.playbackRate + 'x', 900); }
     else if (/^[0-9]$/.test(k) && v.duration) v.currentTime = v.duration * (+k) / 10;

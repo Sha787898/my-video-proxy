@@ -159,6 +159,7 @@ export default function PlayerSettingsPage() {
     const [savedJson, setSavedJson] = useState('');
     const [saving, setSaving] = useState(false);
     const [msg, setMsg] = useState(null); // { ok, text }
+    const [btns, setBtns] = useState({ vlcPlayer: true, vlcPage: true }); // extra buttons the admin can switch off
 
     useEffect(() => {
         let dead = false;
@@ -173,13 +174,15 @@ export default function PlayerSettingsPage() {
             const d = { ...FACTORY, ...cfg.defaults };
             setDefaults(d);
             setLocked(cfg.locked);
-            setSavedJson(JSON.stringify({ d, l: cfg.locked }));
+            const b = { vlcPlayer: cfg.vlcPlayer, vlcPage: cfg.vlcPage };
+            setBtns(b);
+            setSavedJson(JSON.stringify({ d, l: cfg.locked, b }));
             setLoading(false);
         })();
         return () => { dead = true; };
     }, [router]);
 
-    const dirty = useMemo(() => JSON.stringify({ d: defaults, l: locked }) !== savedJson, [defaults, locked, savedJson]);
+    const dirty = useMemo(() => JSON.stringify({ d: defaults, l: locked, b: btns }) !== savedJson, [defaults, locked, btns, savedJson]);
     const preview = useMemo(() => resolvePrefs({ defaults, locked }, {}), [defaults, locked]);
 
     const setDef = (patch) => { setMsg(null); setDefaults((d) => ({ ...d, ...patch })); };
@@ -198,15 +201,15 @@ export default function PlayerSettingsPage() {
         setMsg(null);
         // keep the server order / default player / Direct switch that Manage Sites saved in the same JSON
         const { data: cur } = await supabase.from('settings').select('value').eq('user_id', user.id).eq('key', CONFIG_KEY).maybeSingle();
-        const payload = JSON.stringify({ defaults, locked, ...extrasOf(cur && cur.value) });
+        const payload = JSON.stringify({ defaults, locked, ...extrasOf(cur && cur.value), vlcPlayer: btns.vlcPlayer, vlcPage: btns.vlcPage });
         const { error } = await supabase.from('settings').upsert({ user_id: user.id, key: CONFIG_KEY, value: payload }, { onConflict: 'user_id,key' });
         setSaving(false);
         if (error) { setMsg({ ok: false, text: `Could not save: ${error.message}` }); return; }
-        setSavedJson(JSON.stringify({ d: defaults, l: locked }));
+        setSavedJson(JSON.stringify({ d: defaults, l: locked, b: btns }));
         setMsg({ ok: true, text: 'Saved. Player and download pages use it right away.' });
     };
 
-    const factory = () => { setMsg(null); setDefaults({ ...FACTORY }); setLocked({}); };
+    const factory = () => { setMsg(null); setDefaults({ ...FACTORY }); setLocked({}); setBtns({ vlcPlayer: true, vlcPage: true }); };
 
     if (loading) {
         return (
@@ -313,6 +316,32 @@ export default function PlayerSettingsPage() {
                                         )}
                                     </Row>
                                 ))}
+                            </section>
+
+                            <section className="ms-card p-4 sm:p-5">
+                                <h2 className="ms-h2 mb-1">Extra buttons</h2>
+                                <p className="ms-muted text-xs mb-2">Switch these on or off for everyone who opens your links.</p>
+                                <div className="ps-btnrow">
+                                    <div className="min-w-0">
+                                        <b>Open in VLC · player menu</b>
+                                        <span>Adds an &quot;Open in VLC&quot; item to the Direct player settings menu. VLC shows every audio track and subtitle of the file.</span>
+                                    </div>
+                                    <div className="flex items-center gap-3 shrink-0">
+                                        <Toggle on={btns.vlcPlayer} onChange={(v) => { setMsg(null); setBtns((b) => ({ ...b, vlcPlayer: v })); }} label="Open in VLC in the player menu" />
+                                        <span className="text-xs text-slate-400 w-6">{btns.vlcPlayer ? 'On' : 'Off'}</span>
+                                    </div>
+                                </div>
+                                <div className="ps-btnrow">
+                                    <div className="min-w-0">
+                                        <b>Play in VLC · download page</b>
+                                        <span>Shows a small &quot;Play in VLC&quot; button under the fast download on the file page.</span>
+                                    </div>
+                                    <div className="flex items-center gap-3 shrink-0">
+                                        <Toggle on={btns.vlcPage} onChange={(v) => { setMsg(null); setBtns((b) => ({ ...b, vlcPage: v })); }} label="Play in VLC on the download page" />
+                                        <span className="text-xs text-slate-400 w-6">{btns.vlcPage ? 'On' : 'Off'}</span>
+                                    </div>
+                                </div>
+                                <style>{`.ps-btnrow { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid rgba(255,255,255,.07); } .ps-btnrow:first-of-type { border-top: 0; } .ps-btnrow b { display: block; font-size: 13px; color: #fff; } .ps-btnrow span { display: block; font-size: 12px; color: #8e9bb0; margin-top: 2px; line-height: 1.45; } @media (max-width: 520px) { .ps-btnrow { align-items: flex-start; flex-direction: column; } }`}</style>
                             </section>
                         </div>
 
