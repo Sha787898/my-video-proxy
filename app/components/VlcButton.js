@@ -5,14 +5,24 @@ import { openInVlc, VLC_ICON } from '../utils/vlc';
 import { DL_BASE, publicPath } from '../utils/turboDownload';
 
 // Small standard button for the download page: plays the file in the VLC app (all audio tracks + subtitles).
-export default function VlcButton({ id, name }) {
+export default function VlcButton({ id, name, compact = false, onNote }) {
     const [note, setNote] = useState('');
     if (!DL_BASE || !id) return null;
     const go = () => {
         const t = openInVlc(publicPath(id, name), name);
+        if (compact) { if (onNote) { onNote(t); if (t) setTimeout(() => onNote(''), 6000); } return; }
         setNote(t);
         if (t) setTimeout(() => setNote(''), 6000);
     };
+    // compact: one small button that sits in the row with "Copy page link" / "Play here" (the row styles it)
+    if (compact) {
+        return (
+            <button type="button" onClick={go} aria-label="Play in VLC (all audio and subtitles)" title="Play in VLC: every audio track and subtitle">
+                <span dangerouslySetInnerHTML={{ __html: VLC_ICON }} style={{ display: 'inline-flex', width: 18, height: 18 }} />
+                Play in VLC
+            </button>
+        );
+    }
     return (
         <div className="vlcb-wrap">
             <style>{`

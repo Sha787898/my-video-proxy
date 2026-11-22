@@ -281,6 +281,7 @@ function TracksModal({ id, onClose }) {
     const [phase, setPhase] = useState('loading'); // loading | ready | saving | error
     const [audio, setAudio] = useState([]);
     const [subs, setSubs] = useState([]);
+    const [video, setVideo] = useState([]);
     const [kind, setKind] = useState('audio');
     const [label, setLabel] = useState('');
     const [lang, setLang] = useState('');
@@ -305,7 +306,7 @@ function TracksModal({ id, onClose }) {
                 const { data: row } = await c.from('settings').select('value').eq('user_id', uid).eq('key', TRK_KEY(id)).maybeSingle();
                 let j = null; try { j = row && row.value ? JSON.parse(row.value) : null; } catch (e) { j = null; }
                 if (dead) return;
-                setAudio(Array.isArray(j && j.audio) ? j.audio : []); setSubs(Array.isArray(j && j.subs) ? j.subs : []);
+                setAudio(Array.isArray(j && j.audio) ? j.audio : []); setSubs(Array.isArray(j && j.subs) ? j.subs : []); setVideo(Array.isArray(j && j.video) ? j.video : []);
                 setPhase('ready');
             } catch (e) { if (!dead) { setPhase('error'); setMsg('Could not load. Try again.'); } }
         })();
@@ -318,18 +319,20 @@ function TracksModal({ id, onClose }) {
         if (!l) { setMsg('Give it a name, for example "Hindi" or "English subtitles".'); return; }
         if (!sr) { setMsg('Paste a Google Drive link (or file ID), or a link that starts with https://'); return; }
         const t = { label: l.slice(0, 40), lang: lang.trim().slice(0, 12), src: sr };
-        if (kind === 'audio') { if (audio.length >= 12) { setMsg('Up to 12 audio tracks.'); return; } setAudio([...audio, t]); } else { if (subs.length >= 12) { setMsg('Up to 12 subtitles.'); return; } setSubs([...subs, t]); }
+        if (kind === 'audio') { if (audio.length >= 12) { setMsg('Up to 12 audio tracks.'); return; } setAudio([...audio, t]); }
+        else if (kind === 'video') { if (video.length >= 8) { setMsg('Up to 8 quality versions.'); return; } setVideo([...video, { label: t.label, lang: '', src: sr }]); }
+        else { if (subs.length >= 12) { setMsg('Up to 12 subtitles.'); return; } setSubs([...subs, t]); }
         setLabel(''); setLang(''); setSrc('');
     };
-    const del = (k, i) => { if (k === 'audio') setAudio(audio.filter((_, n) => n !== i)); else setSubs(subs.filter((_, n) => n !== i)); setOk(''); };
+    const del = (k, i) => { if (k === 'audio') setAudio(audio.filter((_, n) => n !== i)); else if (k === 'video') setVideo(video.filter((_, n) => n !== i)); else setSubs(subs.filter((_, n) => n !== i)); setOk(''); };
     const mv = (k, i, d) => {
-        const list = [...(k === 'audio' ? audio : subs)]; const j = i + d; if (j < 0 || j >= list.length) return;
-        [list[i], list[j]] = [list[j], list[i]]; if (k === 'audio') setAudio(list); else setSubs(list); setOk('');
+        const list = [...(k === 'audio' ? audio : k === 'video' ? video : subs)]; const j = i + d; if (j < 0 || j >= list.length) return;
+        [list[i], list[j]] = [list[j], list[i]]; if (k === 'audio') setAudio(list); else if (k === 'video') setVideo(list); else setSubs(list); setOk('');
     };
     const save = async () => {
         setPhase('saving'); setMsg(''); setOk('');
         try {
-            const value = JSON.stringify({ v: 1, audio, subs });
+            const value = JSON.stringify({ v: 1, audio, subs, video });
             const { error } = await ownerClient().from('settings').upsert({ user_id: uidRef.current, key: TRK_KEY(id), value }, { onConflict: 'user_id,key' });
             if (error) { setPhase('ready'); setMsg(error.message || 'Could not save.'); return; }
             setPhase('ready'); setOk('Saved. The player picks it up within a minute.');
@@ -350,7 +353,7 @@ function TracksModal({ id, onClose }) {
             <div className="dl-meta dl-rep" onClick={(e) => e.stopPropagation()}>
                 <div className="dl-meta-h">
                     <span className="dl-meta-ic">{Svg.info}</span>
-                    <div className="dl-meta-t"><b>Audio &amp; subtitles</b><small>Extra tracks for the Direct player</small></div>
+                    <div className="dl-meta-t"><b>Audio, subtitles &amp; quality</b><small>Extra tracks for the Direct player</small></div>
                     <button type="button" className="dl-meta-x" onClick={onClose} aria-label="Close">{Svg.cross}</button>
                 </div>
                 <div className="dl-meta-b">
@@ -358,6 +361,8 @@ function TracksModal({ id, onClose }) {
                     {phase === 'error' && <div className="dl-rep-note bad">{msg}</div>}
                     {phase !== 'loading' && phase !== 'error' && (
                         <>
+                            <p className="dl-tr-h">Quality versions <small>({video.length})</small></p>
+                            {video.length ? <ul className="dl-tr-list">{video.map((t, i) => <Row key={`v${i}`} k="video" t={t} i={i} n={video.length} />)}</ul> : <p className="dl-tr-e">None. Only the original file plays.</p>}
                             <p className="dl-tr-h">Audio tracks <small>({audio.length})</small></p>
                             {audio.length ? <ul className="dl-tr-list">{audio.map((t, i) => <Row key={`a${i}`} k="audio" t={t} i={i} n={audio.length} />)}</ul> : <p className="dl-tr-e">None. The video&apos;s own audio plays.</p>}
                             <p className="dl-tr-h">Subtitles <small>({subs.length})</small></p>
@@ -368,13 +373,14 @@ function TracksModal({ id, onClose }) {
                                 <div className="dl-tr-seg" role="group" aria-label="Type">
                                     <button type="button" className={kind === 'audio' ? 'on' : ''} onClick={() => setKind('audio')}>Audio</button>
                                     <button type="button" className={kind === 'subs' ? 'on' : ''} onClick={() => setKind('subs')}>Subtitle</button>
+                                    <button type="button" className={kind === 'video' ? 'on' : ''} onClick={() => setKind('video')}>Quality</button>
                                 </div>
-                                <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === 'audio' ? 'Name, e.g. Hindi dub' : 'Name, e.g. English'} maxLength={40} aria-label="Name" />
-                                <input value={lang} onChange={(e) => setLang(e.target.value)} placeholder="Language code (optional) e.g. hi" maxLength={12} aria-label="Language" />
-                                <input value={src} onChange={(e) => setSrc(e.target.value)} placeholder={kind === 'audio' ? 'Google Drive link of the .m4a / .mp3 file' : 'Google Drive link of the .srt / .vtt file'} aria-label="Link" />
+                                <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === 'audio' ? 'Name, e.g. Hindi dub' : kind === 'video' ? 'Name, e.g. 720p' : 'Name, e.g. English'} maxLength={40} aria-label="Name" />
+                                <input value={lang} onChange={(e) => setLang(e.target.value)} placeholder="Language code (optional) e.g. hi" maxLength={12} aria-label="Language" style={kind === 'video' ? { display: 'none' } : undefined} />
+                                <input value={src} onChange={(e) => setSrc(e.target.value)} placeholder={kind === 'audio' ? 'Google Drive link of the .m4a / .mp3 file' : kind === 'video' ? 'Google Drive link of the 720p / 480p .mp4 file' : 'Google Drive link of the .srt / .vtt file'} aria-label="Link" />
                                 <button type="button" className="dl-tr-add" onClick={add}>+ Add</button>
                             </div>
-                            <p className="dl-tr-e">Make the files with <b>transcode/extract-tracks.mjs</b> (it pulls every audio and subtitle out of your video), upload them to Google Drive and paste the links. The Drive file must be shared with the Google account used by Server B, or set to &quot;Anyone with the link&quot;.</p>
+                            <p className="dl-tr-e">Make the files with the <b>ms-track-tool</b> (it pulls every audio and subtitle out of your video and can make 720p / 480p / 360p copies), upload them to Google Drive and paste the links. The Drive file must be shared with the Google account used by Server B, or set to &quot;Anyone with the link&quot;.</p>
                             {msg && <div className="dl-rep-note bad">{msg}</div>}
                             {ok && <div className="dl-rep-note ok"><span>{ok}</span></div>}
                         </>
@@ -691,6 +697,7 @@ const CSS = `
 .dl-rep-go { background: rgba(var(--ac-rgb),.2) !important; border-color: rgba(var(--ac-rgb),.5) !important; color: #fff !important; }
 .dl-meta-f button:disabled { opacity: .45; cursor: not-allowed; }
 .dl-rep-open { margin-top: 12px; width: 100%; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; border: 1px dashed rgba(var(--ac-rgb),.45); background: rgba(var(--ac-rgb),.06); color: #e6e9ef; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.dl-vlcnote { margin: 8px 2px 0; font-size: 11.5px; color: #9aa6b8; }
 .dl-tr-h { margin: 14px 0 6px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #aab4c5; } .dl-tr-h small { opacity: .7; }
 .dl-tr-e { margin: 6px 0; font-size: 12px; color: #8e9bb0; line-height: 1.5; text-align: left; }
 .dl-tr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -720,6 +727,7 @@ function FileDownloadContent({ params }) {
     const [metaOpen, setMetaOpen] = useState(false);
     const [repOpen, setRepOpen] = useState(false);
     const [trkOpen, setTrkOpen] = useState(false);
+    const [vlcNote, setVlcNote] = useState('');
     const [isOwner, setIsOwner] = useState(false);
     useEffect(() => {
         let dead = false;
@@ -901,7 +909,6 @@ function FileDownloadContent({ params }) {
                         ))}
 
                         <FastDownload id={id} />
-                        {cfgObj.vlcPage && file && <VlcButton id={id} name={file.name} />}
 
                         {best && (
                             <button type="button" className="dl-main" onClick={() => setSel(best)}>
@@ -913,8 +920,10 @@ function FileDownloadContent({ params }) {
 
                         <div className="dl-acts">
                             <button type="button" onClick={copyPage}>{Svg.copy}{copied ? 'Link copied' : 'Copy page link'}</button>
+                            {cfgObj.vlcPage && file && <VlcButton id={id} name={file.name} compact onNote={setVlcNote} />}
                             {hasPlayer && !watch && <button type="button" onClick={() => setWatch(true)}>{Svg.play}Play here</button>}
                         </div>
+                        {vlcNote && <p className="dl-vlcnote" role="status">{vlcNote}</p>}
                         </div>
 
                         <aside className="dl-colB">
@@ -938,7 +947,7 @@ function FileDownloadContent({ params }) {
                             <div className="dl-empty">No download servers are available for this file yet.</div>
                         )}
                         {isOwner && <button type="button" className="dl-rep-open" onClick={() => setRepOpen(true)}>{Svg.wrench}Check &amp; repair files</button>}
-                        {isOwner && <button type="button" className="dl-rep-open" onClick={() => setTrkOpen(true)}>{Svg.info}Audio &amp; subtitles</button>}
+                        {isOwner && <button type="button" className="dl-rep-open" onClick={() => setTrkOpen(true)}>{Svg.info}Audio, subtitles &amp; quality</button>}
 
                         </aside>
                         </div>
